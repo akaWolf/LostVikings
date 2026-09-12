@@ -86,7 +86,8 @@ std::mutex g_pending_mutex;
 // UX stage 8 step 3 — the lockstep. This client's events wait here until the
 // next read packs them into the batch of read n + delay (v2_net.h); the
 // events applied at a read are the batches of every player for that read.
-bool g_net = false;
+std::atomic<bool> g_net{false};             // set by the game thread, or by the menu's join thread (v2_net_join_async)
+bool g_net_synced = false;                  // false: a joiner waiting for the host's image (its reads run free until then)
 int  g_net_local = 0;                       // the player this client's keyboard is
 std::vector<V2NetEvent> g_pending_net;      // under g_pending_mutex
 long g_net_batches = 0, g_net_applied = 0;
@@ -207,6 +208,8 @@ void net_capture_impl(const SDL_Event* e, bool from_replay) {
     const bool peers = v2_net_peer_count() > 0;
     if (from_replay) {
         if (peers && player != g_net_local) return;
+    } else if (!g_net_synced) {
+        return;                                 // nothing before the join: the image replaces this world
     } else if (g_net_local > 0) {
         if (player != 0 || kv == 0 || so != 0) return;
         name = "P" + std::to_string(g_net_local + 1) + ":" + name;
@@ -325,7 +328,7 @@ int v2_replay_drain_impl(void) {
     int applied = 0;
     SDL_Event e;
     while (dequeue_due_replay(&e)) {
-        if (g_net) net_capture_impl(&e, true);   // lockstep: captured, applied at read + delay
+        if (g_net.load()) net_capture_impl(&e, true);   // lockstep: captured, applied at read + delay
         else apply_replay_event(e, "clk");
         applied++;
     }
@@ -356,7 +359,7 @@ extern "C" void v2_input_tick_12352(void) {
     g_sub12352_seq++;
     if (g_mode == MODE_RECORD) {
         v2_input_record_drain();
-        if (!g_net) return;         // a networked game may record too: its read still needs the batches below
+        if (!g_net.load()) return;  // a networked game may record too: its read still needs the batches below
     }
     if (g_mode == MODE_REPLAY && g_replay_has_seq) {
         while (g_replay_pos < g_replay_queue.size() &&
@@ -369,7 +372,7 @@ extern "C" void v2_input_tick_12352(void) {
             e.key.repeat = 0;
             e.key.state = (re.kind == 0) ? SDL_PRESSED : SDL_RELEASED;
             e.key.timestamp = SDL_GetTicks();
-            if (g_net) net_capture_impl(&e, true);   // lockstep: this read packs it, read + delay applies it everywhere
+            if (g_net.load()) net_capture_impl(&e, true);   // lockstep: this read packs it, read + delay applies it everywhere
             else apply_replay_event(e, "seq");
             g_replay_pos++;
         }
@@ -384,7 +387,51 @@ extern "C" void v2_input_tick_12352(void) {
     // last read becomes its batch of read seq + delay (sent, and queued for
     // itself); then the batches of every player for THIS read are applied in
     // player order, through the same apply_replay_event a seq replay uses.
-    if (g_net) {
+    if (g_net.load()) {
+        // UX stage 8 tails — the image points, on the frame's main read only
+        // (a wait loop's read would leave the joiner in another phase than
+        // the host was in when it took the picture):
+        //  - a joiner runs free until the host's image lands; then this read
+        //    becomes the host's read m (the image was taken before batch m),
+        //    the replay's earlier events and the keys pressed so far are
+        //    dropped, and the client takes part from here;
+        //  - the host with a joiner waiting takes the image here, before this
+        //    read's batch is consumed, so the joiner gets batch m too;
+        //  - the host's LOAD arrives as an image for everybody, applied here.
+        if (!g_net_synced) {
+            if (v2_input_main_read) {
+                std::vector<uint8_t> img; long m = 0;
+                if (v2_net_take_image(img, m)) {
+                    v2_net_adopt_session();
+                    if (v2_state_apply_image(img.data(), img.size()) != 0)
+                        fprintf(stderr, "v2_input_recorder: LOCKSTEP: the host's image failed to load — this client is out of sync\n");
+                    g_sub12352_seq = m;
+                    g_replay_clock = v2_dbg_pre_vm_iter;
+                    while (g_replay_pos < g_replay_queue.size() &&
+                           (g_replay_has_seq ? g_replay_queue[g_replay_pos].seq <= m
+                                             : (long)g_replay_queue[g_replay_pos].frame <= g_replay_clock))
+                        g_replay_pos++;
+                    { std::lock_guard<std::mutex> lk(g_pending_mutex); g_pending_net.clear(); }
+                    g_net_synced = true;
+                    fprintf(stderr, "v2_input_recorder: LOCKSTEP joined at read %ld, frame %d (%zu replay events before the join skipped)\n",
+                            m, v2_dbg_pre_vm_iter, g_replay_pos);
+                }
+            }
+            if (!g_net_synced) return;
+        } else if (v2_input_main_read) {
+            std::vector<uint8_t> img; long m = 0;
+            if (v2_net_take_image(img, m)) {
+                if (m != g_sub12352_seq) fprintf(stderr, "v2_input_recorder: LOCKSTEP: an image for read %ld applied at read %ld\n", m, g_sub12352_seq);
+                if (v2_state_apply_image(img.data(), img.size()) != 0)
+                    fprintf(stderr, "v2_input_recorder: LOCKSTEP: the loaded image failed — out of sync\n");
+                else fprintf(stderr, "v2_input_recorder: LOCKSTEP: state image applied at read %ld, frame %d\n", g_sub12352_seq, v2_dbg_pre_vm_iter);
+            }
+            if (v2_net_snapshot_wanted()) {
+                std::vector<uint8_t> snap;
+                v2_state_serialize(snap);
+                v2_net_send_image(g_sub12352_seq, snap, false);
+            }
+        }
         std::vector<V2NetEvent> batch;
         { std::lock_guard<std::mutex> lk(g_pending_mutex); batch.swap(g_pending_net); }
         v2_net_send_batch(g_sub12352_seq + v2_net_delay(), batch);
@@ -411,14 +458,15 @@ extern "C" void v2_input_tick_12352(void) {
     }
 }
 
-extern "C" void v2_input_recorder_net(int local_player) {
-    g_net = true;
+extern "C" void v2_input_recorder_net(int local_player, int synced) {
     g_net_local = local_player;
-    fprintf(stderr, "v2_input_recorder: LOCKSTEP mode — this client is player %d, input delay %d read(s)\n",
-            local_player + 1, v2_net_delay());
+    g_net_synced = synced != 0;
+    g_net = true;
+    fprintf(stderr, "v2_input_recorder: LOCKSTEP mode — this client is player %d, input delay %d read(s)%s\n",
+            local_player + 1, v2_net_delay(), synced ? "" : "; waiting for the host's state image");
 }
 extern "C" void v2_input_net_capture(const SDL_Event* e) {
-    if (!g_net || !e) return;
+    if (!g_net.load() || !e) return;
     if (e->type != SDL_KEYDOWN && e->type != SDL_KEYUP) return;
     net_capture_impl(e, false);
 }

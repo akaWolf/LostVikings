@@ -1,18 +1,23 @@
 // v2_net.cpp — the lockstep transport (see v2_net.h). Plain TCP, one line per
-// message, a receiver thread per connection, a mutex + condition variable
+// message (an image line is followed by its raw bytes), a receiver thread per
+// connection, an accept thread on the host, a mutex + condition variable
 // around the per-player inboxes. Nothing here touches the game state: the
 // recorder (v2_input_recorder.cpp) turns the batches into key events at the
-// read, the way it replays a file.
+// read, the way it replays a file, and applies the images.
 //
 // Lines:
 //   W <players> <index> <delay> <opts...>   host -> client on connect (HELLO)
-//   S                                       host -> clients: everybody is in
+//   S                                       host -> client: the game is on (after the lobby, or at once for a late joiner)
 //   I <player> <read_n> <count> <frame>/<kind>/<action> ...   a batch (relayed by the host)
+//   T <read_n> <len>\n<len bytes>           host -> client: the state image taken at read_n
+//   J <player> <from_read>                  host -> all: that player's batches are awaited from that read on
 //   H <player> <frame> <hash>               client -> host, the DS hash of that frame
+//   P <ticks>                               client -> host -> client: a ping, echoed as is
 //   B <player>                              a player left (relayed by the host)
 #include "v2_net.h"
 #include "v2_coop.h"
 #include "v2_ui.h"
+#include <SDL2/SDL.h>
 #include <atomic>
 #include <chrono>
 #include <condition_variable>
@@ -32,6 +37,7 @@ typedef SOCKET sock_t;
 static const sock_t BAD_SOCK = INVALID_SOCKET;
 static bool sock_init() { WSADATA w; return WSAStartup(MAKEWORD(2, 2), &w) == 0; }
 static void sock_close(sock_t s) { closesocket(s); }
+static void sock_shutdown(sock_t s) { shutdown(s, SD_BOTH); }
 static int  sock_send(sock_t s, const char* p, size_t n) { return send(s, p, (int)n, 0); }
 static int  sock_recv(sock_t s, char* p, size_t n) { return recv(s, p, (int)n, 0); }
 static void sock_nodelay(sock_t s) { int one = 1; setsockopt(s, IPPROTO_TCP, TCP_NODELAY, (const char*)&one, sizeof one); }
@@ -49,6 +55,7 @@ typedef int sock_t;
 static const sock_t BAD_SOCK = -1;
 static bool sock_init() { return true; }
 static void sock_close(sock_t s) { close(s); }
+static void sock_shutdown(sock_t s) { shutdown(s, SHUT_RDWR); }
 static int  sock_send(sock_t s, const char* p, size_t n) { return (int)send(s, p, n, MSG_NOSIGNAL); }
 static int  sock_recv(sock_t s, char* p, size_t n) { return (int)recv(s, p, n, 0); }
 static void sock_nodelay(sock_t s) { int one = 1; setsockopt(s, IPPROTO_TCP, TCP_NODELAY, &one, sizeof one); }
@@ -56,6 +63,7 @@ static void sock_reuse(sock_t s) { int one = 1; setsockopt(s, SOL_SOCKET, SO_REU
 #endif
 
 extern bool need_quit;
+extern "C" void v2_input_recorder_net(int local_player, int synced);   // v2_input_recorder.cpp
 
 namespace {
 
@@ -65,18 +73,29 @@ struct Peer {
     std::mutex send_mx;
     std::thread rx;
     std::atomic<bool> alive{false};
+    std::atomic<bool> started{false};       // host: START sent (a lobby peer waits for the lobby to fill)
+    std::atomic<bool> needs_image{false};   // host: a late joiner waiting for the state image
     std::string acc0;                // bytes the lobby read past its last line (the receiver starts with them)
 };
 
 std::vector<Peer*> g_peers;          // host: one per client; client: [0] = the host
-bool g_active = false, g_host = false;
-int  g_players = 1, g_local = 0, g_delay = 2;
+std::mutex g_peers_mx;               // the host's accept thread adds peers while the game thread sends
+std::atomic<bool> g_active{false};
+bool g_host = false;
+int  g_players = 1, g_local = 0, g_delay = 2, g_port = 0;
+std::string g_host_name;
 
 std::mutex g_mx;
 std::condition_variable g_cv;
 std::map<long, std::vector<V2NetEvent>> g_inbox[V2_COOP_MAX];   // [player][read_n] -> the batch
 bool g_gone[V2_COOP_MAX] = {false, false, false};
-bool g_part[V2_COOP_MAX] = {false, false, false};   // the players whose batches a read waits for (a host/client game: everybody; solo: this player only)
+bool g_part[V2_COOP_MAX] = {false, false, false};   // the players whose batches a read waits for
+long g_part_from[V2_COOP_MAX] = {0, 0, 0};          // ... from this read on (a late joiner's first batch)
+
+// the image channel
+std::vector<uint8_t> g_pending_image; long g_pending_image_read = 0; bool g_has_image = false;
+// a session joined from the menu, adopted by the game thread
+std::atomic<bool> g_session_pending{false}; int g_session_players = 0, g_session_index = 0;
 
 // host: the hashes — mine per frame, theirs per player per frame
 std::map<int, uint32_t> g_hash_mine;
@@ -85,20 +104,32 @@ int  g_desync = 0;
 long g_hash_checked = 0;             // host: peer hashes compared with mine
 long g_batches_sent = 0, g_batches_recv = 0;
 std::chrono::steady_clock::time_point g_last_wait_log;
+std::atomic<int> g_rtt_ms{-1};
+uint32_t g_last_ping = 0;
+
+// the lobby / accept thread (host)
+sock_t g_listen = BAD_SOCK;
+std::thread g_accept;
+std::atomic<bool> g_lobby_open{false};     // the lobby has not filled yet: new peers wait for START
+bool g_late = false;                        // client: joined a running game (an image follows START)
+std::atomic<bool> g_image_applied{false};   // client: a late joiner took the host's image (its hashes count from then on)
+std::atomic<int>  g_connected{0};
+std::atomic<bool> g_quit_net{false};
 
 // ---------------------------------------------------------------- sockets
-bool send_all(Peer* p, const std::string& line) {
+bool send_all(Peer* p, const char* data, size_t len) {
     if (!p || p->s == BAD_SOCK) return false;
     std::lock_guard<std::mutex> lk(p->send_mx);
     size_t off = 0;
-    while (off < line.size()) {
-        int n = sock_send(p->s, line.data() + off, line.size() - off);
+    while (off < len) {
+        int n = sock_send(p->s, data + off, len - off);
         if (n <= 0) { p->alive = false; return false; }
         off += (size_t)n;
     }
     return true;
 }
-// one line, blocking (the lobby: before the receiver threads exist)
+bool send_all(Peer* p, const std::string& line) { return send_all(p, line.data(), line.size()); }
+// one line, blocking (the lobby: before the receiver thread exists)
 bool recv_line(sock_t s, std::string& acc, std::string& line) {
     for (;;) {
         size_t nl = acc.find('\n');
@@ -108,6 +139,10 @@ bool recv_line(sock_t s, std::string& acc, std::string& line) {
         if (n <= 0) return false;
         acc.append(buf, (size_t)n);
     }
+}
+std::vector<Peer*> peers_snapshot() {
+    std::lock_guard<std::mutex> lk(g_peers_mx);
+    return g_peers;
 }
 
 // ---------------------------------------------------------------- messages
@@ -148,7 +183,7 @@ bool decode_batch(const std::string& line, int& player, long& read_n, std::vecto
 
 void relay(const std::string& line, Peer* from) {
     if (!g_host) return;
-    for (Peer* p : g_peers) if (p != from && p->alive) send_all(p, line);
+    for (Peer* p : peers_snapshot()) if (p != from && p->alive && p->started) send_all(p, line);
 }
 
 void note_gone(int player) {
@@ -175,7 +210,6 @@ void check_hash(int frame) {
         }
         g_hash_peer[k].erase(it);
     }
-    // forget old frames
     while (g_hash_mine.size() > 64) g_hash_mine.erase(g_hash_mine.begin());
 }
 
@@ -206,6 +240,26 @@ void handle_line(Peer* from, const std::string& line) {
         }
         break;
     }
+    case 'J': {
+        int player = -1; long from_read = 0;
+        if (sscanf(line.c_str(), "J %d %ld", &player, &from_read) == 2 && player >= 0 && player < V2_COOP_MAX) {
+            {
+                std::lock_guard<std::mutex> lk(g_mx);
+                g_part[player] = true; g_part_from[player] = from_read; g_gone[player] = false;
+            }
+            g_cv.notify_all();
+            fprintf(stderr, "V2-NET: player %d takes part from read %ld\n", player + 1, from_read);
+        }
+        break;
+    }
+    case 'P': {
+        if (g_host) send_all(from, line + "\n");                  // echo
+        else {
+            unsigned t = 0;
+            if (sscanf(line.c_str(), "P %u", &t) == 1) g_rtt_ms = (int)(SDL_GetTicks() - t);
+        }
+        break;
+    }
     case 'B': {
         int player = -1;
         if (sscanf(line.c_str(), "B %d", &player) == 1) {
@@ -224,11 +278,27 @@ void rx_thread(Peer* p) {
     std::string acc = p->acc0, line;
     char buf[4096];
     for (;;) {
-        size_t nl;
-        while ((nl = acc.find('\n')) != std::string::npos) {
+        for (;;) {
+            size_t nl = acc.find('\n');
+            if (nl == std::string::npos) break;
             line = acc.substr(0, nl);
-            acc.erase(0, nl + 1);
             if (!line.empty() && line.back() == '\r') line.pop_back();
+            if (!line.empty() && line[0] == 'T') {
+                // the state image: the line, then len raw bytes
+                long read_n = 0; unsigned long len = 0;
+                if (sscanf(line.c_str(), "T %ld %lu", &read_n, &len) != 2) { acc.erase(0, nl + 1); continue; }
+                if (acc.size() < nl + 1 + len) break;              // more bytes needed
+                {
+                    std::lock_guard<std::mutex> lk(g_mx);
+                    g_pending_image.assign(acc.begin() + (long)(nl + 1), acc.begin() + (long)(nl + 1 + len));
+                    g_pending_image_read = read_n;
+                    g_has_image = true;
+                }
+                fprintf(stderr, "V2-NET: state image of read %ld received (%lu bytes)\n", read_n, len);
+                acc.erase(0, nl + 1 + len);
+                continue;
+            }
+            acc.erase(0, nl + 1);
             handle_line(p, line);
         }
         if (!p->alive) break;
@@ -264,7 +334,7 @@ std::string options_string() {
     return b;
 }
 void apply_options(const char* opts) {
-    v2_options_ensure_loaded();      // the cfg first, the host's values over it (the game has not started)
+    v2_options_ensure_loaded();      // the cfg first, the host's values over it
     int v; char lang[16];
     const char* c = opts;
     while (*c) {
@@ -279,11 +349,64 @@ void apply_options(const char* opts) {
     fprintf(stderr, "V2-NET: the host's world: %s\n", opts);
 }
 
-} // namespace
+// ---------------------------------------------------------------- host: accept
+// "S" / "S I" + the participants as of now: <player>:<from_read> for the host
+// and every started peer — the client waits for exactly these from its first
+// read (a later joiner is announced by J). g_mx held by the caller.
+std::string start_line(bool image) {
+    std::string l = image ? "S I" : "S";
+    l += " 0:0";
+    for (Peer* q : peers_snapshot())
+        if (q->alive && q->started && g_part[q->player]) l += " " + std::to_string(q->player) + ":" + std::to_string(g_part_from[q->player]);
+    return l + "\n";
+}
+int free_player_slot() {
+    // the lowest player number 1..players-1 without a live peer (a departed player's number is reused)
+    for (int k = 1; k < g_players; k++) {
+        bool taken = false;
+        for (Peer* p : peers_snapshot()) if (p->alive && p->player == k) taken = true;
+        if (!taken) return k;
+    }
+    return -1;
+}
+void accept_thread() {
+    const std::string opts = options_string();
+    while (!g_quit_net) {
+        sockaddr_in ca; socklen_t cl = sizeof ca;
+        sock_t cs = accept(g_listen, (sockaddr*)&ca, &cl);
+        if (cs == BAD_SOCK) { if (g_quit_net) break; continue; }
+        int k = free_player_slot();
+        if (k < 0) { fprintf(stderr, "V2-NET: a connection refused — the game is full\n"); sock_close(cs); continue; }
+        sock_nodelay(cs);
+        Peer* p = new Peer; p->s = cs; p->player = k;
+        char hello[256];
+        snprintf(hello, sizeof hello, "W %d %d %d %s\n", g_players, k, g_delay, opts.c_str());
+        send_all(p, hello);
+        {
+            std::lock_guard<std::mutex> lk(g_mx);
+            g_gone[k] = false;
+        }
+        {
+            std::lock_guard<std::mutex> lk(g_peers_mx);
+            g_peers.push_back(p);
+        }
+        g_connected++;
+        fprintf(stderr, "V2-NET: player %d connected from %s%s\n", k + 1, inet_ntoa(ca.sin_addr),
+                g_lobby_open ? " (lobby)" : " — joining the running game");
+        if (!g_lobby_open) {
+            // a late joiner: START now ("S I": an image follows), the state image at the host's next main read
+            std::string sl;
+            { std::lock_guard<std::mutex> lk(g_mx); sl = start_line(true); }
+            send_all(p, sl);
+            p->started = true;
+            p->needs_image = true;
+        }
+        start_rx(p);
+    }
+}
 
-// ================================================================== lobby
-bool v2_net_host(int port, int players, int delay) {
-    if (players < 2 || players > V2_COOP_MAX) { fprintf(stderr, "V2-NET: --host needs --coop=2 or 3\n"); return false; }
+bool start_listening(int port, int players, int delay) {
+    if (players < 2 || players > V2_COOP_MAX) { fprintf(stderr, "V2-NET: hosting needs 2 or 3 players\n"); return false; }
     if (!sock_init()) { fprintf(stderr, "V2-NET: socket init failed\n"); return false; }
     sock_t ls = socket(AF_INET, SOCK_STREAM, 0);
     if (ls == BAD_SOCK) { fprintf(stderr, "V2-NET: socket() failed\n"); return false; }
@@ -294,34 +417,17 @@ bool v2_net_host(int port, int players, int delay) {
         fprintf(stderr, "V2-NET: cannot listen on port %d\n", port);
         sock_close(ls); return false;
     }
-    g_players = players; g_local = 0; g_delay = delay; g_host = true;
-    for (int k = 0; k < players; k++) g_part[k] = true;
-    const std::string opts = options_string();
-    fprintf(stderr, "V2-NET: hosting %d players on port %d (input delay %d reads), waiting for %d client(s)...\n",
-            players, port, delay, players - 1);
-    for (int k = 1; k < players; k++) {
-        sockaddr_in ca; socklen_t cl = sizeof ca;
-        sock_t cs = accept(ls, (sockaddr*)&ca, &cl);
-        if (cs == BAD_SOCK) { fprintf(stderr, "V2-NET: accept() failed\n"); sock_close(ls); return false; }
-        sock_nodelay(cs);
-        Peer* p = new Peer; p->s = cs; p->player = k;
-        g_peers.push_back(p);
-        char hello[256];
-        snprintf(hello, sizeof hello, "W %d %d %d %s\n", players, k, delay, opts.c_str());
-        send_all(p, hello);
-        fprintf(stderr, "V2-NET: player %d connected from %s\n", k + 1, inet_ntoa(ca.sin_addr));
-    }
-    sock_close(ls);
-    for (Peer* p : g_peers) send_all(p, "S\n");
-    for (Peer* p : g_peers) start_rx(p);
-    g_active = true;
+    g_listen = ls;
+    g_players = players; g_local = 0; g_delay = delay; g_host = true; g_port = port;
+    g_part[0] = true; g_part_from[0] = 0;
     g_last_wait_log = std::chrono::steady_clock::now();
-    fprintf(stderr, "V2-NET: all players in — starting\n");
+    g_accept = std::thread(accept_thread);
     return true;
 }
 
-bool v2_net_join(const char* host_port) {
-    if (!sock_init()) { fprintf(stderr, "V2-NET: socket init failed\n"); return false; }
+// ---------------------------------------------------------------- client: connect
+bool connect_and_hello(const char* host_port, std::string& err) {
+    if (!sock_init()) { err = "socket init failed"; return false; }
     std::string hp = host_port ? host_port : "";
     std::string host = hp, port = "7420";
     size_t colon = hp.rfind(':');
@@ -330,9 +436,7 @@ bool v2_net_join(const char* host_port) {
     addrinfo hints; memset(&hints, 0, sizeof hints);
     hints.ai_family = AF_UNSPEC; hints.ai_socktype = SOCK_STREAM;
     addrinfo* res = nullptr;
-    if (getaddrinfo(host.c_str(), port.c_str(), &hints, &res) != 0 || !res) {
-        fprintf(stderr, "V2-NET: cannot resolve %s:%s\n", host.c_str(), port.c_str()); return false;
-    }
+    if (getaddrinfo(host.c_str(), port.c_str(), &hints, &res) != 0 || !res) { err = "cannot resolve " + host; return false; }
     sock_t s = BAD_SOCK;
     for (addrinfo* ai = res; ai; ai = ai->ai_next) {
         s = socket(ai->ai_family, ai->ai_socktype, ai->ai_protocol);
@@ -341,34 +445,117 @@ bool v2_net_join(const char* host_port) {
         sock_close(s); s = BAD_SOCK;
     }
     freeaddrinfo(res);
-    if (s == BAD_SOCK) { fprintf(stderr, "V2-NET: cannot connect to %s:%s\n", host.c_str(), port.c_str()); return false; }
+    if (s == BAD_SOCK) { err = "cannot connect to " + host + ":" + port; return false; }
     sock_nodelay(s);
     std::string acc, line;
-    if (!recv_line(s, acc, line) || line.size() < 2 || line[0] != 'W') {
-        fprintf(stderr, "V2-NET: no HELLO from the host\n"); sock_close(s); return false;
-    }
+    if (!recv_line(s, acc, line) || line.size() < 2 || line[0] != 'W') { err = "no HELLO from the host"; sock_close(s); return false; }
     int players = 0, index = 0, delay = 2, consumed = 0;
     if (sscanf(line.c_str(), "W %d %d %d %n", &players, &index, &delay, &consumed) < 3 || players < 2 || players > V2_COOP_MAX || index < 1 || index >= players) {
-        fprintf(stderr, "V2-NET: bad HELLO '%s'\n", line.c_str()); sock_close(s); return false;
+        err = "bad HELLO"; sock_close(s); return false;
     }
     apply_options(line.c_str() + consumed);
-    g_players = players; g_local = index; g_delay = delay; g_host = false;
-    for (int k = 0; k < players; k++) g_part[k] = true;
-    v2_coop_set_players(players);
-    g_v2_local_player = index;
-    fprintf(stderr, "V2-NET: joined %s:%s as player %d of %d (input delay %d reads), waiting for the start...\n",
-            host.c_str(), port.c_str(), index + 1, players, delay);
+    g_players = players; g_local = index; g_delay = delay; g_host = false; g_host_name = host + ":" + port;
+    fprintf(stderr, "V2-NET: joined %s as player %d of %d (input delay %d reads), waiting for the start...\n",
+            g_host_name.c_str(), index + 1, players, delay);
     for (;;) {
-        if (!recv_line(s, acc, line)) { fprintf(stderr, "V2-NET: the host went away before the start\n"); sock_close(s); return false; }
-        if (line == "S") break;
+        if (!recv_line(s, acc, line)) { err = "the host went away before the start"; sock_close(s); return false; }
+        if (line.empty() || line[0] != 'S') continue;
+        // "S k:from ..." (a lobby start: this client takes part from read 1) or
+        // "S I k:from ..." (a running game: the host's image follows; the J after it says from which read this client counts)
+        g_late = line.compare(0, 3, "S I") == 0;
+        {
+            std::lock_guard<std::mutex> lk(g_mx);
+            for (int k = 0; k < V2_COOP_MAX; k++) { g_part[k] = false; g_part_from[k] = 0; g_gone[k] = false; }
+            const char* c = line.c_str() + (g_late ? 3 : 1);
+            int k; long from; int used;
+            while (sscanf(c, " %d:%ld%n", &k, &from, &used) == 2) {
+                if (k >= 0 && k < V2_COOP_MAX) { g_part[k] = true; g_part_from[k] = from; }
+                c += used;
+            }
+            if (!g_late) { g_part[index] = true; g_part_from[index] = 0; }
+        }
+        break;
     }
-    Peer* p = new Peer; p->s = s; p->player = 0;
-    p->acc0 = acc;                  // a batch the host sent right after START may already be here
-    g_peers.push_back(p);
+    Peer* p = new Peer; p->s = s; p->player = 0; p->started = true;
+    p->acc0 = acc;                  // whatever the host sent right after START (an image, batches) is already here
+    {
+        std::lock_guard<std::mutex> lk(g_peers_mx);
+        g_peers.push_back(p);
+    }
     start_rx(p);
-    g_active = true;
     g_last_wait_log = std::chrono::steady_clock::now();
     fprintf(stderr, "V2-NET: started\n");
+    return true;
+}
+
+} // namespace
+
+// ================================================================== lobby
+bool v2_net_host(int port, int players, int delay, int lobby_wait) {
+    if (lobby_wait < 0 || lobby_wait > players - 1) lobby_wait = players - 1;
+    g_lobby_open = true;
+    if (!start_listening(port, players, delay)) return false;
+    fprintf(stderr, "V2-NET: hosting %d players on port %d (input delay %d reads), waiting for %d client(s) in the lobby...\n",
+            players, port, delay, lobby_wait);
+    while (g_connected.load() < lobby_wait && !need_quit) SDL_Delay(20);
+    // the lobby is complete: everybody in it takes part from read 1; START (with the whole list) to each
+    std::vector<Peer*> lobby = peers_snapshot();
+    {
+        std::lock_guard<std::mutex> lk(g_mx);
+        for (Peer* p : lobby) if (p->alive && !p->started) { p->started = true; g_part[p->player] = true; g_part_from[p->player] = 0; }
+    }
+    std::string sl;
+    { std::lock_guard<std::mutex> lk(g_mx); sl = start_line(false); }
+    for (Peer* p : lobby) if (p->alive) send_all(p, sl);
+    g_lobby_open = false;
+    g_active = true;
+    fprintf(stderr, "V2-NET: %s — starting\n", lobby_wait == players - 1 ? "all players in" : "the lobby is in; the others may join the running game");
+    return true;
+}
+
+bool v2_net_listen(int port, int players, int delay) {
+    if (g_active) { fprintf(stderr, "V2-NET: already in a network game\n"); return false; }
+    g_lobby_open = false;
+    if (!start_listening(port, players, delay)) return false;
+    g_active = true;
+    fprintf(stderr, "V2-NET: hosting %d players on port %d (input delay %d reads) — players join the running game\n", players, port, delay);
+    return true;
+}
+
+bool v2_net_join(const char* host_port) {
+    std::string err;
+    if (!connect_and_hello(host_port, err)) { fprintf(stderr, "V2-NET: %s\n", err.c_str()); return false; }
+    v2_coop_set_players(g_players);
+    g_v2_local_player = g_local;
+    g_active = true;
+    return true;
+}
+
+bool v2_net_joined_late() { return g_late; }
+
+bool v2_net_join_async(const char* host_port) {
+    if (g_active) { fprintf(stderr, "V2-NET: already in a network game\n"); return false; }
+    std::string addr = host_port ? host_port : "";
+    std::thread([addr]() {
+        std::string err;
+        if (!connect_and_hello(addr.c_str(), err)) {
+            fprintf(stderr, "V2-NET: %s\n", err.c_str());
+            v2_ui_toast("JOIN FAILED");
+            return;
+        }
+        if (!g_late) {
+            // a lobby host starts everybody at read 1 — this game is already running; only a running game can be joined from the menu
+            fprintf(stderr, "V2-NET: the host is still in its lobby — join it with --join at start\n");
+            v2_ui_toast("HOST IN LOBBY: USE --JOIN");
+            for (Peer* p : peers_snapshot()) { p->alive = false; sock_shutdown(p->s); }
+            return;
+        }
+        g_session_players = g_players; g_session_index = g_local;
+        g_session_pending = true;
+        g_active = true;
+        v2_input_recorder_net(g_local, 0);     // the game thread adopts the session and waits for the image at its next main read
+        v2_ui_toast("CONNECTED - SYNCING");
+    }).detach();
     return true;
 }
 
@@ -380,9 +567,27 @@ void v2_net_solo(int delay) {
     fprintf(stderr, "V2-NET: solo lockstep, input delay %d reads\n", delay);
 }
 
-bool v2_net_active() { return g_active; }
+bool v2_net_active() { return g_active.load(); }
 int  v2_net_delay()  { return g_delay; }
-int  v2_net_peer_count() { return (int)g_peers.size(); }
+int  v2_net_peer_count() { std::lock_guard<std::mutex> lk(g_peers_mx); return (int)g_peers.size(); }
+bool v2_net_is_host() { return g_host; }
+int  v2_net_rtt_ms() { return g_rtt_ms.load(); }
+
+const char* v2_net_status() {
+    static char buf[96];
+    if (!g_active) { snprintf(buf, sizeof buf, "NET: OFF"); return buf; }
+    int live = 0;
+    std::vector<Peer*> peers = peers_snapshot();
+    for (Peer* p : peers) if (p->alive) live++;
+    if (g_host) snprintf(buf, sizeof buf, "NET: HOST PORT %d  %d/%d PLAYERS  DELAY %d", g_port, live + 1, g_players, g_delay);
+    else if (peers.empty()) snprintf(buf, sizeof buf, "NET: SOLO LOCKSTEP  DELAY %d", g_delay);
+    else {
+        int rtt = g_rtt_ms.load();
+        if (rtt >= 0) snprintf(buf, sizeof buf, "NET: PLAYER %d OF %d  %s  PING %d MS", g_local + 1, g_players, live ? "ON" : "HOST LOST", rtt);
+        else          snprintf(buf, sizeof buf, "NET: PLAYER %d OF %d  %s", g_local + 1, g_players, live ? "ON" : "HOST LOST");
+    }
+    return buf;
+}
 
 // ============================================================ the pipeline
 void v2_net_send_batch(long read_n, const std::vector<V2NetEvent>& evs) {
@@ -393,9 +598,10 @@ void v2_net_send_batch(long read_n, const std::vector<V2NetEvent>& evs) {
         g_inbox[g_local][read_n] = evs;
         g_batches_sent++;
     }
-    if (g_peers.empty()) return;
+    std::vector<Peer*> peers = peers_snapshot();
+    if (peers.empty()) return;
     const std::string line = encode_batch(g_local, read_n, evs);
-    for (Peer* p : g_peers) if (p->alive) send_all(p, line);
+    for (Peer* p : peers) if (p->alive && p->started) send_all(p, line);
 }
 
 bool v2_net_wait_batch(long read_n, std::vector<V2NetEvent>& out) {
@@ -404,9 +610,10 @@ bool v2_net_wait_batch(long read_n, std::vector<V2NetEvent>& out) {
     if (g_players <= 0) g_players = g_v2_coop_players;
     if (read_n <= g_delay) return true;              // the first d reads have no batches: everybody's first is read d+1
     std::unique_lock<std::mutex> lk(g_mx);
+    auto awaited = [&](int k) { return g_part[k] && !g_gone[k] && read_n >= g_part_from[k]; };
     auto ready = [&]() {
         for (int k = 0; k < g_players; k++)
-            if (g_part[k] && !g_gone[k] && g_inbox[k].find(read_n) == g_inbox[k].end()) return false;
+            if (awaited(k) && g_inbox[k].find(read_n) == g_inbox[k].end()) return false;
         return true;
     };
     while (!ready()) {
@@ -417,22 +624,91 @@ bool v2_net_wait_batch(long read_n, std::vector<V2NetEvent>& out) {
                 g_last_wait_log = now;
                 std::string who;
                 for (int k = 0; k < g_players; k++)
-                    if (g_part[k] && !g_gone[k] && g_inbox[k].find(read_n) == g_inbox[k].end()) who += " P" + std::to_string(k + 1);
+                    if (awaited(k) && g_inbox[k].find(read_n) == g_inbox[k].end()) who += " P" + std::to_string(k + 1);
                 fprintf(stderr, "V2-NET: read %ld waits for%s\n", read_n, who.c_str());
             }
         }
     }
     for (int k = 0; k < g_players; k++) {
         auto it = g_inbox[k].find(read_n);
-        if (it == g_inbox[k].end()) continue;        // a player who left: an empty batch
+        if (it == g_inbox[k].end()) continue;        // a player who left / has not joined yet: an empty batch
         out.insert(out.end(), it->second.begin(), it->second.end());
         g_inbox[k].erase(it);
     }
     return true;
 }
 
+// ============================================================ the image channel
+bool v2_net_adopt_session() {
+    if (!g_session_pending.exchange(false)) return false;
+    v2_coop_set_players(g_session_players);
+    g_v2_local_player = g_session_index;
+    return true;
+}
+
+bool v2_net_snapshot_wanted() {
+    if (!g_active || !g_host) return false;
+    for (Peer* p : peers_snapshot()) if (p->alive && p->needs_image) return true;
+    return false;
+}
+
+void v2_net_send_image(long read_n, const std::vector<uint8_t>& img, bool everyone) {
+    if (!g_active) return;
+    if (g_players <= 0) g_players = g_v2_coop_players;
+    char head[64];
+    snprintf(head, sizeof head, "T %ld %lu\n", read_n, (unsigned long)img.size());
+    std::vector<Peer*> peers = peers_snapshot();
+    if (everyone) {
+        // the host's state load: every peer and the host itself apply it at read_n
+        for (Peer* p : peers) if (p->alive && p->started) { send_all(p, head); send_all(p, (const char*)img.data(), img.size()); }
+        std::lock_guard<std::mutex> lk(g_mx);
+        g_pending_image = img; g_pending_image_read = read_n; g_has_image = true;
+        fprintf(stderr, "V2-NET: state image for read %ld sent to %d peer(s)\n", read_n, (int)peers.size());
+        return;
+    }
+    // the joiners: the image, then every batch already held for reads >= read_n, then everybody learns from which read they take part
+    std::vector<std::string> future;
+    {
+        std::lock_guard<std::mutex> lk(g_mx);
+        for (int k = 0; k < g_players; k++)
+            for (auto& kv : g_inbox[k]) if (kv.first >= read_n) future.push_back(encode_batch(k, kv.first, kv.second));
+    }
+    for (Peer* p : peers) {
+        if (!p->alive || !p->needs_image) continue;
+        send_all(p, head);
+        send_all(p, (const char*)img.data(), img.size());
+        for (const std::string& l : future) send_all(p, l);
+        p->needs_image = false;
+        const long from = read_n + g_delay;
+        {
+            std::lock_guard<std::mutex> lk(g_mx);
+            g_part[p->player] = true; g_part_from[p->player] = from; g_gone[p->player] = false;
+        }
+        const std::string j = "J " + std::to_string(p->player) + " " + std::to_string(from) + "\n";
+        for (Peer* q : peers) if (q->alive && q->started) send_all(q, j);
+        fprintf(stderr, "V2-NET: player %d joined at read %ld (%lu-byte image, %d pending batches); takes part from read %ld\n",
+                p->player + 1, read_n, (unsigned long)img.size(), (int)future.size(), from);
+    }
+    g_cv.notify_all();
+}
+
+bool v2_net_take_image(std::vector<uint8_t>& img, long& read_n) {
+    std::lock_guard<std::mutex> lk(g_mx);
+    if (!g_has_image) return false;
+    img.swap(g_pending_image);
+    g_pending_image.clear();
+    read_n = g_pending_image_read;
+    g_has_image = false;
+    g_image_applied = true;
+    return true;
+}
+
+bool v2_net_synced() { return !g_late || g_image_applied.load(); }
+
 void v2_net_send_hash(int frame, uint32_t hash) {
-    if (!g_active || g_peers.empty()) return;
+    if (!g_active) return;
+    std::vector<Peer*> peers = peers_snapshot();
+    if (peers.empty()) return;
     if (g_host) {
         std::lock_guard<std::mutex> lk(g_mx);
         g_hash_mine[frame] = hash;
@@ -440,21 +716,26 @@ void v2_net_send_hash(int frame, uint32_t hash) {
     } else {
         char b[64];
         snprintf(b, sizeof b, "H %d %d %08X\n", g_local, frame, (unsigned)hash);
-        send_all(g_peers[0], b);
+        send_all(peers[0], b);
+        // a ping once a second (echoed by the host; the menu shows the round trip)
+        uint32_t now = SDL_GetTicks();
+        if (now - g_last_ping >= 1000) {
+            g_last_ping = now;
+            snprintf(b, sizeof b, "P %u\n", (unsigned)now);
+            send_all(peers[0], b);
+        }
     }
 }
 
 void v2_net_shutdown() {
-    if (!g_active) return;
-    g_active = false;
-    for (Peer* p : g_peers) {
+    if (!g_active.exchange(false)) return;
+    g_quit_net = true;
+    if (g_listen != BAD_SOCK) { sock_shutdown(g_listen); sock_close(g_listen); g_listen = BAD_SOCK; }
+    if (g_accept.joinable()) g_accept.join();
+    for (Peer* p : peers_snapshot()) {
         p->alive = false;
         if (p->s != BAD_SOCK) {
-#ifdef _WIN32
-            shutdown(p->s, SD_BOTH);
-#else
-            shutdown(p->s, SHUT_RDWR);
-#endif
+            sock_shutdown(p->s);
             sock_close(p->s);
             p->s = BAD_SOCK;
         }

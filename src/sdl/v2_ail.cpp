@@ -232,6 +232,11 @@ static constexpr uint16_t DS_A39A_INIT = 0xA39A;  // sound-init done flag
 // game segments, see v2_ail_interp service paragraphs).
 static constexpr uint16_t CACHE_PARA = 0xEC00;
 static uint8_t g_cache[0x10000 + 16];
+// UX stage 8 tails: the cache is part of the state image (the "AILC" block) —
+// without it a loaded state (or a joining lockstep client) runs the sound
+// driver on another timbre cache than the world it copies and the driver's DS
+// words (slots, timbre offsets) drift apart.
+extern "C" uint8_t* v2_ail_cache_data(uint32_t* size) { if (size) *size = (uint32_t)sizeof(g_cache); return g_cache; }
 
 static bool     g_booted = false;
 static double   g_tick_hz = 0.0;

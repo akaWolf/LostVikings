@@ -18,8 +18,10 @@
 // original. Co-op needs V2_ONLY (the default mode mirrors the DOS engine,
 // which has no second player).
 #pragma once
+#include <cstddef>
 #include <cstdint>
 #include <atomic>
+#include <vector>
 
 constexpr int V2_COOP_MAX = 3;
 
@@ -81,6 +83,12 @@ uint16_t v2_coop_view(uint16_t off, uint16_t real, const uint8_t* ds);
 void v2_coop_read_inputs(uint8_t* s);   // after sub_12352: the words of players 2..3 for this read
 void v2_coop_cycle(uint8_t* s);         // instead of sub_12e79 in co-op: viking cycling per player, held vikings skipped
 void v2_coop_death(uint8_t* s);         // after sub_12e16: reassign the vikings of dead players
+// UX stage 8 tails — the state image (v2_vm.cpp): the V2S1 blocks plus the
+// "COOP" block (the players' words/ownership/cameras, the frame counter, the
+// view). v2_state_save/load wrap these for files; the lockstep sends them.
+void v2_state_serialize(std::vector<uint8_t>& out);
+int  v2_state_apply_image(const uint8_t* img, size_t size);   // the lockstep: restores the frame counter and reloads the level caches; 0 = ok
+extern bool v2_input_main_read;   // the frame's pre_vm input read is in progress (not a wait loop's): the lockstep's image points
 // step 2 (cameras)
 void v2_coop_cameras(uint8_t* s);        // after sub_1064b: the cameras of players 2..3 follow their vikings
 void v2_coop_spawn_trackers(uint8_t* s); // after sub_1673c: the spawn scans of the extra cameras

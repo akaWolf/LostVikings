@@ -103,6 +103,7 @@ int main(int argc, char* argv[]) {
     int net_host_port = 0;            // UX stage 8 step 3: --host=PORT (with --coop=N)
     const char* net_join = nullptr;   //                    --join=HOST[:PORT]
     int net_delay = -1;               //                    --delay=N reads (default 2; alone = the solo lockstep)
+    int net_lobby = -1;               //                    --lobby=K: the host starts once K clients are in (default all; the rest join the running game)
     for (int i = 1; i < argc; i++) {
         if (strcmp(argv[i], "--debug") == 0) {
             g_debug_mode = true;
@@ -125,6 +126,8 @@ int main(int argc, char* argv[]) {
             net_join = argv[i] + 7;
         } else if (strncmp(argv[i], "--delay=", 8) == 0) {
             net_delay = atoi(argv[i] + 8);
+        } else if (strncmp(argv[i], "--lobby=", 8) == 0) {
+            net_lobby = atoi(argv[i] + 8);
         } else if (strncmp(argv[i], "--player=", 9) == 0) {
             // UX stage 8 step 2: the player this client presents (1..3; the
             // camera and the badge); step 3's lobby sets it from the host
@@ -171,13 +174,14 @@ int main(int argc, char* argv[]) {
     {
         const int delay = (net_delay < 0) ? 2 : (net_delay < 1 ? 1 : (net_delay > 8 ? 8 : net_delay));
         if (net_host_port > 0) {
-            if (!v2_net_host(net_host_port, v2_coop_players(), delay)) return 1;
+            if (!v2_net_host(net_host_port, v2_coop_players(), delay, net_lobby)) return 1;
         } else if (net_join) {
             if (!v2_net_join(net_join)) return 1;
         } else if (net_delay >= 0) {
             v2_net_solo(delay);
         }
-        if (v2_net_active()) v2_input_recorder_net(g_v2_local_player);
+        // a client that joined a game already running gets the host's image first (synced = 0)
+        if (v2_net_active()) v2_input_recorder_net(g_v2_local_player, (net_join && v2_net_joined_late()) ? 0 : 1);
     }
 
     // Load baked static EXE data, then point v2 base at it.

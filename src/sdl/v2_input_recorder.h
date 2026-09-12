@@ -37,7 +37,7 @@ int v2_input_poll_event(SDL_Event* e);
 // events are captured instead of applied (the render loop hands its key events
 // to v2_input_net_capture; a replay's events are captured when they fall due)
 // and every read applies the batches of all players for that read.
-void v2_input_recorder_net(int local_player);
+void v2_input_recorder_net(int local_player, int synced);   // synced = 0: a joiner — free-running until the host's image lands at a main read
 void v2_input_net_capture(const SDL_Event* e);
 
 // RECORD mode only: flush pending key edges (captured by the render thread) to

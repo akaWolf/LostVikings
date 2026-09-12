@@ -44,6 +44,12 @@ extern std::atomic<int>  v2_ui_req_save;                // slot or -1
 extern std::atomic<int>  v2_ui_req_load;
 extern std::atomic<int>  v2_ui_req_level;               // level slot or -1
 extern std::atomic<bool> v2_ui_rewind_hold;
+// UX stage 8 tails: the co-op lobby lives in the menu (v2_net.h)
+extern std::atomic<int>  v2_ui_req_net_host;            // a port to host on, or -1
+extern std::atomic<bool> v2_ui_req_net_join;            // connect to v2_ui_net_addr (written before the flag is raised)
+extern char              v2_ui_net_addr[64];
+extern std::atomic<int>  v2_ui_net_players;             // 2..3
+extern std::atomic<int>  v2_ui_net_delay;               // 1..8 reads
 
 // level list for the menu (filled by the game thread)
 struct V2UiLevel { int slot; char pw[5]; };

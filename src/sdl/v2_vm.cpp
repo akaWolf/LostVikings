@@ -43,6 +43,10 @@ extern uint8_t v2_vga[65536 * 4];
 #include "v2_obj_view.h"
 #include "v2_coop.h"        // UX stage 8: per-player input words / active vikings (inert with one player)
 #include "v2_net.h"         // UX stage 8 step 3: the per-frame hash of the lockstep
+#include <vector>
+extern "C" long g_sub12352_seq;                              // v2_input_recorder.cpp: the lockstep's read coordinate
+extern "C" void v2_input_recorder_net(int local_player, int synced);   // v2_input_recorder.cpp
+bool v2_input_main_read = false;    // UX stage 8 tails: set around the frame's pre_vm input read (v2_coop.h)
 #include "v2_vm_gen.h"      // V2VM + everything the generated executors (src/sdl/gen/exec_01cN.cpp) share with this file
 
 // Access to emulated memory
@@ -3734,11 +3738,11 @@ void v2_coop_spawn_trackers(uint8_t* s) {
 // (then he is a spectator: p[0].active = none, the DS word keeps the camera).
 // Step 2: a player who has a viking has a camera (placed by sub_113d8's rule
 // the moment he gets his first viking in the level; kept across a switch).
+static uint16_t g_coop_sync_level = 0xFFFF;   // the level the assignments belong to (part of the state image's COOP block)
 static void v2_coop_sync(uint8_t* s) {
-    static uint16_t s_level = 0xFFFF;
     uint16_t level = v2gs(s).level();
-    if (level != s_level) {
-        s_level = level;
+    if (level != g_coop_sync_level) {
+        g_coop_sync_level = level;
         for (int k = 1; k < V2_COOP_MAX; k++) g_coop.p[k] = V2CoopPlayer{};
     }
     uint16_t a1 = coop_ds_u16(s, DS_ACTIVE_VIKING);
@@ -3850,6 +3854,54 @@ void v2_coop_death(uint8_t* s) {
             if (v2_coop_alive(s, vk) && v2_coop_free(vk, 0)) { v2gs(s).active_viking(vk); break; }
     }
     v2_coop_sync(s);
+}
+
+// ---- the state image's "COOP" block (UX stage 8 tails) -------------------
+// The co-op / lockstep state outside the DS. Little-endian words, an explicit
+// layout (no struct dumps):
+//   u16 version = 1, u16 players, u16 sync level, u32 frame counter (lo, hi),
+//   u16 view width, u16 view height, u16 console variant,
+//   per player 0..2: u16 keys, edges, prev, active, cam_x, cam_y, cam_col2, cam_row2; u8 cam_valid, cam_scanned
+// The frame counter is restored only by the lockstep (every client applies
+// the image with the same counting); the debug LOAD slot keeps its own.
+static void coop_put16(std::vector<uint8_t>& o, uint16_t v) { o.push_back((uint8_t)v); o.push_back((uint8_t)(v >> 8)); }
+static uint16_t coop_get16(const uint8_t* p) { return (uint16_t)(p[0] | (p[1] << 8)); }
+static const size_t V2_COOP_BLOCK_SIZE = 2 * 8 + V2_COOP_MAX * (8 * 2 + 2);
+static void v2_coop_state_write(std::vector<uint8_t>& o) {
+    coop_put16(o, 1);
+    coop_put16(o, (uint16_t)g_v2_coop_players);
+    coop_put16(o, g_coop_sync_level);
+    coop_put16(o, (uint16_t)((uint32_t)v2_dbg_pre_vm_iter & 0xFFFF));
+    coop_put16(o, (uint16_t)((uint32_t)v2_dbg_pre_vm_iter >> 16));
+    coop_put16(o, (uint16_t)v2_view_w);
+    coop_put16(o, (uint16_t)v2_view_h_cur);
+    coop_put16(o, v2_console_variant ? 1 : 0);
+    for (int k = 0; k < V2_COOP_MAX; k++) {
+        const V2CoopPlayer& p = g_coop.p[k];
+        coop_put16(o, p.keys); coop_put16(o, p.edges); coop_put16(o, p.prev); coop_put16(o, p.active);
+        coop_put16(o, p.cam_x); coop_put16(o, p.cam_y); coop_put16(o, p.cam_col2); coop_put16(o, p.cam_row2);
+        o.push_back(p.cam_valid ? 1 : 0); o.push_back(p.cam_scanned ? 1 : 0);
+    }
+}
+static bool v2_coop_state_read(const uint8_t* p, size_t n, bool restore_frame) {
+    if (n < V2_COOP_BLOCK_SIZE || coop_get16(p) != 1) return false;
+    int players = coop_get16(p + 2);
+    if (players < 1 || players > V2_COOP_MAX) return false;
+    g_v2_coop_players = players;
+    g_coop_sync_level = coop_get16(p + 4);
+    if (restore_frame) v2_dbg_pre_vm_iter = (int)((uint32_t)coop_get16(p + 6) | ((uint32_t)coop_get16(p + 8) << 16));
+    v2_view_w = coop_get16(p + 10);
+    v2_view_h_cur = coop_get16(p + 12);
+    v2_console_variant = coop_get16(p + 14) != 0;
+    const uint8_t* q = p + 16;
+    for (int k = 0; k < V2_COOP_MAX; k++) {
+        V2CoopPlayer& pl = g_coop.p[k];
+        pl.keys = coop_get16(q); pl.edges = coop_get16(q + 2); pl.prev = coop_get16(q + 4); pl.active = coop_get16(q + 6);
+        pl.cam_x = coop_get16(q + 8); pl.cam_y = coop_get16(q + 10); pl.cam_col2 = coop_get16(q + 12); pl.cam_row2 = coop_get16(q + 14);
+        pl.cam_valid = q[16] != 0; pl.cam_scanned = q[17] != 0;
+        q += 18;
+    }
+    return true;
 }
 
 static void v2_hud_health_120ff(uint8_t* s);
@@ -8840,7 +8892,9 @@ static bool v2_shadow_initialized = false;
 // Save is read-only (safe on any world); load is V2_ONLY-only by call site
 // (loading just the shadow under verify would split the twin worlds).
 // ============================================================================
-struct V2StateBlock { const char* tag; void* ptr; uint32_t len; };
+struct V2StateBlock { const char* tag; void* ptr; uint32_t len; bool optional; };   // optional: an older image may lack it
+extern "C" uint8_t* v2_ailnat_data();                 // v2_ail_native.cpp: the driver's resident memory (code + live data)
+extern "C" uint8_t* v2_ail_cache_data(uint32_t* size); // v2_ail.cpp: the timbre cache the driver was handed
 static bool v2_state_blocks(V2StateBlock* b, int* n, uint8_t* ds_img) {
     int k = 0;
     b[k++] = { "DS  ", ds_img,                   0x10000 };
@@ -8858,53 +8912,75 @@ static bool v2_state_blocks(V2StateBlock* b, int* n, uint8_t* ds_img) {
       b[k++] = { "VGA ", v2_vga,     65536u * 4 };
       b[k++] = { "VCOV", v2_vga_cov, 65536u * 4 }; }
     b[k++] = { "DAC ", v2_dac_shadow, 768 };
+    // UX stage 8 tails: the sound driver's world — its resident memory and the
+    // timbre cache. A state without them (older files) loads with the sound
+    // running on; the lockstep needs them, or the driver's DS words (sequence
+    // slots, timbre offsets, the requested patch) diverge on a joining client.
+    { uint32_t csz = 0; uint8_t* cache = v2_ail_cache_data(&csz);
+      b[k++] = { "AILN", v2_ailnat_data(), 0x10000, true };
+      b[k++] = { "AILC", cache,            csz,     true }; }
     *n = k;
     return true;
 }
-extern "C" int v2_state_save(const char* path) {
+// The image in memory (UX stage 8 tails): the blocks above plus the "COOP"
+// block (the co-op state, the view, the frame counter). The lockstep sends it
+// to a joining client and carries the host's LOAD to every peer; the files
+// of v2_state_save/load are the same bytes.
+static void wr32(std::vector<uint8_t>& o, uint32_t v) { for (int i = 0; i < 4; i++) o.push_back((uint8_t)(v >> (8 * i))); }
+static uint32_t rd32(const uint8_t* p) { return (uint32_t)p[0] | ((uint32_t)p[1] << 8) | ((uint32_t)p[2] << 16) | ((uint32_t)p[3] << 24); }
+void v2_state_serialize(std::vector<uint8_t>& out) {
     static V2GameState st_gs;
     static uint8_t ds_img[0x10000];
     v2_gs_deserialize(&st_gs, v2_vm_shadow_ds);
     v2_gs_serialize(&st_gs, ds_img);
     V2StateBlock b[20]; int n = 0;
     v2_state_blocks(b, &n, ds_img);
-    FILE* f = fopen(path, "wb");
-    if (!f) { fprintf(stderr, "V2-STATE: save: cannot open %s\n", path); return 1; }
-    fwrite("V2S1", 1, 4, f);
-    uint32_t nn = (uint32_t)n;
-    fwrite(&nn, 4, 1, f);
+    std::vector<uint8_t> coop;
+    v2_coop_state_write(coop);
+    out.clear();
+    out.insert(out.end(), (const uint8_t*)"V2S1", (const uint8_t*)"V2S1" + 4);
+    wr32(out, (uint32_t)n + 1);
     for (int i = 0; i < n; i++) {
-        fwrite(b[i].tag, 1, 4, f);
-        fwrite(&b[i].len, 4, 1, f);
-        fwrite(b[i].ptr, 1, b[i].len, f);
+        out.insert(out.end(), (const uint8_t*)b[i].tag, (const uint8_t*)b[i].tag + 4);
+        wr32(out, b[i].len);
+        out.insert(out.end(), (const uint8_t*)b[i].ptr, (const uint8_t*)b[i].ptr + b[i].len);
     }
-    fclose(f);
-    fprintf(stderr, "V2-STATE: saved %d blocks to %s\n", n, path);
-    return 0;
+    out.insert(out.end(), (const uint8_t*)"COOP", (const uint8_t*)"COOP" + 4);
+    wr32(out, (uint32_t)coop.size());
+    out.insert(out.end(), coop.begin(), coop.end());
 }
-extern "C" int v2_state_load(const char* path) {
+// Tag-directed: the blocks in any order, a tag this build does not know is
+// skipped, the COOP block is optional (an older file = a one-player world).
+static int v2_state_deserialize(const uint8_t* img, size_t size, bool restore_frame, const char* what) {
     static V2GameState st_gs;
     static uint8_t ds_img[0x10000];
     V2StateBlock b[20]; int n = 0;
     v2_state_blocks(b, &n, ds_img);
-    FILE* f = fopen(path, "rb");
-    if (!f) { fprintf(stderr, "V2-STATE: load: cannot open %s\n", path); return 1; }
-    char magic[4]; uint32_t nn = 0;
-    if (fread(magic, 1, 4, f) != 4 || memcmp(magic, "V2S1", 4) != 0 ||
-        fread(&nn, 4, 1, f) != 1 || (int)nn != n) {
-        fprintf(stderr, "V2-STATE: load: bad header in %s\n", path);
-        fclose(f); return 1;
-    }
-    for (int i = 0; i < n; i++) {
-        char tag[4]; uint32_t len = 0;
-        if (fread(tag, 1, 4, f) != 4 || memcmp(tag, b[i].tag, 4) != 0 ||
-            fread(&len, 4, 1, f) != 1 || len != b[i].len ||
-            fread(b[i].ptr, 1, len, f) != len) {
-            fprintf(stderr, "V2-STATE: load: block %d (%.4s) mismatch\n", i, b[i].tag);
-            fclose(f); return 1;
+    if (size < 8 || memcmp(img, "V2S1", 4) != 0) { fprintf(stderr, "V2-STATE: %s: bad header\n", what); return 1; }
+    const uint32_t nn = rd32(img + 4);
+    size_t off = 8;
+    bool seen[20] = {}; bool coop_seen = false;
+    for (uint32_t i = 0; i < nn; i++) {
+        if (off + 8 > size) { fprintf(stderr, "V2-STATE: %s: truncated at block %u\n", what, i); return 1; }
+        const char* tag = (const char*)img + off;
+        const uint32_t len = rd32(img + off + 4);
+        off += 8;
+        if (off + len > size) { fprintf(stderr, "V2-STATE: %s: block %.4s runs past the end\n", what, tag); return 1; }
+        int j = 0;
+        while (j < n && memcmp(tag, b[j].tag, 4) != 0) j++;
+        if (j < n) {
+            if (len != b[j].len) { fprintf(stderr, "V2-STATE: %s: block %.4s is %u bytes, %u expected\n", what, tag, len, b[j].len); return 1; }
+            memcpy(b[j].ptr, img + off, len);
+            seen[j] = true;
+        } else if (memcmp(tag, "COOP", 4) == 0) {
+            if (!v2_coop_state_read(img + off, len, restore_frame)) { fprintf(stderr, "V2-STATE: %s: bad COOP block\n", what); return 1; }
+            coop_seen = true;
         }
+        off += len;
     }
-    fclose(f);
+    for (int j = 0; j < n; j++)
+        if (!seen[j] && !b[j].optional) { fprintf(stderr, "V2-STATE: %s: block %.4s missing\n", what, b[j].tag); return 1; }
+    if (!coop_seen) g_coop_sync_level = 0xFFFF;   // a one-player image: the assignments are re-derived at the next read
     // DS image -> shadow through the typed model (the save direction already
     // proved identity; this direction re-proves DEserialization).
     v2_gs_deserialize(&st_gs, ds_img);
@@ -8916,9 +8992,34 @@ extern "C" int v2_state_load(const char* path) {
     v2_current_level = v2gs(v2_vm_shadow_ds).level();
     v2_input_snapshot = 0;
     { extern uint16_t g_last_sub12352_new_keydowns; g_last_sub12352_new_keydowns = 0; }
-    fprintf(stderr, "V2-STATE: loaded %d blocks from %s (level=%u)\n",
-            n, path, (unsigned)v2_current_level);
+    fprintf(stderr, "V2-STATE: %s: %u blocks%s (level=%u, frame %d)\n", what, nn, coop_seen ? " incl. COOP" : "",
+            (unsigned)v2_current_level, v2_dbg_pre_vm_iter);
     return 0;
+}
+extern "C" int v2_state_save(const char* path) {
+    std::vector<uint8_t> img;
+    v2_state_serialize(img);
+    FILE* f = fopen(path, "wb");
+    if (!f) { fprintf(stderr, "V2-STATE: save: cannot open %s\n", path); return 1; }
+    fwrite(img.data(), 1, img.size(), f);
+    fclose(f);
+    fprintf(stderr, "V2-STATE: saved %lu bytes to %s\n", (unsigned long)img.size(), path);
+    return 0;
+}
+static bool v2_file_read_all(const char* path, std::vector<uint8_t>& out) {
+    FILE* f = fopen(path, "rb");
+    if (!f) return false;
+    fseek(f, 0, SEEK_END); long sz = ftell(f); fseek(f, 0, SEEK_SET);
+    if (sz < 0) { fclose(f); return false; }
+    out.resize((size_t)sz);
+    bool ok = sz == 0 || fread(out.data(), 1, (size_t)sz, f) == (size_t)sz;
+    fclose(f);
+    return ok;
+}
+extern "C" int v2_state_load(const char* path) {
+    std::vector<uint8_t> img;
+    if (!v2_file_read_all(path, img)) { fprintf(stderr, "V2-STATE: load: cannot open %s\n", path); return 1; }
+    return v2_state_deserialize(img.data(), img.size(), false, path);
 }
 
 // ============================================================================
@@ -8928,6 +9029,15 @@ extern "C" int v2_state_load(const char* path) {
 static void v2_parallax_load(uint8_t* s);
 static const V2LvxEntry* v2_lvx_find(uint16_t level);
 static uint16_t v2_lvx_demo_cid(uint16_t level);
+// The lockstep's image (v2_coop.h): a joiner's start, or the host's LOAD on
+// every peer — the frame counter comes with it (all clients count alike), the
+// parallax layer is reloaded for the image's level. The sound is not part of
+// the image (the music runs on until the next level).
+int v2_state_apply_image(const uint8_t* img, size_t size) {
+    int r = v2_state_deserialize(img, size, true, "lockstep image");
+    if (r == 0) v2_parallax_load(v2_vm_shadow_ds);
+    return r;
+}
 
 // rewind ring: raw copies of the state blocks (debug only, lazily allocated)
 static uint8_t* v2_rw_mem = nullptr;
@@ -8996,8 +9106,24 @@ static void v2_ui_service(uint8_t* s) {
     extern bool need_quit; extern bool g_debug_mode;
     v2_options_ensure_loaded();
     if (v2_ui_nlevels.load() == 0 && v2_shadow_initialized) v2_ui_fill_levels(s);
-    // the menu pauses the game at the tick boundary (the presenter keeps running)
-    while (v2_ui_menu_open.load() && !need_quit) SDL_Delay(8);
+    // the menu pauses the game at the tick boundary (the presenter keeps running) —
+    // not in a network game (UX stage 8 tails): one player's menu must not stall everybody
+    while (v2_ui_menu_open.load() && !need_quit && !v2_net_active()) SDL_Delay(8);
+    // UX stage 8 tails: the menu's HOST GAME / JOIN — the lobby is the menu
+    { int port;
+      if ((port = v2_ui_req_net_host.exchange(-1)) > 0) {
+          const int np = v2_ui_net_players.load(), nd = v2_ui_net_delay.load();
+          if (v2_net_listen(port, np, nd)) {
+              v2_coop_set_players(np);
+              g_v2_local_player = 0;
+              v2_input_recorder_net(0, 1);
+              v2_ui_toast("HOSTING - PLAYERS MAY JOIN");
+          } else v2_ui_toast("HOST FAILED");
+      }
+      if (v2_ui_req_net_join.exchange(false)) {
+          if (v2_net_join_async(v2_ui_net_addr)) v2_ui_toast("CONNECTING...");
+          else v2_ui_toast("JOIN FAILED");
+      } }
     // options: parallax on/off at runtime (display lane), interludes on/off
     static int last_par = -1;
     int par = v2_options.parallax.load() ? 1 : 0;
@@ -9040,15 +9166,25 @@ static void v2_ui_service(uint8_t* s) {
         char p[64]; snprintf(p, sizeof p, "v2_save_%d.state", k);
         v2_ui_toast(v2_state_save(p) == 0 ? "STATE SAVED" : "SAVE FAILED");
     }
+    const bool net_game = v2_net_active() && v2_net_peer_count() > 0;   // UX stage 8 tails: peers share this state
     if ((k = v2_ui_req_load.exchange(-1)) >= 0) {
         char p[64]; snprintf(p, sizeof p, "v2_save_%d.state", k);
-        if (v2_state_load(p) == 0) { v2_parallax_load(s); v2_ui_toast("STATE LOADED"); }
+        if (net_game) {
+            // a network game: the host's image goes to every peer and is applied by all at the same read; a client cannot load
+            std::vector<uint8_t> img;
+            if (!v2_net_is_host()) v2_ui_toast("ONLY THE HOST LOADS");
+            else if (v2_file_read_all(p, img)) { v2_net_send_image(g_sub12352_seq + 1, img, true); v2_ui_toast("STATE SENT TO ALL"); }
+            else v2_ui_toast("LOAD FAILED");
+        } else if (v2_state_load(p) == 0) { v2_parallax_load(s); v2_ui_toast("STATE LOADED"); }
         else v2_ui_toast("LOAD FAILED");
     }
     if ((k = v2_ui_req_level.exchange(-1)) >= 0) {
-        v2gs(s).level_load((uint16_t)k);
-        v2gs(s).frame_flags(v2gs(s).frame_flags() | 1);   // sub_102ad's arming, as V2_START_LEVEL
-        v2_ui_toast("LEVEL JUMP");
+        if (net_game) v2_ui_toast("NOT IN A NETWORK GAME");
+        else {
+            v2gs(s).level_load((uint16_t)k);
+            v2gs(s).frame_flags(v2gs(s).frame_flags() | 1);   // sub_102ad's arming, as V2_START_LEVEL
+            v2_ui_toast("LEVEL JUMP");
+        }
     }
     // rewind: a snapshot every 8 ticks; while F8 is held, step back one
     // snapshot every 4 ticks (the captures stop meanwhile)
@@ -9057,7 +9193,9 @@ static void v2_ui_service(uint8_t* s) {
     // tick (headless review of the ring: the VIKDBG positions run backwards)
     { static int tr = -2; if (tr == -2) { const char* e = getenv("V2_UI_TESTREWIND"); tr = (e && *e) ? atoi(e) : -1; }
       if (tr > 0) { if (tick == tr) v2_ui_rewind_hold = true; if (tick == tr + 100) v2_ui_rewind_hold = false; } }
-    if (v2_ui_rewind_hold.load()) {
+    if (v2_ui_rewind_hold.load() && net_game) {
+        if ((tick & 31) == 0) v2_ui_toast("NOT IN A NETWORK GAME");
+    } else if (v2_ui_rewind_hold.load()) {
         if ((tick & 3) == 0) { if (v2_rw_restore(s)) v2_parallax_load(s); else v2_ui_toast("REWIND: EMPTY"); }
     } else if ((tick & 7) == 0) {
         v2_rw_capture();
@@ -9256,7 +9394,9 @@ static void v2_game_loop_pre_vm(uint8_t* shadow, uint16_t ds_val) {
     //   v2_read_input_12352_iter on shadow. shadow_28896/8/A is current. Skip here.
     // - V2_ONLY: orig isn't running → no INPUT_UPDATE signal → drive ourselves.
 #ifdef V2_ONLY
+    v2_input_main_read = true;      // UX stage 8 tails: the lockstep's image points (snapshot / apply) sit on this read only
     v2_read_input_12352_iter(shadow);
+    v2_input_main_read = false;
 #endif
 
     // sub_12d72: demo input record/replay tick (extracted, see the helper zone).
@@ -21909,7 +22049,7 @@ void v2_phase_frame_end(uint16_t ds_val) {
     v2_frame_end_verify();
     // UX stage 8 step 3: the lockstep's proof — every client hashes its DS at
     // the same point of the same frame; the host compares (V2-NET-DESYNC).
-    if (v2_net_active()) v2_net_send_hash(v2_dbg_pre_vm_iter, v2_ds_hash(v2_vm_shadow_ds));
+    if (v2_net_active() && v2_net_synced()) v2_net_send_hash(v2_dbg_pre_vm_iter, v2_ds_hash(v2_vm_shadow_ds));
 
     // End-of-frame level transition check.
     // Verified with seg000 lines 122-146 (eip 0x00F7..0x012D, loc_100f7).
