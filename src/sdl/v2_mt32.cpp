@@ -7,6 +7,8 @@
 #include <cstring>
 #include <string>
 #include <vector>
+#include <cmath>
+#include <cstdarg>
 #include <dirent.h>
 #include <sys/stat.h>
 
@@ -121,6 +123,17 @@ void dump_event(const uint8_t* bytes, size_t n) {
     g_dump.events++;
 }
 
+// what the module reports (V2_MT32_TRACE): the LCD, queue overflows, ROM errors
+class Reporter : public MT32Emu::ReportHandler {
+    void printDebug(const char* fmt, va_list list) override { if (trace_on()) { fprintf(stderr, "V2-MT32 munt: "); vfprintf(stderr, fmt, list); fprintf(stderr, "\n"); } }
+    void showLCDMessage(const char* m) override { fprintf(stderr, "V2-MT32 LCD: %s\n", m); }
+    bool onMIDIQueueOverflow() override { static uint64_t n = 0; n++; if ((n & (n - 1)) == 0) fprintf(stderr, "V2-MT32 munt: MIDI queue overflow (%llu)\n", (unsigned long long)n); return false; }
+    void onErrorControlROM() override { fprintf(stderr, "V2-MT32 munt: control ROM error\n"); }
+    void onErrorPCMROM() override { fprintf(stderr, "V2-MT32 munt: PCM ROM error\n"); }
+    void onProgramChanged(MT32Emu::Bit8u part, const char* group, const char* patch) override { if (trace_on()) fprintf(stderr, "V2-MT32 munt: part %u -> %s %s\n", part, group, patch); }
+};
+Reporter g_reporter;
+uint64_t g_play_fail = 0, g_notes_sent = 0;
 MT32Emu::Synth* g_synth = nullptr;
 MT32Emu::SampleRateConverter* g_src = nullptr;
 const MT32Emu::ROMImage* g_rom_ctrl = nullptr; const MT32Emu::ROMImage* g_rom_pcm = nullptr;
@@ -136,12 +149,12 @@ class Parser : public MT32Emu::MidiStreamParser {
         if (fam < 0x80) return;
         g_short_out++;
         dump_event(b, n);
-        if (g_synth_open) g_synth->playMsg(m, munt_timestamp());
+        if (g_synth_open) { if (fam == 0x90 && b[2]) g_notes_sent++; if (!g_synth->playMsg(m, munt_timestamp())) g_play_fail++; }
     }
     void handleSysex(const MT32Emu::Bit8u s[], const MT32Emu::Bit32u len) override {
         g_sysex_out++;
         dump_event(s, len);
-        if (g_synth_open) g_synth->playSysex(s, len, munt_timestamp());
+        if (g_synth_open && !g_synth->playSysex(s, len, munt_timestamp())) g_play_fail++;
     }
     void handleSystemRealtimeMessage(const MT32Emu::Bit8u) override {}
     void printDebug(const char* msg) override { if (trace_on()) fprintf(stderr, "V2-MT32 parser: %s\n", msg); }
@@ -223,7 +236,7 @@ bool munt_open(uint32_t rate) {
         snprintf(g_status, sizeof g_status, "MT-32: %s missing in %s", !g_rom_ctrl ? "control ROM" : "PCM ROM", dir);
         munt_close(); return false;
     }
-    g_synth = new MT32Emu::Synth();
+    g_synth = new MT32Emu::Synth(&g_reporter);
     if (!g_synth->open(*g_rom_ctrl, *g_rom_pcm)) { snprintf(g_status, sizeof g_status, "MT-32: synth open failed"); munt_close(); return false; }
     g_synth_open = true;
     g_src = new MT32Emu::SampleRateConverter(*g_synth, (double)rate, MT32Emu::SamplerateConversionQuality_GOOD);
@@ -507,9 +520,19 @@ void v2_mt32_pump(uint64_t pos, uint32_t offset_frames, uint32_t rate) {
     while (g_ticks < due && guard++ < 96) { v2_ail_mt32i_call(g_off[0x67], a, 1); g_ticks++; if ((g_ticks % 250) == 0) trace_channels("tick"); }
 }
 
-bool v2_mt32_mix(int16_t* out, uint32_t frames, uint32_t) {
+bool v2_mt32_mix(int16_t* out, uint32_t frames, uint32_t rate) {
     if (!g_built || !g_synth_open || !g_src) return false;
     g_src->getOutputSamples(out, frames);
+    if (trace_on()) {   // one line per second of output: what went to the module and whether it sounds
+        static uint64_t acc = 0, sec = 0; acc += frames;
+        if (acc >= rate) {
+            acc -= rate; sec++;
+            double e = 0; for (uint32_t i = 0; i < frames * 2; i++) e += (double)out[i] * out[i];
+            fprintf(stderr, "V2-MT32 sec %llu: notes %llu, sysex %llu, bytes %llu, play failures %llu, active %d, rms %.0f, tick %llu\n",
+                    (unsigned long long)sec, (unsigned long long)g_notes_sent, (unsigned long long)g_sysex_out, (unsigned long long)g_bytes_out,
+                    (unsigned long long)g_play_fail, g_synth->isActive() ? 1 : 0, sqrt(e / (frames * 2)), (unsigned long long)g_ticks);
+        }
+    }
     return true;
 }
 
