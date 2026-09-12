@@ -14,6 +14,10 @@ assets_raw/lvs/*
 /content/
 # mod packages exported by tools/assets/edit_server.py --export-mod: console-derived data, never committed
 /mods/
+# the Blizzard Arcade Collection's translation files (the language banks of the content pack): the user's, never committed
+/locale.strings
+/lv_snes_strings.json
+/bac/
 __pycache__/
 
 # Nix GC-root symlinks (toolchain pins)

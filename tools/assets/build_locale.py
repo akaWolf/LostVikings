@@ -236,11 +236,13 @@ def build_bank(code, strings, glyphs, orig=None):
     return payload, len(recs), len(charset)
 
 
-def banks(texts_path=None):
+def banks(texts_path=None, locale_path=None):
     """texts_path: the texts_exe.json whose box sizes are the floor (default the
     canonical extraction assets/texts_exe.json; build_content.py's tree carries
-    its own copy of the same extraction)."""
-    L = json.load(open(os.path.join(ROOT, "tools/assets/bac_lv_locale.json")))
+    its own copy of the same extraction). locale_path: the translation table
+    bac_strings.py builds from the user's Blizzard Arcade Collection (not in
+    the repository — Blizzard's text); build_content.py writes it into the tree."""
+    L = json.load(open(locale_path or os.path.join(ROOT, "tools/assets/bac_lv_locale.json")))
     G = json.load(open(os.path.join(ROOT, "tools/assets/ps2p_glyphs.json")))
     G16 = json.load(open(os.path.join(ROOT, "tools/assets/unifont16_glyphs.json")))
     orig = {e["i"]: (e["w"], e["h"])
@@ -263,8 +265,16 @@ def integrate(scratch):
     extras = json.load(open(ex_path)) if os.path.exists(ex_path) else {}
     os.makedirs(os.path.join(scratch, "unreferenced"), exist_ok=True)
     tp = os.path.join(scratch, "texts_exe.json")
-    print("language banks:")
-    for cid, (code, payload, nrec, ng) in sorted(banks(tp if os.path.exists(tp) else None).items()):
+    # the translations: the tree's table (build_content.py, from the user's BAC),
+    # else a developer's copy under tools/assets; neither -> no banks, the
+    # English original only (the engine lists the banks it finds from 0x300 on)
+    lp = next((p for p in (os.path.join(scratch, "bac_lv_locale.json"),
+                           os.path.join(ROOT, "tools/assets/bac_lv_locale.json")) if os.path.exists(p)), None)
+    if lp is None:
+        print("language banks: no BAC translation table (bac_lv_locale.json) — English only")
+        return
+    print(f"language banks ({lp}):")
+    for cid, (code, payload, nrec, ng) in sorted(banks(tp if os.path.exists(tp) else None, lp).items()):
         with open(os.path.join(scratch, "unreferenced", f"{cid:04X}.bin"), "wb") as f:
             f.write(payload)
         extras[f"{cid:04X}"] = {"role": "unreferenced"}

@@ -29,6 +29,9 @@ their SHA-256):
     python3 content-tools/tools/assets/build_content.py
 
 writes content/ (~25 MB) there; vikings picks it up by itself. Needs python3.
+For the twelve languages put strings/locale.strings and lv_snes_strings.json
+from the Blizzard Arcade Collection's assets/ folder beside DATA.DAT as well
+(or pass --bac <that assets folder>); without them the pack is English only.
 See README.md, "Console content".
 EOF
 echo "content-tools: $(find "$DEST" -type f | wc -l) files -> $DEST"

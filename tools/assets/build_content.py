@@ -126,6 +126,47 @@ def find_rom(arg, want, name, flag, data_dir, any_rom):
     fail(f"the {name} image was not found — pass --{flag} <file> (searched " + ", ".join(dirs) + ")")
 
 
+BAC_INSTALLS = (   # the collection's assets/ in the usual installations
+    "/mnt/win/Program Files (x86)/Blizzard Arcade Collection/assets",
+    "C:/Program Files (x86)/Blizzard Arcade Collection/assets",
+    "C:/Program Files (x86)/Steam/steamapps/common/Blizzard Arcade Collection/assets",
+    "~/.steam/steam/steamapps/common/Blizzard Arcade Collection/assets",
+    "~/.local/share/Steam/steamapps/common/Blizzard Arcade Collection/assets",
+)
+
+
+def bac_pair(d):
+    """(locale.strings, lv_snes_strings.json) in d: the two files flat, or the
+    collection's assets/ layout (strings/locale.strings beside lv_snes_strings.json)."""
+    for loc in (os.path.join(d, "locale.strings"), os.path.join(d, "strings", "locale.strings")):
+        keys = os.path.join(d, "lv_snes_strings.json")
+        if os.path.isfile(loc) and os.path.isfile(keys):
+            return loc, keys
+    return None
+
+
+def find_bac(arg, data_dir):
+    """--bac: the collection's assets/ (or its parent), a directory holding the
+    two files, or the locale.strings file itself; else the usual places. None =
+    no translations (English only)."""
+    if arg:
+        p = os.path.abspath(os.path.expanduser(arg))
+        cands = [os.path.dirname(p)] if os.path.isfile(p) else [p, os.path.join(p, "assets")]
+        for d in cands:
+            pair = bac_pair(d)
+            if pair:
+                return pair
+        fail(f"--bac {arg}: locale.strings + lv_snes_strings.json not found there (the collection's assets/ holds "
+             "strings/locale.strings and lv_snes_strings.json)")
+    dirs = [os.getcwd(), os.path.join(os.getcwd(), "bac"), ROOT, os.path.join(ROOT, "bac"), data_dir]
+    dirs += [os.path.expanduser(d) for d in BAC_INSTALLS]
+    for d in dirs:
+        pair = bac_pair(d)
+        if pair:
+            return pair
+    return None
+
+
 def main():
     ap = argparse.ArgumentParser(description="build the console content pack for the V2_ONLY engine")
     ap.add_argument("--data", help="DATA.DAT (default: ./DATA.DAT, then the repo root)")
@@ -134,6 +175,8 @@ def main():
     ap.add_argument("--genesis-rom", help="the Genesis image (default: found by its SHA-256)")
     ap.add_argument("--any-rom", action="store_true", help="accept images with other hashes (unverified result)")
     ap.add_argument("--mod", help="apply this mod package (edit_server.py --export-mod) instead of converting the images")
+    ap.add_argument("--bac", help="the Blizzard Arcade Collection's assets/ (or a directory with its locale.strings + "
+                                  "lv_snes_strings.json) for the language banks; default: the usual places, none = English only")
     ap.add_argument("--fresh", action="store_true", help="remove an existing output directory first")
     args = ap.parse_args()
     sys.argv = sys.argv[:1]   # assetc.main() reads argv[1] ("--pack")
@@ -159,6 +202,7 @@ def main():
         snes = find_rom(args.snes_rom, SNES_ROM_SHA256, "SNES DE", "snes-rom", os.path.dirname(data), args.any_rom)
         genesis = find_rom(args.genesis_rom, GENESIS_ROM_SHA256, "Genesis", "genesis-rom", os.path.dirname(data),
                            args.any_rom)
+    bac = None if mod else find_bac(args.bac, os.path.dirname(data))
     if os.path.abspath(os.path.dirname(data)) == out:
         fail("--out must not be the directory of DATA.DAT")
     if os.path.exists(out):
@@ -199,6 +243,16 @@ def main():
     import texts_exe as TX
     with open(os.path.join(out, "texts_exe.json"), "w") as f:
         json.dump(TX.extract(TX.load_image(image)), f, indent=1)
+    # the translations for the language banks: the table bac_strings.py aligns
+    # from the user's Blizzard Arcade Collection (Blizzard's text — never in
+    # the repository); without it build_locale leaves the English original
+    if bac:
+        print(f"      translations: {bac[0]}")
+        import bac_strings
+        bac_strings.build(bac[0], bac[1], os.path.join(out, "texts_exe.json"), os.path.join(out, "bac_lv_locale.json"))
+    elif not mod:
+        print("      no Blizzard Arcade Collection found (locale.strings + lv_snes_strings.json): the language banks are "
+              "skipped, English only — --bac <dir> adds them")
 
     # 3. the console content
     import edit_server as E

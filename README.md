@@ -206,7 +206,15 @@ V2_ONLY=1 make -j$(nproc)
 directory; the start-up log says `V2_ONLY: console content pack
 content`. The F1 menu then switches the features: PARALLAX, SCENES and
 FINALE are on by default, SNES BALANCE is off, LANGUAGE and SOUND (PC /
-SNES / SC55 / MT32) as you like. The extra levels have no switch — they
+SNES / SC55 / MT32) as you like.
+
+The twelve languages are Blizzard's translations from the Blizzard
+Arcade Collection and are not in the repository either: copy
+`strings/locale.strings` and `lv_snes_strings.json` from the
+collection's `assets/` folder next to `DATA.DAT` (or pass `--bac <its
+assets dir>`; a Steam or Battle.net installation in the usual place is
+found by itself) and the build adds the language banks. Without them the
+pack has the English original only. The extra levels have no switch — they
 are simply in the progression. `V2_CONTENT=0` runs the plain archive
 with the same binary; `V2_ASSETS_DIR=<dir>/.compiled
 V2_EXE_STATIC=<dir>/exe_static.bin` point at a pack elsewhere (the

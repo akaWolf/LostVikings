@@ -172,13 +172,14 @@ def align(E, P, band=1500):
     return out
 
 
-def main():
-    out_path = os.path.join(ROOT, "tools", "assets", "bac_lv_locale.json")
-    if "--out" in sys.argv:
-        out_path = sys.argv[sys.argv.index("--out") + 1]
-    pools = read_pools()
+def build(locale_path, keys_path, texts_path, out_path):
+    """The translation table (the JSON build_locale.py reads) from the two BAC
+    files and the PC texts: locale_path = strings/locale.strings, keys_path =
+    lv_snes_strings.json (both from the collection's assets/), texts_path =
+    the texts_exe.json of the tree (texts_exe.py extract)."""
+    pools = read_pools(locale_path)
     E = pools[1]
-    js = json.load(open(os.path.join(BAC, "lv_snes_strings.json"), encoding="utf-8"))["strings"]
+    js = json.load(open(keys_path, encoding="utf-8"))["strings"]
     # LV keys -> English run index
     by_norm = {}
     for i, s in enumerate(E):
@@ -224,7 +225,7 @@ def main():
         print(f"  {code:6s} mapped {len(vals):3d}/{len(by_name)}  line-count agreement {ok}/{len(vals)}"
               f"  msg0={by_name.get('msg0', {}).get(code, '')[:18]!r}  405={by_name.get('STRING_405', {}).get(code, '')[:18]!r}")
     # PC strings -> LV keys
-    pc = json.load(open(os.path.join(ROOT, "assets", "texts_exe.json")))["entries"]
+    pc = json.load(open(texts_path))["entries"]
     key_by_norm = {}
     for e in js:
         if e["name"] in name_idx:
@@ -271,6 +272,20 @@ def main():
                "pc_unmatched": pc_unmatched, "placeholders": placeholders},
               open(out_path, "w"), ensure_ascii=False, indent=0)
     print("wrote", out_path)
+    return {"keys": len(name_idx), "pc": len(pc_key)}
+
+
+def main():
+    import argparse
+    ap = argparse.ArgumentParser(description="the BAC translations of the Lost Vikings strings -> bac_lv_locale.json")
+    ap.add_argument("--bac", default=BAC, help="the collection's assets/ directory (strings/locale.strings, lv_snes_strings.json)")
+    ap.add_argument("--locale", help="strings/locale.strings (default: under --bac)")
+    ap.add_argument("--keys", help="lv_snes_strings.json (default: under --bac)")
+    ap.add_argument("--texts", default=os.path.join(ROOT, "assets", "texts_exe.json"), help="the PC texts (texts_exe.py extract)")
+    ap.add_argument("--out", default=os.path.join(ROOT, "tools", "assets", "bac_lv_locale.json"))
+    a = ap.parse_args()
+    build(a.locale or os.path.join(a.bac, "strings", "locale.strings"),
+          a.keys or os.path.join(a.bac, "lv_snes_strings.json"), a.texts, a.out)
 
 
 if __name__ == "__main__":
