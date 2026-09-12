@@ -4,10 +4,11 @@
 in `tools/assets/edit_server.py`) and what `tools/data/lvsd.py` reads and writes.
 It is a readable layer over the free-form `.lvsf` (docs2/DSL_SPEC.md, v1.5):
 
-* one statement = one object-code instruction (an `o XX …` line of the .lvsf);
+* one statement = one object-code instruction (an `o XX …` line of the .lvsf)
+  or one anim-code command (an `a XX …` line);
 * the compiler lowers every statement back to exactly that instruction and hands
   the text to `lvs_full.compile_free`, the only place that lays bytes out;
-* anim code, data blobs, aliases and palette anchors pass through verbatim.
+* data blobs, aliases and palette anchors pass through verbatim.
 
 So the opcode logic is the verified one of the engine (`src/sdl/v2_vm.cpp`), the
 language only names things. `python3 tools/data/lvsd.py check` decompiles the
@@ -26,13 +27,15 @@ state baleog_anim:                 ; @3850
 state baleog_spawn:
     self.state_187d = 0x63
     self.type_id = 0x2F
-    anim A_403A
+    anim baleog_a7
     self.flags |= 0x2000
     anim_step
     if 0x2F == [level] goto S_13DB
     yield
-A_2618:
-a 14 00                            ; anim code, verbatim
+anim baleog_a7:                    ; @403A — an anim stream (see Animations)
+    sprite 0
+    wait 4
+    goto baleog_a7
 blob <hex>                         ; data with no reference from the code (dead)
 ```
 
@@ -60,8 +63,9 @@ blob <hex>                         ; data with no reference from the code (dead)
 ## Statements
 
 Control: `yield` `nop` `return` `exit` `despawn` `goto L` `call L`
-`anim A_xxxx` (or `anim =HHHH` for a raw pointer) `op13 …` (raw sub-command;
-`op13 d9 P_xxxx` = palette pointer).
+`anim NAME` (or `anim =HHHH` for a raw pointer) `op13 d9 P_xxxx` (palette
+pointer), `quit_to_dos pad a,b`, `hud_to_viewport pad a,b` (the op 13
+sub-commands; the two pad bytes are never read).
 
 Branches: `if <cond> goto L` and `if <cond> call L` (the call families push the
 return address). `search_*(f=N) goto L` are the object searches. The condition
@@ -171,6 +175,49 @@ func t60_5:                     ; @5C1E
   order, because a store uses the accumulator. The value a function leaves in
   `acc` is its result by convention; nothing enforces it.
 
+## Animations
+
+An anim stream is the anim VM's program (v2_vm_exec_anim_cmd): the object
+code starts one with `anim NAME`, the engine runs one frame of it per tick
+until a frame end, and the sub-sprites of the object are what it moves.
+Every `A_xxxx:` label of the .lvsf is an `anim NAME:` header (dictionary
+name from `anims` in lvs_names.json, else the automatic owner name
+`<class>_a<k>` — the k-th anim label, by address, reached from that class's
+code — else `A_xxxx`); its commands are indented statements:
+
+```
+anim erik_a3:                   ; @2618
+    bank 0xE3                   ; 17: sprite bank = chunk id
+    type 2                      ; 15: sprite type (renderer) + strip count
+    sprite 5                    ; 14: decompress image 5 into the sub-sprite buffer
+    frame 0                     ; 01: sub-sprite frame(s), one per sub-sprite
+    x -16, 0                    ; 08: sub-sprite x = object x + N, one per sub-sprite
+    y 0, 0                      ; 0A
+    pal 6                       ; 0C: colour bank bits of the sprite flags ((N << 3) & 0x70)
+    sfx 0x50 vol 0x7F           ; 02: play sequence 0x50 (the vol byte is the console's; the PC ignores it)
+    wait 4                      ; 0F: end of frame, 4 ticks
+    yield                       ; 0E: end of frame, the next tick continues here
+    dx -4                       ; 07: masked: sub-sprite x += N; unmasked: object velocity x += N
+    dy 2                        ; 09
+    frame += 1                  ; 00: advance every (masked: matching) sub-sprite by N frames
+    mask 2                      ; 0D: sub-sprite class mask for the rest of this frame
+    class 1, 2                  ; 13: the sub-sprite classes that `mask` selects
+    flip_x                      ; 10 (flip_y = 11, flip_xy = 12): XOR the flip bits
+    hide                        ; 18 (show = 19): OR 0x4000 / AND 0x9FFF — a hidden sprite is skipped by every draw pass
+    call erik_a9                ; 05: run another stream, `return` (06) comes back here
+    goto erik_a3                ; 03
+    stop                        ; 1A: the anim ends (pc = FFFF)
+    skip 0x58                   ; 04: one dead byte (`skip N #16` = command 16, the same effect)
+    int3                        ; 0B
+```
+
+The per-sub-sprite lists (`frame`, `x`, `y`, `pal`, `class`) carry as many
+values as the command consumes for that object — the decoder's static run
+of the stream (tools/data/anim_static.py) — so a list is copied as it is and
+a new one gets one value per sub-sprite the class has (one per matching
+sub-sprite under a `mask`). `goto`, `call` and `return` inside a stream are
+the anim VM's, not the object code's: the line is under an `anim` header.
+
 ## Operand tokens
 
 * Fields: the `OBJ_*` names of `src/sdl/v2_ds_layout.h`, lower-case (`world_x`,
@@ -185,7 +232,8 @@ func t60_5:                     ; @5C1E
 ## Names
 
 `tools/data/lvs_names.json` — `states` (`"1C1:3853": "baleog_spawn"`),
-`classes` (`"*:01": "erik"`, or per script `"1C1:10"`), `anims`, `sfx`.
+`classes` (`"*:01": "erik"`, or per script `"1C1:10"`), `anims`
+(`"1C1:2618": "erik_walk"`), `sfx`.
 `lvsd.py seed` fills the record entries (`<class>_anim` / `<class>_spawn`);
 everything else is named by hand as the scripts get understood. A name is a
 view: renaming a state changes no byte.

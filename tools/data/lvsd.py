@@ -166,6 +166,64 @@ class Names:
     def cls(self, cid, t):
         return self.d['classes'].get(f'{cid:X}:{t:02X}', self.d['classes'].get(f'*:{t:02X}', f't{t:02X}'))
 
+    def anim(self, cid, lbl):
+        """A_xxxx -> dictionary name, else the automatic owner name
+        (`<class>_a<k>`: the k-th anim label, by address, of the class whose
+        code reaches it; `shared_<t1>_<t2>_a<k>`), else A_xxxx; a label the
+        author named (A_walk from `anim walk:`) shows as `walk`."""
+        if not re.fullmatch(r'A_[0-9A-Fa-f]{4}', lbl):
+            return lbl[2:] if lbl.startswith('A_') else lbl
+        n = self.d['anims'].get(f'{cid:X}:{lbl[2:]}')
+        if n: return n
+        return self.auto_anim_names(cid).get(int(lbl[2:], 16), lbl)
+
+    _aauto = {}
+    def auto_anim_names(self, cid):
+        """{anim label addr: name}. Owners: the op 19 sites of the object code
+        donate their owners (lvs_struct.owners_of_states) to their operand,
+        propagated over the anim graph of lvs_full.anim_layer (fall, the frame
+        ends 0E/0F, goto, call + its continuation; `return` and `stop` end)."""
+        if cid in self._aauto: return self._aauto[cid]
+        ls = mod('lvs_struct'); lf = mod('lvs_full')
+        cwd = os.getcwd(); os.chdir(ROOT)
+        try:
+            anims = lf.anim_layer(cid)
+            d, seen, table, entries = lf.full_walk(cid, with_entries=True)
+            own = ls.owners_of_states(cid)
+            text = canonical_text(cid)
+        finally: os.chdir(cwd)
+        aown = collections.defaultdict(set); work = collections.deque()
+        for pc in seen:
+            if seen[pc][0] == 0x19 and pc + 3 <= len(d):
+                a = struct.unpack_from('<H', d, pc + 1)[0]
+                for t in own.get(pc, ()):
+                    if t not in aown[a]: aown[a].add(t); work.append((a, t))
+        def succ(pc):
+            e = anims.get(pc)
+            if e is None: return []
+            cmd, ln, kind, tgt = e; out = []
+            if kind == 'fall' or (kind == 'stop' and cmd != 0x1A): out.append(pc + ln)
+            if kind in ('jump', 'loopstart') and tgt is not None: out.append(tgt)
+            if kind == 'loopstart': out.append(pc + 3)
+            return [x for x in out if x in anims]
+        while work:
+            pc, t = work.popleft()
+            for n2 in succ(pc):
+                if t not in aown[n2]: aown[n2].add(t); work.append((n2, t))
+        labels = sorted(int(m.group(1), 16) for m in re.finditer(r'^A_([0-9A-F]{4}):', text, re.M))
+        groups = {}
+        for a in labels: groups.setdefault(frozenset(aown.get(a, ())), []).append(a)
+        names = {}
+        for os_, addrs in groups.items():
+            if not os_: continue
+            base = self.cls(cid, min(os_)) if len(os_) == 1 else 'shared_' + '_'.join(f'{t:02X}' for t in sorted(os_))
+            k = 0
+            for a in sorted(addrs):
+                if f'{cid:X}:{a:04X}' in self.d['anims']: continue
+                k += 1; names[a] = f'{base}_a{k}'
+        self._aauto[cid] = names
+        return names
+
 
 # ------------------------------------------------------- statement table --
 # op -> (slots, template, flags). slots = operand kinds in BYTE order:
@@ -273,6 +331,107 @@ CONTROL = {0x00: 'yield', 0x01: 'nop', 0x06: 'return', 0x0F: 'exit', 0x10: 'desp
 # viewport and the HUD cleared; the two bytes behind 01/11 are never read — written as `pad`)
 OP13 = {0x01: 'quit_to_dos', 0x11: 'hud_to_viewport'}
 OP13_RX = re.compile(r'^(quit_to_dos|hud_to_viewport) pad (0x[0-9A-Fa-f]+|\d+),(0x[0-9A-Fa-f]+|\d+)$')
+
+# ------------------------------------------------------ anim statements --
+# The anim VM (v2_vm_exec_anim_cmd, dispatch off_30BC6): one statement per
+# command. Operand kinds: '' none; 'b' one byte; 'sb' one signed byte;
+# 'b*' a byte per sub-sprite (the count is the decoder's — masked sites take
+# one per matching slot); 'sw*' a signed word per sub-sprite; 'w' a word;
+# 'L' an anim label; 'sfx' sequence byte + the console's volume byte (the
+# PC reads the low byte only); 'b16' cmd 16 = the same skip as 04, kept apart
+# by the `#16` suffix.
+ANIM = {
+    0x00: ('frame +=', 'b'),     # sub-sprite data offset += N*72 (advance N frames; masked: matching slots)
+    0x01: ('frame', 'b*'),       # sub-sprite data offset = base + N*72, one N per slot
+    0x02: ('sfx', 'sfx'),        # play sequence N (low byte); the high byte is the console's volume
+    0x03: ('goto', 'L'), 0x04: ('skip', 'b'), 0x05: ('call', 'L'), 0x06: ('return', ''),
+    0x07: ('dx', 'sb'),          # masked: sub-sprite x += N; unmasked: object velocity x += N (pixels)
+    0x08: ('x', 'sw*'),          # sub-sprite x = object x + N, one per slot
+    0x09: ('dy', 'sb'), 0x0A: ('y', 'sw*'),
+    0x0B: ('int3', ''), 0x0C: ('pal', 'b*'),   # colour bank bits 4-6 of the sprite flags = (N << 3) & 0x70
+    0x0D: ('mask', 'b'),         # sub-sprite class mask for the rest of this frame
+    0x0E: ('yield', ''),         # end of frame (the next tick continues here)
+    0x0F: ('wait', 'b'),         # end of frame, N ticks
+    0x10: ('flip_x', ''), 0x11: ('flip_y', ''), 0x12: ('flip_xy', ''),   # XOR 0x200 / 0x400 / 0x600
+    0x13: ('class', 'b*'),       # sub-sprite classes (what `mask` selects)
+    0x14: ('sprite', 'b'),       # decompress image N of the bank into the sub-sprite buffer
+    0x15: ('type', 'b'),         # sprite type (renderer) + strip count from the type table
+    0x16: ('skip', 'b16'), 0x17: ('bank', 'w'),   # sprite bank = chunk id N (DS_ANIM_CHUNK_IDS lookup)
+    0x18: ('hide', ''), 0x19: ('show', ''),      # OR 0x4000 / AND 0x9FFF on the sub-sprite flags: every draw pass skips flags & 0x6000
+    0x1A: ('stop', ''),          # anim pc = FFFF
+}
+ANIM_KW = {}
+for _c, (_kw, _kd) in ANIM.items(): ANIM_KW.setdefault(_kw, []).append(_c)
+_N = r'(0x[0-9A-Fa-f]+|\d+)'; _SN = r'(-?0x[0-9A-Fa-f]+|-?\d+)'
+ANIM_RX = {
+    0x00: re.compile(rf'^frame \+= {_N}$'), 0x02: re.compile(rf'^sfx {_N} vol {_N}$'),
+    0x04: re.compile(rf'^skip {_N}$'), 0x16: re.compile(rf'^skip {_N} #16$'),
+    'b': re.compile(rf'^(mask|wait|sprite|type) {_N}$'), 'sb': re.compile(rf'^(dx|dy) {_SN}$'),
+    'b*': re.compile(rf'^(frame|pal|class)(?: {_N}(?:, {_N})*)?$'), 'sw*': re.compile(rf'^(x|y)(?: {_SN}(?:, {_SN})*)?$'),
+    'w': re.compile(rf'^bank {_N}$'), 'L': re.compile(r'^(goto|call) (\S+)$'),
+}
+
+
+def anim_render(cmd, toks, aname):
+    """`a XX <hex|label>` tokens -> statement text (aname: label token -> name)."""
+    kw, kd = ANIM[cmd]
+    body = bytes.fromhex(toks[0]) if toks and not toks[0].startswith(('A_', '=')) else b''
+    def need(n):
+        if len(body) != n: raise ValueError(f'anim cmd {cmd:02X}: {len(body)} operand bytes, {n} expected')
+    if kd == '': need(0); return kw
+    if kd == 'L': return f'{kw} {aname(toks[0])}'
+    if kd == 'b': need(1); return f'{kw} {imm(body[0])}'
+    if kd == 'b16': need(1); return f'{kw} {imm(body[0])} #16'
+    if kd == 'sb': need(1); return f'{kw} {body[0] - 256 if body[0] >= 128 else body[0]}'
+    if kd == 'w': need(2); return f'{kw} {imm(struct.unpack_from("<H", body)[0])}'
+    if kd == 'sfx': need(2); return f'{kw} {imm(body[0])} vol {imm(body[1])}'
+    if kd == 'b*': return kw + (' ' + ', '.join(imm(b) for b in body) if body else '')
+    if kd == 'sw*':
+        if len(body) % 2: raise ValueError(f'anim cmd {cmd:02X}: odd operand length {len(body)}')
+        vals = [struct.unpack_from('<h', body, o)[0] for o in range(0, len(body), 2)]
+        return kw + (' ' + ', '.join(str(v) for v in vals) if vals else '')
+    raise ValueError(kd)
+
+
+def _ab(v, signed=False):
+    """a byte operand: 0..255, or -128..127 when signed"""
+    if not (-128 <= v <= 255 if signed else 0 <= v <= 255): raise ValueError(f'{v} does not fit a byte')
+    return v & 0xFF
+
+
+def _aw(v, signed=False):
+    if not (-32768 <= v <= 65535 if signed else 0 <= v <= 65535): raise ValueError(f'{v} does not fit a word')
+    return v & 0xFFFF
+
+
+def anim_parse(text, alabel):
+    """statement text -> `a XX ...` line (alabel: name -> label token)."""
+    for cmd in (0x00, 0x02, 0x04, 0x16):
+        m = ANIM_RX[cmd].match(text)
+        if m:
+            vals = [_ab(int(x, 0)) for x in m.groups()]
+            return f'a {cmd:02X} ' + bytes(vals).hex()
+    for kw, cmds in ANIM_KW.items():
+        if text == kw and ANIM[cmds[0]][1] == '': return f'a {cmds[0]:02X}'
+    m = ANIM_RX['L'].match(text)
+    if m: return f'a {0x03 if m.group(1) == "goto" else 0x05:02X} {alabel(m.group(2))}'
+    m = ANIM_RX['b'].match(text)
+    if m: return f'a {ANIM_KW[m.group(1)][0]:02X} {_ab(int(m.group(2), 0)):02x}'
+    m = ANIM_RX['sb'].match(text)
+    if m: return f'a {ANIM_KW[m.group(1)][0]:02X} {_ab(int(m.group(2), 0), True):02x}'
+    m = ANIM_RX['w'].match(text)
+    if m: return f'a 17 ' + struct.pack('<H', _aw(int(m.group(1), 0))).hex()
+    m = ANIM_RX['b*'].match(text)
+    if m:
+        cmd = ANIM_KW[m.group(1)][0]; rest = text[len(m.group(1)):].strip()
+        vals = [_ab(int(x, 0)) for x in rest.split(',')] if rest else []
+        return f'a {cmd:02X}' + (' ' + bytes(vals).hex() if vals else '')
+    m = ANIM_RX['sw*'].match(text)
+    if m:
+        cmd = ANIM_KW[m.group(1)][0]; rest = text[len(m.group(1)):].strip()
+        vals = [_aw(int(x, 0), True) for x in rest.split(',')] if rest else []
+        return f'a {cmd:02X}' + (' ' + b''.join(struct.pack('<H', v) for v in vals).hex() if vals else '')
+    raise ValueError(f'cannot parse anim statement: {text!r}')
 # consumer ops that take `acc` as their single right-hand value: sugar
 SUGAR_CONSUMERS = ({0x56, 0x57, 0x58, 0x59, 0x5A, 0x5B, 0x5C, 0x5D, 0x5E, 0x5F, 0x60, 0x61, 0x62, 0x63,
                     0x64, 0x65, 0x66, 0x67, 0x96, 0xC7, 0xC8, 0xCA,
@@ -574,10 +733,14 @@ def decompile_text(cid, text, names):
     for ln in range(len(lines), 0, -1):
         if ln in addr_after: nxt = addr_after[ln]
         addr_after[ln] = nxt
-    stats = {'stmt': 0, 'sugar': 0, 'states': 0, 'named': 0}
+    stats = {'stmt': 0, 'sugar': 0, 'states': 0, 'named': 0, 'anim': 0, 'anims': 0, 'anamed': 0}
     def tgt_name(tok):
         if tok.startswith('='): return tok
         return names.state(cid, tok)
+    def anim_name(tok):
+        if tok.startswith('='): return tok
+        return names.anim(cid, tok)
+    dmode = None      # 'code' after a code label, 'anim' after an anim label: the two never interleave (asserted)
     pending = None   # (op, body, text) of an `acc = X` load awaiting a consumer
     def flush():
         nonlocal pending
@@ -603,20 +766,31 @@ def decompile_text(cid, text, names):
             if lbl.startswith('S_'):
                 nm = names.state(cid, lbl); stats['states'] += 1; stats['named'] += (nm != lbl)
                 a = addr_after.get(lineno)
-                out.append(f'state {nm}:' + (f'   ; @{a:04X}' if a is not None else ''))
+                out.append(f'state {nm}:' + (f'   ; @{a:04X}' if a is not None else '')); dmode = 'code'
+            elif lbl.startswith('A_'):
+                nm = names.anim(cid, lbl); stats['anims'] += 1; stats['anamed'] += (nm != lbl)
+                a = addr_after.get(lineno)
+                out.append(f'anim {nm}:' + (f'   ; @{a:04X}' if a is not None else '')); dmode = 'anim'
             else:
-                out.append(raw)
+                out.append(raw); dmode = None
             continue
         if len(p) == 3 and p[1] == '=' and p[0].startswith('S_') and '+' in p[2]:
             flush()                                   # alias between code labels: both sides get the state names
             base, off = p[2].split('+')
             out.append(f'alias {tgt_name(p[0])} = {tgt_name(base) if base.startswith("S_") else base}+{off}')
             continue
-        if p[0] in ('blob', 'a') or (len(p) == 3 and p[1] == '='):
-            flush(); out.append(raw); continue
+        if p[0] == 'a':
+            flush()
+            if dmode != 'anim': raise ValueError(f'{cid:X}.lvsf:{lineno}: anim code under a code label ({raw!r})')
+            out.append('    ' + anim_render(int(p[1], 16), p[2:], anim_name)); stats['anim'] += 1; continue
+        if p[0] == 'blob' or (len(p) == 3 and p[1] == '='):
+            flush(); out.append(raw)
+            if p[0] == 'blob': dmode = None
+            continue
         if p[0] != 'o':
             raise ValueError(f'{cid:X}.lvsf:{lineno}: unexpected line {raw!r}')
         op, toks = parse_o_line(raw)
+        if dmode != 'code': raise ValueError(f'{cid:X}.lvsf:{lineno}: object code under an anim label ({raw!r})')
         stats['stmt'] += 1
         sym = [t for t in toks if t.startswith(('S_', 'A_', 'P_', '=')) or t == 'd9']
         hexs = [t for t in toks if not (t.startswith(('S_', 'A_', 'P_', '=')) or t == 'd9')]
@@ -627,7 +801,7 @@ def decompile_text(cid, text, names):
         if op == 0x03 or op == 0x05:
             flush(); out.append(f'    {"goto" if op == 0x03 else "call"} {tgt_name(sym[0])}'); continue
         if op == 0x19:
-            flush(); out.append(f'    anim {sym[0]}'); continue
+            flush(); out.append(f'    anim {anim_name(sym[0])}'); continue
         if op == 0x13:
             flush()
             if sym and sym[0] == 'd9': out.append(f'    op13 d9 {sym[1]}')
@@ -659,7 +833,7 @@ def decompile_text(cid, text, names):
     stats['say'] = nsay
     out, nfn, ncall = fold_funcs(out)
     stats['func'] = nfn; stats['callargs'] = ncall
-    out.append(f'; stats: {stats["stmt"]} statements, {stats["sugar"]} folded loads, {nsw} switch blocks, {nsay} say lines, {nfn} funcs, {ncall} calls with args, {stats["states"]} states ({stats["named"]} named)')
+    out.append(f'; stats: {stats["stmt"]} statements, {stats["sugar"]} folded loads, {nsw} switch blocks, {nsay} say lines, {nfn} funcs, {ncall} calls with args, {stats["states"]} states ({stats["named"]} named), {stats["anim"]} anim statements, {stats["anims"]} anim labels ({stats["anamed"]} named)')
     return '\n'.join(out) + '\n', stats
 
 
@@ -711,10 +885,14 @@ class Cfg:
         self.blocks = []          # [name, line index of the header, [(line index, stmt)], adjacent to the next block]
         self.kind = {}            # name -> 'state' | 'func' | 'inner'
         self.entries = {}         # class entry name -> line index
-        cur = None
+        cur = None; in_anim = False
         for i, l in enumerate(lines):
             code = l.split(';', 1)[0].rstrip()
             if not code.strip(): continue
+            if re.match(r'^anim \S+:$', code) or re.match(r'^A_[0-9A-Fa-f]{4}:$', code):    # an anim label: its indented lines are anim statements
+                in_anim = True; cur = None; continue
+            if code.startswith(('    ', '\t')) and in_anim: continue
+            if not code.startswith(' '): in_anim = False
             m = re.match(r'^(state|func) (\S+):$', code)
             if m:
                 if cur is not None: cur[3] = True
@@ -907,6 +1085,12 @@ class Lowerer:
         if tok.startswith(('S_', 'A_', 'P_')): return tok
         return 'S_' + tok
 
+    def alabel(self, tok):
+        """anim name -> compile_free label token (the anim namespace)."""
+        if tok.startswith('='): return tok
+        if tok.startswith(('A_', 'S_', 'P_')): return tok
+        return 'A_' + tok
+
     def acc_load(self, x):
         """acc-expression text -> (op, body) of the load that produced it."""
         if x.startswith('self.'): return 0x52, bytes([self.N.fld_parse(x[5:])])
@@ -929,7 +1113,7 @@ class Lowerer:
         w = s.split(' ', 1)
         if w[0] in ('goto', 'call') and len(w) == 2:
             return [f'o {0x03 if w[0] == "goto" else 0x05:02X} {self.label(w[1])}']
-        if w[0] == 'anim': return [f'o 19 {w[1]}']
+        if w[0] == 'anim' and len(w) == 2: return [f'o 19 {self.alabel(w[1])}']
         m13 = OP13_RX.match(s)
         if m13:
             sub = next(k for k, v in OP13.items() if v == m13.group(1))
@@ -1010,6 +1194,7 @@ class Lowerer:
         self.check_funcs(text)
         out = []
         block = None            # ('switch'|'select', value) while inside a case block
+        mode = None             # 'code' under a state/func/inner label, 'anim' under an anim label
         for lineno, line in enumerate(text.splitlines(), 1):
             code = line.partition(';')[0].rstrip()
             raw = code.strip()
@@ -1025,7 +1210,11 @@ class Lowerer:
                 block = None
                 mi = re.match(r'^  ([A-Za-z_][A-Za-z0-9_]*):$', code)     # an inner label of a func
                 if mi:
-                    out.append(self.label(mi.group(1)) + ':'); continue
+                    out.append(self.label(mi.group(1)) + ':'); mode = 'code'; continue
+                if (code.startswith('    ') or code.startswith('\t')) and mode == 'anim':   # an anim statement
+                    out.append(anim_parse(raw, self.alabel)); continue
+                if (code.startswith('    ') or code.startswith('\t')) and mode is None:
+                    raise ValueError(f'statement outside a state/func/anim: {raw!r}')
                 if code.startswith('    ') or code.startswith('\t'):   # indented = a statement (checked first:
                     mb = re.match(r'^(switch|select) (\S+):$', raw)     # `x = y` statements look like aliases)
                     if mb:
@@ -1050,18 +1239,24 @@ class Lowerer:
                             out.extend(self.statement(a))
                         out.extend(self.statement(f'call {mc.group(1)}')); continue
                     out.extend(self.statement(raw)); continue
-                if p[0] == 'chunk': out.append(raw)
+                if p[0] == 'chunk': out.append(raw); mode = None
                 elif p[0] == 'class':
                     kv = dict(x.split('=', 1) for x in p[2:])
                     entry = kv['entry']
-                    out.append(f'record {kv["record"]} sprite={kv["sprite"]} flags={kv["flags"]} code={self.label(entry)} rest={kv["rest"]}')
+                    out.append(f'record {kv["record"]} sprite={kv["sprite"]} flags={kv["flags"]} code={self.label(entry)} rest={kv["rest"]}'); mode = None
                 elif p[0] in ('state', 'func') and raw.endswith(':'):
-                    out.append(self.label(p[1][:-1]) + ':')
-                elif raw.endswith(':') and len(p) == 1: out.append(raw)
+                    out.append(self.label(p[1][:-1]) + ':'); mode = 'code'
+                elif p[0] == 'anim' and len(p) == 2 and raw.endswith(':'):
+                    out.append(self.alabel(p[1][:-1]) + ':'); mode = 'anim'
+                elif raw.endswith(':') and len(p) == 1:
+                    out.append(raw); mode = 'anim' if raw.startswith('A_') else ('code' if raw.startswith('S_') else None)
                 elif p[0] == 'alias' and len(p) == 4 and p[2] == '=':
                     base, off = p[3].split('+')
                     out.append(f'{self.label(p[1])} = {self.label(base)}+{off}')
-                elif p[0] in ('blob', 'a') or (len(p) == 3 and p[1] == '='): out.append(raw)
+                elif p[0] == 'a': out.append(raw)                    # a raw anim line still passes
+                elif p[0] == 'blob' or (len(p) == 3 and p[1] == '='):
+                    out.append(raw)
+                    if p[0] == 'blob': mode = None
                 else:
                     raise ValueError(f'unexpected line {raw!r}')
             except Exception as e:

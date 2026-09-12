@@ -638,8 +638,10 @@ def logic_page_lvd(cid_hex):
         raw = code.strip()
         esc = _h.escape(code.rstrip())
         c = f" <span class=c>;{_h.escape(comment)}</span>" if comment else ""
-        if raw.startswith(("state ", "func ")) and raw.endswith(":"):
+        if raw.startswith(("state ", "func ", "anim ")) and raw.endswith(":"):
             out.append(f"<div class=l id='{_h.escape(raw.split()[1][:-1])}'>{esc}{c}</div>")
+        elif raw.endswith(":") and " " not in raw:                                                  # a bare label (A_xxxx: / P_xxxx:)
+            out.append(f"<div class=l id='{_h.escape(raw[:-1])}'>{esc}{c}</div>")
         elif code.startswith("  ") and not code.startswith("    ") and raw.endswith(":"):      # an inner label of a func
             out.append(f"<div class=l id='{_h.escape(raw[:-1])}'>{esc}{c}</div>")
         elif raw.startswith("class "):
@@ -647,7 +649,7 @@ def logic_page_lvd(cid_hex):
             esc2 = esc.replace(f"entry={_h.escape(m.group(1))}", f"entry=<a href='#{_h.escape(m.group(1))}'>{_h.escape(m.group(1))}</a>") if m else esc
             out.append(f"<div class=r>{esc2}</div>")
         elif code.startswith("    "):
-            esc2 = _re.sub(r"\b(goto|call|-&gt;) ([A-Za-z_][A-Za-z0-9_]*)", r"\1 <a href='#\2'>\2</a>", esc)   # goto/call targets and switch cases
+            esc2 = _re.sub(r"\b(goto|call|-&gt;|anim) ([A-Za-z_][A-Za-z0-9_]*)", r"\1 <a href='#\2'>\2</a>", esc)   # goto/call/anim targets and switch cases
             out.append(f"<div class=o>{esc2}{c}</div>")
         else:
             out.append(f"<div class=b>{esc}{c}</div>")
@@ -659,7 +661,7 @@ def logic_page_lvd(cid_hex):
             "<div id=left><h3>script " + cid_hex + " .lvd (" + src + ", " + str(len(text.splitlines())) + " lines) &middot; "
             "<a href='/logic/" + cid_hex + "'>.lvsf view</a> &middot; <a href='/'>&larr; levels</a></h3>"
             + "".join(out) + "</div>"
-            "<div id=right><b>edit .lvd</b> <span class=c>(one statement per line, 4-space indent; `state name:` labels; the left operand of a comparison is the accumulator load; compile lowers to .lvsf and assembles)</span>"
+            "<div id=right><b>edit .lvd</b> <span class=c>(one statement per line, 4-space indent; `state name:` / `func name:` / `anim name:` labels, inner labels of a func `  name:`; the left operand of a comparison is the accumulator load; compile lowers to .lvsf and assembles)</span>"
             "<textarea id=src spellcheck=false>" + _h.escape(text) + "</textarea>"
             "<div><button onclick='doCompile(false)'>check</button><button onclick='doCompile(true)'>compile &rarr; scratch</button>"
             "<button onclick='doPack()'>pack</button><button onclick='doPlay()'>play</button><button onclick='doRevert()'>revert to canonical</button>"
