@@ -27,6 +27,7 @@ void v2_midi_set_clock(uint64_t (*ticks)(void)) { std::lock_guard<std::mutex> lk
 void v2_midi_event(uint16_t status, uint16_t d1, uint16_t d2) {
     const uint8_t fam = (uint8_t)(status & 0xF0);
     if (fam == 0xB0 && (d1 == 0x70 || d1 == 0x71 || d1 == 0x72)) return;   // AIL's protect / lock / bank: not MIDI
+    v2_sc55_observe(status, d1, d2);                                   // the channel state, for a module that comes up later
     if (v2_sc55_enabled()) v2_sc55_midi(status, d1, d2);
     std::lock_guard<std::mutex> lk(g_mtx);
     if (g_dump_state < 0) {

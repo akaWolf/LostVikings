@@ -9184,6 +9184,7 @@ static void v2_ui_service(uint8_t* s) {
             else if (last_snd == 2) v2_sc55_stop();
             last_snd = v2_options.sound_mode.load();
         }
+        v2_sc55_service();   // the boot gate: channel state replayed once the module's firmware is up
     }
     // options: parallax on/off at runtime (display lane), interludes on/off
     static int last_par = -1;

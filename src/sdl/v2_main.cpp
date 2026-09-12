@@ -6,6 +6,8 @@
 // main so it dodges this — V2_ONLY must opt out explicitly.
 #define SDL_MAIN_HANDLED
 #include "v2_midi.h"   // UX stage 11: V2_MIDI_DUMP is written before the _exit paths
+#include "v2_sc55.h"   // UX stage 11: the SC-55 module boots before the game thread starts
+#include "v2_ui.h"     // v2_options
 #include <SDL2/SDL.h>
 #include "v2_timing.h"
 #include <cstdio>
@@ -165,6 +167,12 @@ int main(int argc, char* argv[]) {
     // Init SDL window + sound (only v2 window — orig render not needed since m2c disabled)
     render_init_v2(nullptr);
     sound_init();
+    // UX stage 11: the SC-55 option boots its module now, ahead of the game's
+    // first music (the firmware needs 0.2 s on the SC-55mk2, 2 s on the SC-55
+    // v1.21); until it is up the OPL render stays audible (the boot gate in
+    // v2_sc55). A failure is reported by v2_ui_service's own attempt (toast, back to PC).
+    v2_options_ensure_loaded();
+    if (v2_options.sound_mode.load() == 2) v2_sc55_start();
 
     // Input record/replay (V2_ONLY only). File format is SDL-independent.
     v2_input_recorder_init(record_input, replay_input, strict_replay ? 1 : 0);

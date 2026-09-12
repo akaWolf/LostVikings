@@ -1268,8 +1268,14 @@ void MCU_CloseAudio(void)
 }
 
 #endif // NUKED_SC55_EMBEDDED
+#ifdef NUKED_SC55_EMBEDDED
+uint64_t nsc55_samples_out = 0;   // frames the emulation produced (v2_sc55 diagnostics)
+#endif
 void MCU_PostSample(int *sample)
 {
+#ifdef NUKED_SC55_EMBEDDED
+    nsc55_samples_out++;
+#endif
     sample[0] >>= 15;
     if (sample[0] > INT16_MAX)
         sample[0] = INT16_MAX;
@@ -1854,6 +1860,7 @@ extern "C" int nsc55_load(const char* dir)
 
 // the sample ring (interleaved stereo shorts) and the emulation thread —
 // the init/reset chain of main(): MCU_Init, MCU_PatchROM, MCU_Reset, SM_Reset, PCM_Reset
+extern "C" void nsc55_lcd_reset(void);   // lcd_stub.cpp
 extern "C" int nsc55_start(int ring_frames)
 {
     if (!nsc55_loaded) { snprintf(nsc55_error, sizeof nsc55_error, "ROMs not loaded"); return 0; }
@@ -1865,6 +1872,7 @@ extern "C" int nsc55_start(int ring_frames)
     if (!sample_buffer) { snprintf(nsc55_error, sizeof nsc55_error, "no memory for the sample ring"); return 0; }
     sample_read_ptr = 0; sample_write_ptr = 0;
     uart_write_ptr = 0; uart_read_ptr = 0;
+    nsc55_lcd_reset();   // lcd_stub.cpp: the boot signal starts low
     MCU_Init();
     MCU_PatchROM();
     MCU_Reset();
@@ -1902,4 +1910,11 @@ extern "C" void nsc55_read(short* out, int frames)
 
 extern "C" int nsc55_running(void) { return nsc55_thread != nullptr; }
 extern "C" void nsc55_post(uint8_t b) { MCU_PostUART(b); }
+// diagnostics (v2_sc55 trace): UART backlog, the firmware's receiver enable (SCR RE), frames produced
+extern "C" void nsc55_stats(uint32_t* uart_pending, int* rx_enabled, uint64_t* samples_out)
+{
+    if (uart_pending) *uart_pending = (uart_write_ptr + uart_buffer_size - uart_read_ptr) % uart_buffer_size;
+    if (rx_enabled) *rx_enabled = (dev_register[DEV_SCR] & 16) ? 1 : 0;
+    if (samples_out) *samples_out = nsc55_samples_out;
+}
 #endif // NUKED_SC55_EMBEDDED

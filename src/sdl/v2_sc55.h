@@ -16,6 +16,8 @@ bool v2_sc55_start();                    // game thread: load the ROMs once, boo
 void v2_sc55_stop();
 bool v2_sc55_running();
 const char* v2_sc55_status();            // "SC-55mk2 running" / the last error
-void v2_sc55_midi(uint16_t status, uint16_t d1, uint16_t d2);   // game thread: one channel message to the module
+void v2_sc55_observe(uint16_t status, uint16_t d1, uint16_t d2);   // always (v2_midi): tracks the channels' bank/program/controllers/pitch for a later (re)start
+void v2_sc55_service();                                             // game thread, every tick: the boot gate (channel state replayed once the firmware is up)
+void v2_sc55_midi(uint16_t status, uint16_t d1, uint16_t d2);      // game thread: one channel message to the module (dropped while it boots)
 // audio thread: the module's output resampled to `rate` INTO `out` (replaces it); false = not running
 bool v2_sc55_mix(int16_t* out, uint32_t frames, uint32_t rate);
