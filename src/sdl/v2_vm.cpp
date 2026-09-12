@@ -42,6 +42,7 @@ extern uint8_t v2_vga[65536 * 4];
 #include "v2_gamestate.h"
 #include "v2_obj_view.h"
 #include "v2_coop.h"        // UX stage 8: per-player input words / active vikings (inert with one player)
+#include "v2_net.h"         // UX stage 8 step 3: the per-frame hash of the lockstep
 #include "v2_vm_gen.h"      // V2VM + everything the generated executors (src/sdl/gen/exec_01cN.cpp) share with this file
 
 // Access to emulated memory
@@ -21906,6 +21907,9 @@ void v2_phase_frame_end(uint16_t ds_val) {
     v2_frame_active = false;
     // Per-frame divergence + stuck-state verify (gameplay-level only)
     v2_frame_end_verify();
+    // UX stage 8 step 3: the lockstep's proof — every client hashes its DS at
+    // the same point of the same frame; the host compares (V2-NET-DESYNC).
+    if (v2_net_active()) v2_net_send_hash(v2_dbg_pre_vm_iter, v2_ds_hash(v2_vm_shadow_ds));
 
     // End-of-frame level transition check.
     // Verified with seg000 lines 122-146 (eip 0x00F7..0x012D, loc_100f7).

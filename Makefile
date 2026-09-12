@@ -35,6 +35,7 @@ SDL        := $(shell $(PKG_CONFIG) --cflags --libs sdl2)
 # Drop Linux-only -rdynamic / -no-pie.
 PLATFORM_DEFINES := -D_WIN32_WINNT=0x0601
 PLATFORM_LDFLAGS := -static-libgcc -static-libstdc++
+PLATFORM_LIBS    := -lws2_32       # UX stage 8 step 3: winsock for the lockstep transport (v2_net.cpp)
 EXE_NAME   := vikings.exe
 OBJDIR     := .obj-win
 else
@@ -43,6 +44,7 @@ CXX        := g++
 SDL        := $(shell pkg-config --cflags --libs sdl2)
 PLATFORM_DEFINES :=
 PLATFORM_LDFLAGS := -rdynamic -no-pie
+PLATFORM_LIBS    :=
 EXE_NAME   := vikings
 OBJDIR     := .obj
 endif
@@ -234,6 +236,7 @@ CXX_SRCS := \
   src/sdl/v2_assets.cpp \
   src/sdl/v2_keymap.cpp \
   src/sdl/v2_coop.cpp \
+  src/sdl/v2_net.cpp \
   src/sdl/v2_ui.cpp \
   src/sdl/v2_snes_sound.cpp \
   src/sdl/third_party/snes_spc/Snes_Spc.cpp \
@@ -271,6 +274,7 @@ CXX_SRCS := \
   src/sdl/v2_input_recorder.cpp \
   src/sdl/v2_keymap.cpp \
   src/sdl/v2_coop.cpp \
+  src/sdl/v2_net.cpp \
   src/sdl/v2_ui.cpp \
   src/sdl/v2_fn_test.cpp \
   src/sdl/v2_native_opl.cpp \
@@ -328,6 +332,7 @@ KEYMAP_EDITOR_OBJDIR := .obj-keymap-editor
 KEYMAP_EDITOR_SRCS := \
   src/sdl/v2_keymap.cpp \
   src/sdl/v2_coop.cpp \
+  src/sdl/v2_net.cpp \
   src/sdl/keymap_editor/editor.cpp
 KEYMAP_EDITOR_OBJS := $(patsubst %.cpp, $(KEYMAP_EDITOR_OBJDIR)/%.o, $(KEYMAP_EDITOR_SRCS))
 
@@ -338,7 +343,7 @@ KEYMAP_EDITOR_EXE := vikings_keymap_editor$(if $(filter 1,$(WIN)),.exe,)
 keymap_editor: $(KEYMAP_EDITOR_EXE)
 
 $(KEYMAP_EDITOR_EXE): $(KEYMAP_EDITOR_OBJS)
-	$(CXX) $(DBG) $(PLATFORM_LDFLAGS) -o $@ $^ $(SDL)
+	$(CXX) $(DBG) $(PLATFORM_LDFLAGS) -o $@ $^ $(SDL) $(PLATFORM_LIBS)
 
 $(KEYMAP_EDITOR_OBJDIR)/%.o: %.cpp
 	@mkdir -p $(dir $@)
@@ -347,7 +352,7 @@ $(KEYMAP_EDITOR_OBJDIR)/%.o: %.cpp
 -include $(KEYMAP_EDITOR_OBJS:.o=.d)
 
 $(EXE_NAME): $(ALL_OBJS)
-	$(CXX) $(DBG) $(PLATFORM_LDFLAGS) $(COV_LDFLAGS) -o $@ $^ $(SDL)
+	$(CXX) $(DBG) $(PLATFORM_LDFLAGS) $(COV_LDFLAGS) -o $@ $^ $(SDL) $(PLATFORM_LIBS)
 
 ifdef COV_SEG000
 $(OBJDIR)/src/vikings.exe_seg000.o: CXXFLAGS += --coverage

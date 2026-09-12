@@ -14,6 +14,7 @@
 #include "v2_input_recorder.h"
 #include "v2_keymap.h"
 #include "v2_coop.h"          // UX stage 8: --coop=N
+#include "v2_net.h"           // UX stage 8 step 3: --host / --join / --delay
 #include "v2_gamestate.h"   // stage 4 II.c: evac refresh after teleport load
 #include "render_v2.h"   // V2_EXE_STATIC_SIZE
 #include <csignal>
@@ -99,6 +100,9 @@ int main(int argc, char* argv[]) {
     const char* replay_input = nullptr;
     const char* keymap_path  = nullptr;
     bool strict_replay = false;
+    int net_host_port = 0;            // UX stage 8 step 3: --host=PORT (with --coop=N)
+    const char* net_join = nullptr;   //                    --join=HOST[:PORT]
+    int net_delay = -1;               //                    --delay=N reads (default 2; alone = the solo lockstep)
     for (int i = 1; i < argc; i++) {
         if (strcmp(argv[i], "--debug") == 0) {
             g_debug_mode = true;
@@ -115,6 +119,12 @@ int main(int argc, char* argv[]) {
             // UX stage 8: 2 or 3 players in one game (v2_coop.h); 1 = the original
             v2_coop_set_players(atoi(argv[i] + 7));
             fprintf(stderr, "[v2_main] --coop: %d players\n", atoi(argv[i] + 7));
+        } else if (strncmp(argv[i], "--host=", 7) == 0) {
+            net_host_port = atoi(argv[i] + 7);
+        } else if (strncmp(argv[i], "--join=", 7) == 0) {
+            net_join = argv[i] + 7;
+        } else if (strncmp(argv[i], "--delay=", 8) == 0) {
+            net_delay = atoi(argv[i] + 8);
         } else if (strncmp(argv[i], "--player=", 9) == 0) {
             // UX stage 8 step 2: the player this client presents (1..3; the
             // camera and the badge); step 3's lobby sets it from the host
@@ -154,6 +164,21 @@ int main(int argc, char* argv[]) {
 
     // Input record/replay (V2_ONLY only). File format is SDL-independent.
     v2_input_recorder_init(record_input, replay_input, strict_replay ? 1 : 0);
+
+    // UX stage 8 step 3: the lockstep lobby — the host waits for its players,
+    // a client takes its player number and the host's world options; either
+    // way the recorder then captures this client's keys for a later read.
+    {
+        const int delay = (net_delay < 0) ? 2 : (net_delay < 1 ? 1 : (net_delay > 8 ? 8 : net_delay));
+        if (net_host_port > 0) {
+            if (!v2_net_host(net_host_port, v2_coop_players(), delay)) return 1;
+        } else if (net_join) {
+            if (!v2_net_join(net_join)) return 1;
+        } else if (net_delay >= 0) {
+            v2_net_solo(delay);
+        }
+        if (v2_net_active()) v2_input_recorder_net(g_v2_local_player);
+    }
 
     // Load baked static EXE data, then point v2 base at it.
     v2_load_static_data();
@@ -290,6 +315,7 @@ int main(int argc, char* argv[]) {
 
     printf("V2_ONLY: quitting\n");
     v2_game_thread_stop();
+    v2_net_shutdown();          // UX stage 8 step 3: tell the peers, close the sockets
     // Golden end-state channel at the max-frames/window-close exit — same
     // idempotent dump the quit sites call (V2_GOLDEN_DUMP / V2_SAVE_STATE).
     headless_golden_dump();

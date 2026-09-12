@@ -23,6 +23,7 @@ extern "C" void __gcov_dump(void);   // libgcov: flush counters before _exit
 #endif
 #include "headless_dump.h"
 #include "../v2_input_recorder.h"
+#include "../v2_net.h"   // UX stage 8 step 3: close the lockstep sockets before the _exit below
 #include "../v2_keymap.h"
 
 extern int v2_dbg_pre_vm_iter;
@@ -116,6 +117,7 @@ int headless_check_exit(void) {
 #ifndef V2_ONLY
         v2_fntest_report();   // fn-test infra is not part of the V2_ONLY build
 #endif
+        v2_net_shutdown();    // UX stage 8 step 3: the peers see the close, the summary line lands (no-op without a game)
         fflush(stdout); fflush(stderr);
         // COV_SEG000 builds: flush gcov counters before the atexit-skipping
         // _exit — replays feed the merged coverage profile (#47 step 1).

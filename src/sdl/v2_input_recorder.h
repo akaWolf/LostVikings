@@ -33,6 +33,13 @@ void v2_input_recorder_init(const char* record_file, const char* replay_file, in
 // no event pending. Behaviour depends on mode (see header comment).
 int v2_input_poll_event(SDL_Event* e);
 
+// UX stage 8 step 3 — the lockstep (v2_net.h). After the lobby: this client's
+// events are captured instead of applied (the render loop hands its key events
+// to v2_input_net_capture; a replay's events are captured when they fall due)
+// and every read applies the batches of all players for that read.
+void v2_input_recorder_net(int local_player);
+void v2_input_net_capture(const SDL_Event* e);
+
 // RECORD mode only: flush pending key edges (captured by the render thread) to
 // the file, tagged with the CURRENT game frame. Call from the game thread at the
 // point input is read (sub_12352) so the recorded frame == the frame the game

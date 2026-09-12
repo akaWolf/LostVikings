@@ -11,6 +11,8 @@
 #include "v2_input_recorder.h"
 #include "v2_keymap.h"
 #include "v2_coop.h"          // UX stage 8: `# coop N` headers, the P2:/P3: key sets
+#include "v2_net.h"           // UX stage 8 step 3: the lockstep batches
+#include <string>
 #include <cstdio>
 #include <cstdint>
 #include <cstdlib>
@@ -80,6 +82,15 @@ bool g_replay_has_seq = false;
 struct PendingRec { const char* action; uint8_t kind; }; // kind 0=KD 1=KU 2=KR (#86)
 std::vector<PendingRec> g_pending_record;
 std::mutex g_pending_mutex;
+
+// UX stage 8 step 3 — the lockstep. This client's events wait here until the
+// next read packs them into the batch of read n + delay (v2_net.h); the
+// events applied at a read are the batches of every player for that read.
+bool g_net = false;
+int  g_net_local = 0;                       // the player this client's keyboard is
+std::vector<V2NetEvent> g_pending_net;      // under g_pending_mutex
+long g_net_batches = 0, g_net_applied = 0;
+
 
 void parse_replay_file(const char* path) {
     FILE* f = fopen(path, "r");
@@ -169,6 +180,41 @@ void log_keyboard_event(const SDL_Event* e) {
     // v2_input_record_drain (called from sub_12352). See g_pending_record note.
     std::lock_guard<std::mutex> lk(g_pending_mutex);
     g_pending_record.push_back({action, kind});
+}
+
+// One event of this client, into the pending batch. Live keys of a client
+// that is player k > 1 are its own DOS-layout actions renamed `P<k>:<action>`
+// (only the game actions with key bits: the letters, the spec keys and the
+// numpad sets belong to the host's keyboard); the host keeps everything of
+// its player 1 and, with peers, drops its local P2:/P3: sets (those players
+// are the peers). A replay's events (the loopback bench: every instance reads
+// the same 3-player file) are kept when their action's player is this one;
+// the solo pipeline (no peers) keeps every event.
+void net_capture_impl(const SDL_Event* e, bool from_replay) {
+    uint8_t kind;
+    if (e->type == SDL_KEYDOWN && e->key.repeat) {
+        if (!sdl_int9_dos_scan(SDL_GetScancodeFromKey(e->key.keysym.sym))) return;   // #86: a live no-op
+        kind = 2;
+    } else {
+        kind = (uint8_t)(e->type == SDL_KEYDOWN ? 0 : 1);
+    }
+    const char* action = sdl_key_to_action(e->key.keysym.sym);
+    if (!action) action = raw_key_name(e->key.keysym.sym);
+    if (!action) return;
+    uint16_t kv = 0, so = 0; int player = 0;
+    v2_keymap_lookup_sdl_player(e->key.keysym.sym, &kv, &so, &player);
+    std::string name = action;
+    const bool peers = v2_net_peer_count() > 0;
+    if (from_replay) {
+        if (peers && player != g_net_local) return;
+    } else if (g_net_local > 0) {
+        if (player != 0 || kv == 0 || so != 0) return;
+        name = "P" + std::to_string(g_net_local + 1) + ":" + name;
+    } else if (peers && player != 0) {
+        return;
+    }
+    std::lock_guard<std::mutex> lk(g_pending_mutex);
+    g_pending_net.push_back(V2NetEvent{v2_dbg_pre_vm_iter, kind, name});
 }
 
 // Replay clock: equals the frame counter on the normal path, but keeps
@@ -279,7 +325,8 @@ int v2_replay_drain_impl(void) {
     int applied = 0;
     SDL_Event e;
     while (dequeue_due_replay(&e)) {
-        apply_replay_event(e, "clk");
+        if (g_net) net_capture_impl(&e, true);   // lockstep: captured, applied at read + delay
+        else apply_replay_event(e, "clk");
         applied++;
     }
     return applied;
@@ -309,7 +356,7 @@ extern "C" void v2_input_tick_12352(void) {
     g_sub12352_seq++;
     if (g_mode == MODE_RECORD) {
         v2_input_record_drain();
-        return;
+        if (!g_net) return;         // a networked game may record too: its read still needs the batches below
     }
     if (g_mode == MODE_REPLAY && g_replay_has_seq) {
         while (g_replay_pos < g_replay_queue.size() &&
@@ -322,7 +369,8 @@ extern "C" void v2_input_tick_12352(void) {
             e.key.repeat = 0;
             e.key.state = (re.kind == 0) ? SDL_PRESSED : SDL_RELEASED;
             e.key.timestamp = SDL_GetTicks();
-            apply_replay_event(e, "seq");
+            if (g_net) net_capture_impl(&e, true);   // lockstep: this read packs it, read + delay applies it everywhere
+            else apply_replay_event(e, "seq");
             g_replay_pos++;
         }
         if (g_replay_pos >= g_replay_queue.size() && !g_replay_exhausted_logged &&
@@ -332,6 +380,47 @@ extern "C" void v2_input_tick_12352(void) {
                     v2_dbg_pre_vm_iter, g_sub12352_seq);
         }
     }
+    // UX stage 8 step 3 — the lockstep read: what this client captured since the
+    // last read becomes its batch of read seq + delay (sent, and queued for
+    // itself); then the batches of every player for THIS read are applied in
+    // player order, through the same apply_replay_event a seq replay uses.
+    if (g_net) {
+        std::vector<V2NetEvent> batch;
+        { std::lock_guard<std::mutex> lk(g_pending_mutex); batch.swap(g_pending_net); }
+        v2_net_send_batch(g_sub12352_seq + v2_net_delay(), batch);
+        g_net_batches++;
+        std::vector<V2NetEvent> evs;
+        if (!v2_net_wait_batch(g_sub12352_seq, evs)) return;
+        for (const V2NetEvent& ne : evs) {
+            SDL_Keycode kc = action_to_sdl_key(ne.action.c_str());
+            if (kc == SDLK_UNKNOWN) {
+                static int warned = 0;
+                if (warned++ < 5) fprintf(stderr, "v2_input_recorder: lockstep action '%s' unknown here — dropped (peers need the same key sets)\n", ne.action.c_str());
+                continue;
+            }
+            SDL_Event e; SDL_zerop(&e);
+            e.type = (ne.kind == 1) ? SDL_KEYUP : SDL_KEYDOWN;
+            e.key.keysym.sym = kc;
+            e.key.keysym.scancode = SDL_GetScancodeFromKey(kc);
+            e.key.repeat = (ne.kind == 2) ? 1 : 0;
+            e.key.state = (ne.kind == 1) ? SDL_RELEASED : SDL_PRESSED;
+            e.key.timestamp = SDL_GetTicks();
+            apply_replay_event(e, "net");
+            g_net_applied++;
+        }
+    }
+}
+
+extern "C" void v2_input_recorder_net(int local_player) {
+    g_net = true;
+    g_net_local = local_player;
+    fprintf(stderr, "v2_input_recorder: LOCKSTEP mode — this client is player %d, input delay %d read(s)\n",
+            local_player + 1, v2_net_delay());
+}
+extern "C" void v2_input_net_capture(const SDL_Event* e) {
+    if (!g_net || !e) return;
+    if (e->type != SDL_KEYDOWN && e->type != SDL_KEYUP) return;
+    net_capture_impl(e, false);
 }
 
 extern "C" void v2_input_recorder_init(const char* record_file, const char* replay_file, int strict_replay) {

@@ -10,6 +10,7 @@ extern "C" void sdl_int9_note_keydown(int sdl_scancode);  // render.cpp (#62)
 #include "v2_input_recorder.h"
 #include "v2_keymap.h"
 #include "v2_coop.h"          // UX stage 8: co-op key sets and game controllers
+#include "v2_net.h"           // UX stage 8 step 3: the lockstep captures the keys instead
 #include <unistd.h>  // _exit
 
 // ============================================================================
@@ -344,6 +345,7 @@ void render_thread_proc_v2(void* _state)
           switch (event.type) {
           case SDL_QUIT:
               need_quit = true;
+              v2_net_shutdown();          // UX stage 8 step 3: tell the peers before the hard exit
               fflush(stdout);
               _exit(0);
               break;
@@ -358,6 +360,10 @@ void render_thread_proc_v2(void* _state)
                       (wf & SDL_WINDOW_FULLSCREEN_DESKTOP) ? 0 : SDL_WINDOW_FULLSCREEN_DESKTOP);
                   break;
               }
+              // UX stage 8 step 3: in a lockstep game the key is this client's
+              // event for a later read, applied then on every client — never
+              // straight into the words (the replay path applies it).
+              if (v2_net_active()) { v2_input_net_capture(&event); break; }
               uint16_t key_val = 0;
               uint16_t spec_off = 0;
               int key_player = 0;
