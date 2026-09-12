@@ -24,6 +24,22 @@ for inp in tests/coop/*.inp; do
     xa=$(grep '^obj_world_x' "$OUT/${name}_a.txt" | sed 's/.*: //'); xs=$(grep '^obj_world_x' "$OUT/${name}_solo.txt" | sed 's/.*: //')
     echo "$name: coop x = ${xa:0:14} | solo x = ${xs:0:14}"
     set -- $xa; ca1=$1; ca2=$2; ca3=$3; set -- $xs; sa1=$1; sa2=$2; sa3=$3
-    if [ "$ca2" = "$sa2" ] || [ "$ca3" = "$sa3" ]; then echo "FAIL $name: a viking of player 2 or 3 did not move (P2 $sa2 -> $ca2, P3 $sa3 -> $ca3)"; fail=1; else echo "PASS $name"; fi
+    if [ "$ca2" = "$sa2" ] || [ "$ca3" = "$sa3" ]; then echo "FAIL $name: a viking of player 2 or 3 did not move (P2 $sa2 -> $ca2, P3 $sa3 -> $ca3)"; fail=1; continue; fi
+    # step 2: the co-op line — player 3's own camera exists and differs from the DS viewport (player 1's)
+    cl=$(grep '^coop players=' "$OUT/${name}_a.txt"); vpx=$(grep '^viewport_x' "$OUT/${name}_a.txt" | sed 's/.*= //'); vpy=$(grep '^viewport_y' "$OUT/${name}_a.txt" | sed 's/.*= //')
+    c3=$(echo "$cl" | sed -n 's/.*P3 act=[0-9A-F]* cam=\([0-9A-F,-]*\).*/\1/p')
+    echo "$name: $cl | DS viewport $vpx,$vpy"
+    if [ -z "$cl" ] || [ -z "$c3" ] || [ "$c3" = "-" ]; then echo "FAIL $name: no camera for player 3 in the golden dump"; fail=1; continue; fi
+    if [ "$c3" = "$vpx,$vpy" ]; then echo "FAIL $name: player 3's camera equals the DS viewport"; fail=1; continue; fi
+    # step 2: a scenario with a .spawn marker walks a player past the DS camera's window — his camera
+    # must have spawned objects the one-player run never had (more live slots: non-zero obj_code_seg words)
+    if [ -f "tests/coop/$name.spawn" ]; then
+        nc=$(grep '^obj_code_seg' "$OUT/${name}_a.txt" | sed 's/.*: //' | tr ' ' '\n' | grep -c -v '^0000$')
+        ns=$(grep '^obj_code_seg' "$OUT/${name}_solo.txt" | sed 's/.*: //' | tr ' ' '\n' | grep -c -v '^0000$')
+        echo "$name: live object slots coop=$nc solo=$ns"
+        if [ "$nc" -le "$ns" ]; then echo "FAIL $name: player 2's camera spawned nothing beyond the one-player run"; fail=1; continue; fi
+    fi
+    echo "PASS $name"
+
 done
 [ "$fail" = 0 ]

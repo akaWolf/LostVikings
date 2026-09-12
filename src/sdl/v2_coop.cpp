@@ -8,6 +8,7 @@
 
 V2Coop g_coop;
 int g_v2_coop_players = 1;
+int g_v2_local_player = 0;
 thread_local uint16_t g_v2_exec_obj = 0xFFFF;
 uint16_t v2_coop_held[V2_COOP_MAX] = {0, 0, 0};
 std::atomic<uint16_t> v2_coop_press[V2_COOP_MAX];

@@ -969,14 +969,16 @@ extern "C" void v2_gs_bounds_note(uint32_t base, uint32_t len, uint32_t off);
 #define V2_GS_BCHK(off, len, o)
 #endif
 
-// Co-op (v2_coop.h): the three words the VM sees per player. The condition on
-// the constant `off` folds away for every other field; with one player the
-// hook is a single global compare on these three getters. All three are
+// Co-op (v2_coop.h): the three input words the VM sees per player, and (step
+// 2) the viewport words = the camera of the executing object's screen. The
+// condition on the constant `off` folds away for every other field; with one
+// player the hook is a single global compare on these getters. All five are
 // evacuated fields (V2_GS_FIELDS_EVAC), so the hook sits in the V2_GS_AE1
 // getters of both views (and in V2_GS_A1 for the day they leave the list).
 extern int g_v2_coop_players;
 uint16_t v2_coop_view(uint16_t off, uint16_t real, const uint8_t* ds);
-#define V2_COOP_VIRT(off) ((off) == DS_INPUT_KEYS || (off) == DS_INPUT_EDGES || (off) == DS_ACTIVE_VIKING)
+#define V2_COOP_VIRT(off) ((off) == DS_INPUT_KEYS || (off) == DS_INPUT_EDGES || (off) == DS_ACTIVE_VIKING || \
+                           (off) == DS_VIEWPORT_X || (off) == DS_VIEWPORT_Y)   /* step 2: the object's screen */
 
 struct V2StateView {
     uint8_t* ds;

@@ -1,0 +1,39 @@
+# Lost Vikings v2 input recording — co-op spawn scenario (UX stage 8 step 2)
+# coop 3
+# GR8T through the password screen (the pw_01_GR8T prefix), then player 2 walks Baleog
+# east along the long corridor while player 1's Erik idles: the objects past the DS
+# camera's window exist only because player 2's camera spawned them.
+230 KD RETURN
+233 KU RETURN
+258 KD P
+261 KU P
+278 KD G
+281 KU G
+293 KD R
+296 KU R
+308 KD 8
+311 KU 8
+323 KD T
+326 KU T
+358 KD RETURN
+361 KU RETURN
+400 KD SPACE
+402 KU SPACE
+420 KD P2:RIGHT
+440 KD SPACE
+442 KU SPACE
+460 KD P3:RIGHT
+480 KD SPACE
+480 KU P3:RIGHT
+482 KU SPACE
+520 KD SPACE
+522 KU SPACE
+560 KD SPACE
+562 KU SPACE
+600 KD SPACE
+602 KU SPACE
+640 KD SPACE
+642 KU SPACE
+680 KD SPACE
+682 KU SPACE
+700 KU P2:RIGHT

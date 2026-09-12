@@ -112,14 +112,16 @@ static void v2_present_frame(int H) {
     }
     if (!drawn) SDL_RenderCopy(myRenderer_v2, myTexture_v2, &src, &dst);
     {
-        static int shot = -1, at = 1, calls = 0; static const char* path = nullptr; static char pbuf[512];
+        static int shot = -1, at = 1, at_frame = -1, calls = 0; static const char* path = nullptr; static char pbuf[512];
         if (shot < 0) {
             const char* e = getenv("V2_PRESENT_SHOT");
             shot = (e && *e) ? 0 : 2;
-            if (shot == 0) { snprintf(pbuf, sizeof pbuf, "%s", e); char* c = strrchr(pbuf, ':'); if (c && c[1]) { at = atoi(c + 1); *c = 0; } path = pbuf; }
+            // <path>[:<presenter call>] or <path>:f<game frame> (UX stage 8: a shot at a known point of a replay)
+            if (shot == 0) { snprintf(pbuf, sizeof pbuf, "%s", e); char* c = strrchr(pbuf, ':');
+                             if (c && c[1]) { if (c[1] == 'f') at_frame = atoi(c + 2); else at = atoi(c + 1); *c = 0; } path = pbuf; }
         }
         calls++;
-        if (shot == 0 && calls >= at) {
+        if (shot == 0 && (at_frame >= 0 ? v2_dbg_pre_vm_iter >= at_frame : calls >= at)) {
             std::vector<uint8_t> px((size_t)W * Hout * 3);
             if (SDL_RenderReadPixels(myRenderer_v2, NULL, SDL_PIXELFORMAT_RGB24, px.data(), W * 3) == 0) {
                 FILE* f = fopen(path, "wb");

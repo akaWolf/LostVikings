@@ -3500,22 +3500,84 @@ static inline uint16_t coop_ds_u16(const uint8_t* s, uint16_t off) { return *(co
 // The view of ds:3B6 / 3B8 / 3C2 the VM sees while it executes an object: the
 // words of the player whose active viking that object is. Player 1's viking
 // and every other object read the DS words.
-uint16_t v2_coop_view(uint16_t off, uint16_t real, const uint8_t*) {
-    int k = v2_coop_owner(g_v2_exec_obj);
-    if (k <= 0) return real;
-    const V2CoopPlayer& p = g_coop.p[k];
-    uint16_t v = (off == DS_INPUT_KEYS) ? p.keys : (off == DS_INPUT_EDGES) ? p.edges
-               : g_v2_exec_obj;         // DS_ACTIVE_VIKING: the object IS its player's active viking
+// sub_13c0c's window around a camera (ds:34/36/38/3A with the X low bound
+// clamped at 0 and the Y pair from the clamped value), tested on object `obj`
+// the way the despawn loop does (x +- half width, y +- half height).
+static bool v2_coop_in_window(const uint8_t* s, uint16_t obj, uint16_t cx, uint16_t cy) {
+    uint16_t axr = (uint16_t)(cx - 0x10);
+    uint16_t b34 = ((int16_t)cx >= (int16_t)0x10) ? axr : 0;
+    uint16_t b36 = (uint16_t)(axr + (v2_view_w + 0x20));
+    uint16_t ayr = (uint16_t)(cy - 0x10);
+    if (ayr & 0x8000) ayr = 0;
+    uint16_t b38 = ayr, b3a = (uint16_t)(ayr + 0xD0);
+    uint16_t x  = *(const uint16_t*)(s + obj + OBJ_WORLD_X), hw = *(const uint16_t*)(s + obj + OBJ_HALF_W);
+    uint16_t y  = *(const uint16_t*)(s + obj + OBJ_WORLD_Y), hh = *(const uint16_t*)(s + obj + OBJ_HALF_H);
+    if ((int16_t)(uint16_t)(x + hw) <  (int16_t)b34) return false;
+    if ((int16_t)(uint16_t)(x - hw) >= (int16_t)b36) return false;
+    if ((int16_t)(uint16_t)(y + hh) <  (int16_t)b38) return false;
+    if ((int16_t)(uint16_t)(y - hh) >= (int16_t)b3a) return false;
+    return true;
+}
+// sub_13c0c in co-op: an object leaves the world only when it is outside the
+// window of EVERY camera — the DS one (tested by the caller) and these.
+bool v2_coop_outside_all(const uint8_t* s, uint16_t obj) {
+    for (int k = 1; k < g_v2_coop_players; k++) {
+        const V2CoopPlayer& p = g_coop.p[k];
+        if (p.cam_valid && v2_coop_in_window(s, obj, p.cam_x, p.cam_y)) return false;
+    }
+    return true;
+}
+
+// The view of the hooked DS words the VM sees while it executes an object:
+//  - input_keys / input_edges / active_viking: the words of the player whose
+//    active viking that object is (player 1's viking and the DS words are the
+//    same thing); a controller object nobody owns (text boxes, TRY AGAIN — the
+//    only non-viking readers of the input are the UI classes) sees the DS
+//    words OR the buttons and directions (0xCFC0) of players 2..3, so any
+//    player turns a page or answers;
+//  - viewport_x / viewport_y (step 2): the camera of the object's screen — its
+//    owner's camera for a player's viking, else the first camera whose despawn
+//    window holds the object (the DS camera first), else the DS camera. So ops
+//    CC/CD/CE/CF see "on screen" = on somebody's screen, and an object's
+//    screen-relative arithmetic runs against the screen it is on.
+uint16_t v2_coop_view(uint16_t off, uint16_t real, const uint8_t* s) {
+    const uint16_t obj = g_v2_exec_obj;
+    if (obj == 0xFFFF) return real;
+    int k = v2_coop_owner(obj);
+    uint16_t v = real;
+    if (off == DS_VIEWPORT_X || off == DS_VIEWPORT_Y) {
+        if (k > 0) {
+            if (g_coop.p[k].cam_valid) v = (off == DS_VIEWPORT_X) ? g_coop.p[k].cam_x : g_coop.p[k].cam_y;
+        } else if (k < 0 && obj < 0x100 &&
+                   !v2_coop_in_window(s, obj, coop_ds_u16(s, DS_VIEWPORT_X), coop_ds_u16(s, DS_VIEWPORT_Y))) {
+            for (int j = 1; j < g_v2_coop_players; j++) {
+                const V2CoopPlayer& q = g_coop.p[j];
+                if (q.cam_valid && v2_coop_in_window(s, obj, q.cam_x, q.cam_y)) {
+                    v = (off == DS_VIEWPORT_X) ? q.cam_x : q.cam_y;
+                    break;
+                }
+            }
+        }
+    } else if (k > 0) {
+        const V2CoopPlayer& p = g_coop.p[k];
+        v = (off == DS_INPUT_KEYS) ? p.keys : (off == DS_INPUT_EDGES) ? p.edges
+          : obj;                        // DS_ACTIVE_VIKING: the object IS its player's active viking
+    } else if (k < 0 && obj >= 6 && off != DS_ACTIVE_VIKING) {
+        uint16_t o = 0;
+        for (int j = 1; j < g_v2_coop_players; j++) o |= (off == DS_INPUT_KEYS) ? g_coop.p[j].keys : g_coop.p[j].edges;
+        v = (uint16_t)(real | (o & 0xCFC0));
+    }
     // V2_COOP_TRACE=1: the first reads served per player and word
     static int s_trace = -1;
     if (s_trace < 0) s_trace = getenv("V2_COOP_TRACE") ? 1 : 0;
-    if (s_trace) {
-        static int seen[V2_COOP_MAX][3] = {};
-        int w = (off == DS_INPUT_KEYS) ? 0 : (off == DS_INPUT_EDGES) ? 1 : 2;
-        if (seen[k][w] < 3 || (w == 0 && v != 0 && seen[k][w] < 6)) {
-            seen[k][w]++;
-            fprintf(stderr, "V2-COOP-VIEW[f%d] P%d obj=%04X off=%04X real=%04X -> %04X\n",
-                    v2_dbg_pre_vm_iter, k + 1, g_v2_exec_obj, off, real, v);
+    if (s_trace && v != real) {
+        static int seen[V2_COOP_MAX + 1][4] = {};
+        int w = (off == DS_INPUT_KEYS) ? 0 : (off == DS_INPUT_EDGES) ? 1 : (off == DS_ACTIVE_VIKING) ? 2 : 3;
+        int kk = (k < 0) ? V2_COOP_MAX : k;
+        if (seen[kk][w] < 3 || (w == 0 && seen[kk][w] < 6)) {
+            seen[kk][w]++;
+            fprintf(stderr, "V2-COOP-VIEW[f%d] %s%d obj=%04X off=%04X real=%04X -> %04X\n",
+                    v2_dbg_pre_vm_iter, k < 0 ? "owner-less obj, players>=" : "P", k < 0 ? 2 : k + 1, obj, off, real, v);
         }
     }
     return v;
@@ -3534,11 +3596,143 @@ static bool v2_coop_free(uint16_t vk, int me) {
 static bool v2_coop_playing(const uint8_t* s) {
     return v2gs(s).level() < 0x25 && v2gs(s).game_mode_ac() != 0x8000;
 }
+// ---- step 2: the cameras of players 2..3 --------------------------------
+// The DOS spawn scans the extra cameras reuse (defined with sub_1673c below).
+static void v2_spawn_visible_13a0e(uint8_t* s);
+static void v2_scroll_spawn_up_13a14(uint8_t* s);
+static void v2_scroll_spawn_down_13a34(uint8_t* s);
+static void v2_scroll_spawn_left_13a74(uint8_t* s);
+static void v2_scroll_spawn_right_13a54(uint8_t* s);
+
+// The logical camera of player k >= 2 is the DS camera's own rules applied
+// to the player's viking. sub_113d8 places it when the player gets a viking
+// in a level (centre on the viking, clamp to [0, scroll limit]; the tracker
+// words of 92F3/92F5 from it); sub_1064b + the four movers follow it every
+// POST_VM (dead zone W/2 +- 0x10 / 0x50..0x60, at most 0x10 of demand, the
+// speed from ds:[amt*2 + 2B84], the movers' clamps). An axis under the DOS
+// scroll lock follows the DS viewport (the level wants that fixed camera);
+// switching vikings pans like the DOS camera does. A player without a viking
+// has no camera (cam_valid = false: the presenter shows the DS camera).
+static void v2_coop_cam_init(uint8_t* s, V2CoopPlayer& p) {
+    int16_t ax = (int16_t)(*(const uint16_t*)(s + p.active + OBJ_WORLD_X) - (uint16_t)(v2_view_w / 2));   // sub_113d8 X
+    if (ax < 0) ax = 0;
+    if (ax > (int16_t)v2gs(s).scroll_limit_x()) ax = (int16_t)v2gs(s).scroll_limit_x();
+    p.cam_x = (uint16_t)ax;
+    ax = (int16_t)(*(const uint16_t*)(s + p.active + OBJ_WORLD_Y) - (uint16_t)(v2_view_h_cur / 2));         // sub_113d8 Y
+    if (ax < 0) ax = 0;
+    if (ax > (int16_t)v2gs(s).scroll_limit_y()) ax = (int16_t)v2gs(s).scroll_limit_y();
+    p.cam_y = (uint16_t)ax;
+    p.cam_col2 = (uint16_t)((p.cam_x >> 3) >> 1);
+    p.cam_row2 = (uint16_t)((p.cam_y >> 3) >> 1);
+    p.cam_valid = true;
+    p.cam_scanned = false;
+}
+static void v2_coop_cam_follow(uint8_t* s, V2CoopPlayer& p) {
+    const uint16_t vx = *(const uint16_t*)(s + p.active + OBJ_WORLD_X);
+    const uint16_t vy = *(const uint16_t*)(s + p.active + OBJ_WORLD_Y);
+    // X (sub_1064b eips 0x66F-0x6B8 with this camera for word_28524)
+    if (v2gs(s).scroll_lock_x()) p.cam_x = coop_ds_u16(s, DS_VIEWPORT_X);
+    else {
+        uint16_t sum = (uint16_t)(p.cam_x + (v2_view_w / 2 - 0x10));
+        if ((int16_t)sum > (int16_t)vx) {
+            uint16_t amt = (uint16_t)(sum - vx);
+            if ((int16_t)amt >= (int16_t)0x10) amt = 0x10;
+            int16_t ax = (int16_t)(p.cam_x - *(const int16_t*)(s + (uint16_t)(amt * 2 + DS_SCROLL_AMT_TBL)));   // sub_17496
+            if (ax < 0) ax = 0;
+            p.cam_x = (uint16_t)ax;
+        } else {
+            uint16_t diff = (uint16_t)(vx - p.cam_x);
+            if ((int16_t)diff > (int16_t)(v2_view_w / 2 + 0x10)) {
+                uint16_t amt = (uint16_t)(diff - (v2_view_w / 2 + 0x10));
+                if ((int16_t)amt >= (int16_t)0x10) amt = 0x10;
+                int16_t ax = (int16_t)(p.cam_x + *(const int16_t*)(s + (uint16_t)(amt * 2 + DS_SCROLL_AMT_TBL)));   // sub_1746c
+                uint16_t limit = v2gs(s).scroll_limit_x();
+                if ((uint16_t)ax >= limit) ax = (int16_t)limit;
+                p.cam_x = (uint16_t)ax;
+            }
+        }
+    }
+    // Y (eips 0x6BB-0x702)
+    if (v2gs(s).scroll_lock_y()) p.cam_y = coop_ds_u16(s, DS_VIEWPORT_Y);
+    else {
+        uint16_t sum = (uint16_t)(p.cam_y + 0x50);
+        if ((int16_t)sum > (int16_t)vy) {
+            uint16_t amt = (uint16_t)(sum - vy);
+            if ((int16_t)amt >= (int16_t)0x10) amt = 0x10;
+            int16_t ax = (int16_t)(p.cam_y - *(const int16_t*)(s + (uint16_t)(amt * 2 + DS_SCROLL_AMT_TBL)));   // sub_174e9
+            if (ax < 0) ax = 0;
+            p.cam_y = (uint16_t)ax;
+        } else {
+            uint16_t diff = (uint16_t)(vy - p.cam_y);
+            if ((int16_t)diff > (int16_t)0x60) {
+                uint16_t amt = (uint16_t)(diff - 0x60);
+                if ((int16_t)amt >= (int16_t)0x10) amt = 0x10;
+                int16_t ax = (int16_t)(p.cam_y + *(const int16_t*)(s + (uint16_t)(amt * 2 + DS_SCROLL_AMT_TBL)));   // sub_174bf
+                uint16_t limit = v2gs(s).scroll_limit_y();
+                if ((uint16_t)ax >= limit) ax = (int16_t)limit;
+                p.cam_y = (uint16_t)ax;
+            }
+        }
+    }
+}
+// POST_VM, after sub_1064b moved the DS camera.
+void v2_coop_cameras(uint8_t* s) {
+    if (g_v2_coop_players <= 1) return;
+    for (int k = 1; k < g_v2_coop_players; k++) {
+        V2CoopPlayer& p = g_coop.p[k];
+        if (p.cam_valid && p.active < 6 && v2_coop_playing(s)) v2_coop_cam_follow(s, p);
+    }
+}
+// A DOS spawn scan on behalf of camera k: the scans read the viewport words,
+// so the camera is put there for the call and the DS viewport restored right
+// after (every client does the same: deterministic). The scratch words a scan
+// leaves behind (the 34..3A bounds, cur_obj = FFFF, the staged spawn fields)
+// are what the DOS tracker leaves when it scans.
+static void v2_coop_scan_as(uint8_t* s, const V2CoopPlayer& p, void (*scan)(uint8_t*)) {
+    uint16_t sx = coop_ds_u16(s, DS_VIEWPORT_X), sy = coop_ds_u16(s, DS_VIEWPORT_Y);
+    v2gs(s).viewport_x(p.cam_x);
+    v2gs(s).viewport_y(p.cam_y);
+    scan(s);
+    v2gs(s).viewport_x(sx);
+    v2gs(s).viewport_y(sy);
+}
+// sub_1673c for the extra cameras, right after the DOS tracker: a new camera
+// first runs sub_13a0e's full-window scan (sub_11080 does that for the DS
+// camera at level init), then every change of its tile-scroll words runs the
+// same band as the DOS tracker (axis 1 = scroll_col >> 1: 13a14 when it
+// decreased, 13a34 when it grew; axis 2 = scroll_row >> 1: 13a74 / 13a54).
+void v2_coop_spawn_trackers(uint8_t* s) {
+    if (g_v2_coop_players <= 1) return;
+    for (int k = 1; k < g_v2_coop_players; k++) {
+        V2CoopPlayer& p = g_coop.p[k];
+        if (!p.cam_valid) continue;
+        if (!p.cam_scanned) {
+            p.cam_scanned = true;
+            v2_coop_scan_as(s, p, v2_spawn_visible_13a0e);
+            continue;
+        }
+        uint16_t col2 = (uint16_t)((p.cam_x >> 3) >> 1);
+        if (col2 != p.cam_col2) {
+            bool dec = (int16_t)col2 < (int16_t)p.cam_col2;
+            p.cam_col2 = col2;
+            v2_coop_scan_as(s, p, dec ? v2_scroll_spawn_up_13a14 : v2_scroll_spawn_down_13a34);
+        }
+        uint16_t row2 = (uint16_t)((p.cam_y >> 3) >> 1);
+        if (row2 != p.cam_row2) {
+            bool dec = (int16_t)row2 < (int16_t)p.cam_row2;
+            p.cam_row2 = row2;
+            v2_coop_scan_as(s, p, dec ? v2_scroll_spawn_left_13a74 : v2_scroll_spawn_right_13a54);
+        }
+    }
+}
+
 // The ownership bookkeeping once per input read: a new level drops the
 // assignments; in a gameplay level every player without a viking takes the
 // first alive one nobody holds (player k prefers viking k: Erik / Baleog /
 // Olaf); player 1 owns the DS active viking unless another player holds it
 // (then he is a spectator: p[0].active = none, the DS word keeps the camera).
+// Step 2: a player who has a viking has a camera (placed by sub_113d8's rule
+// the moment he gets his first viking in the level; kept across a switch).
 static void v2_coop_sync(uint8_t* s) {
     static uint16_t s_level = 0xFFFF;
     uint16_t level = v2gs(s).level();
@@ -3551,11 +3745,14 @@ static void v2_coop_sync(uint8_t* s) {
     if (!v2_coop_playing(s)) return;
     for (int k = 1; k < g_v2_coop_players; k++) {
         V2CoopPlayer& p = g_coop.p[k];
-        if (p.active < 6 && v2_coop_alive(s, p.active) && v2_coop_free(p.active, k)) continue;
-        p.active = 0xFFFF;
-        const uint16_t order[3] = {(uint16_t)(k * 2), (uint16_t)((k * 2 + 2) % 6), (uint16_t)((k * 2 + 4) % 6)};
-        for (uint16_t vk : order)
-            if (v2_coop_alive(s, vk) && v2_coop_free(vk, k)) { p.active = vk; break; }
+        if (!(p.active < 6 && v2_coop_alive(s, p.active) && v2_coop_free(p.active, k))) {
+            p.active = 0xFFFF;
+            const uint16_t order[3] = {(uint16_t)(k * 2), (uint16_t)((k * 2 + 2) % 6), (uint16_t)((k * 2 + 4) % 6)};
+            for (uint16_t vk : order)
+                if (v2_coop_alive(s, vk) && v2_coop_free(vk, k)) { p.active = vk; break; }
+        }
+        if (p.active < 6) { if (!p.cam_valid) v2_coop_cam_init(s, p); }
+        else { p.cam_valid = false; p.cam_scanned = false; }
     }
 }
 // After sub_12352 wrote player 1's words: the words of players 2..3 for this
@@ -3780,6 +3977,8 @@ static void v2_hud_health_120ff(uint8_t* s) {
         v2gs(s).hud_health_prev(vk, prev);
         int16_t hv = ObjMem{s, (uint16_t)(vk * 2)}.i16(OBJ_ANIM_IDX);
         uint16_t ax = (hv < 0) ? 2 : (v2gs(s).active_viking() != (uint16_t)(vk * 2)) ? 1 : 0;
+        // UX stage 8 step 2 (co-op): a viking any player controls shows as the active one
+        if (g_v2_coop_players > 1 && hv >= 0) ax = (v2_coop_owner((uint16_t)(vk * 2)) >= 0) ? 0 : 1;
         v2gs(s).hud_health(vk, ax);
         if (ax != prev) {
             v2_draw_hud_healthbar(v2_current_ds_val, ax, vk, vk);
@@ -5948,6 +6147,8 @@ static void v2_despawn_bounds_13c0c(uint8_t* s) {
         else if ((int16_t)(uint16_t)(x - hw) >= (int16_t)v2gs(s).scratch_36()) outside = true;
         else if ((int16_t)(uint16_t)(y + hh) <  (int16_t)v2gs(s).scratch_38()) outside = true;
         else if ((int16_t)(uint16_t)(y - hh) >= (int16_t)v2gs(s).scratch_3a()) outside = true;
+        // UX stage 8 step 2 (co-op): the object stays while any other player's camera window holds it
+        if (outside && g_v2_coop_players > 1 && !v2_coop_outside_all(s, si)) outside = false;
         if (outside) ObjMem{s, (uint16_t)(si)}.w16(OBJ_FLAGS, (uint16_t)(ObjMem{s, (uint16_t)(si)}.u16(OBJ_FLAGS) | (0x200)));        // mark for despawn
     }
 }
@@ -9284,6 +9485,7 @@ static void v2_game_loop_pre_vm(uint8_t* shadow, uint16_t ds_val) {
             // Critical: sub_1673c must run on new level for scroll tracking.
             // Do sub_1673c here, then return to skip remaining pre_vm (sub_10813 etc).
             v2_scroll_spawn_tracker_1673c(shadow);   // CALL sub_1673C (extracted, unit 150)
+            v2_coop_spawn_trackers(shadow);          // UX stage 8 step 2: the extra cameras' scans (inert with one player)
         }
     }
 
@@ -9327,6 +9529,7 @@ static void v2_game_loop_pre_vm(uint8_t* shadow, uint16_t ds_val) {
 
     // sub_1673c: tile scroll management + object spawn/despawn (extracted).
     v2_scroll_spawn_tracker_1673c(shadow);   // CALL sub_1673C (extracted, unit 150)
+    v2_coop_spawn_trackers(shadow);          // UX stage 8 step 2: the extra cameras' scans (inert with one player)
 }
 
 // Viewport movers — called from v2_game_loop_post_vm (sub_1064b camera follow)
@@ -10434,6 +10637,7 @@ static void v2_game_loop_post_vm(uint8_t* shadow) {
 
     // sub_1064b: camera follow
     v2_camera_follow_1064b(shadow);
+    v2_coop_cameras(shadow);                 // UX stage 8 step 2: the cameras of players 2..3 (inert with one player)
     if (!v2_in_115d2_transition_render) {
     v2_postvm_check_hash(shadow, "after-sub_1064b", 4);
     v2_compare_phase_snap(V2_PSNAP_MAIN_AFTER_1064B, "v2_game_loop_post_vm after-sub_1064b");
@@ -19982,6 +20186,7 @@ static void v2_vm_verify_object_refs(uint8_t* shadow) {
 // v2_current_ds_val defined at line ~157 (forward decl area)
 
 static void v2_do_render() {
+    V2CoopExecGuard _coop_render(0xFFFF);   // co-op: rendering is never on behalf of an object (the op 41 wait loop renders from inside the talker's execution)
     v2_draw_tiles(v2_current_ds_val);
     v2_pixwatch_stage("p1-tiles");
     v2_draw_sprites(v2_current_ds_val);
@@ -21934,7 +22139,15 @@ bool v2_run_viking_switch_loop(uint8_t* shadow) {
 #endif
 
     // test word_28898 (DS:0x03B8 = ds_seg + 0x28898 - 0x284E0 = 0x3B8) & 0xC0C0
-    if (v2gs(shadow).input_edges() & 0xC0C0) {
+    uint16_t edges_c0c0 = v2gs(shadow).input_edges();
+    if (g_v2_coop_players > 1) {
+        // UX stage 8 step 2: the loop runs inside the talker's execution (its
+        // getter would hand back the talker's player only) — the DS word OR
+        // the edges of players 2..3: any player turns the page
+        edges_c0c0 = *(const uint16_t*)(shadow + DS_INPUT_EDGES);
+        for (int k = 1; k < g_v2_coop_players; k++) edges_c0c0 |= g_coop.p[k].edges;
+    }
+    if (edges_c0c0 & 0xC0C0) {
         // loc_10191: exit loop. orig does JMP sub_12352 (one more input read).
 #ifdef V2_ONLY
         v2_read_input_12352_iter(shadow);

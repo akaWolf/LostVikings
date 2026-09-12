@@ -115,6 +115,12 @@ int main(int argc, char* argv[]) {
             // UX stage 8: 2 or 3 players in one game (v2_coop.h); 1 = the original
             v2_coop_set_players(atoi(argv[i] + 7));
             fprintf(stderr, "[v2_main] --coop: %d players\n", atoi(argv[i] + 7));
+        } else if (strncmp(argv[i], "--player=", 9) == 0) {
+            // UX stage 8 step 2: the player this client presents (1..3; the
+            // camera and the badge); step 3's lobby sets it from the host
+            int pl = atoi(argv[i] + 9);
+            g_v2_local_player = (pl < 1) ? 0 : (pl > V2_COOP_MAX) ? V2_COOP_MAX - 1 : pl - 1;
+            fprintf(stderr, "[v2_main] --player: this client is player %d\n", g_v2_local_player + 1);
         }
         else if (strncmp(argv[i], "--max-frames=", 13) == 0) {
             // №59: parsed in ALL V2_ONLY builds (used to be HEADLESS-only —

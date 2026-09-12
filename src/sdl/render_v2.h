@@ -62,6 +62,11 @@ extern std::mutex v2_display_mutex;
 // HUD buffer — rendered independently from game data, 320x64
 // Screen rows 176-239 (VGA split screen: always from VGA address 0)
 extern uint8_t  v2_hud_buf[320*64];
+// UX stage 8 step 2 (co-op): per viking portrait, the player holding that
+// viking (0-based, -1 = nobody / one-player game) and the portrait's HUD
+// position — published at the swap under v2_display_mutex.
+struct V2DisplayBadge { int x, y, owner; };
+extern V2DisplayBadge v2_display_badge[3];
 
 // UX stage 2: the SNES parallax layer (display lane only — never touches DS,
 // the shadow VGA or the canon replays). Loaded per level from the head copy

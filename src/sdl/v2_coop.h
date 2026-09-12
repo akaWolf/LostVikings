@@ -26,12 +26,20 @@ constexpr int V2_COOP_MAX = 3;
 struct V2CoopPlayer {
     uint16_t keys = 0, edges = 0, prev = 0;   // this player's 3B6 / 3B8 / 3BA
     uint16_t active = 0xFFFF;                 // this player's active viking (object slot 0/2/4) or none
+    // Step 2: the player's logical camera (players 2..3; player 1's is the DS
+    // viewport). Game state: it decides spawns/despawns and what the VM's
+    // visibility tests see, so it is deterministic and part of the lockstep.
+    uint16_t cam_x = 0, cam_y = 0;            // the viewport of this player's screen
+    uint16_t cam_col2 = 0, cam_row2 = 0;      // sub_1673c's tracker words for this camera (scroll_col >> 1 / scroll_row >> 1)
+    bool cam_valid = false;                   // the player has a viking in a gameplay level (else no camera: the presenter shows the DS one)
+    bool cam_scanned = false;                 // sub_13a0e's full-window spawn scan ran for this camera
 };
 struct V2Coop {
     V2CoopPlayer p[V2_COOP_MAX];              // p[0] mirrors the DS words of player 1 (its `active` = ownership only)
 };
 extern V2Coop g_coop;
 extern int g_v2_coop_players;                 // 1..3
+extern int g_v2_local_player;                 // 0-based: the player whose screen this client presents (--player=N; 0 = player 1)
 // the object the VM is executing on THIS thread; 0xFFFF outside the VM.
 // thread_local: the presenter thread reads the same hooked getters (camera,
 // HUD, its own render passes) while the game thread is inside an object —
@@ -73,3 +81,7 @@ uint16_t v2_coop_view(uint16_t off, uint16_t real, const uint8_t* ds);
 void v2_coop_read_inputs(uint8_t* s);   // after sub_12352: the words of players 2..3 for this read
 void v2_coop_cycle(uint8_t* s);         // instead of sub_12e79 in co-op: viking cycling per player, held vikings skipped
 void v2_coop_death(uint8_t* s);         // after sub_12e16: reassign the vikings of dead players
+// step 2 (cameras)
+void v2_coop_cameras(uint8_t* s);        // after sub_1064b: the cameras of players 2..3 follow their vikings
+void v2_coop_spawn_trackers(uint8_t* s); // after sub_1673c: the spawn scans of the extra cameras
+bool v2_coop_outside_all(const uint8_t* s, uint16_t obj);   // sub_13c0c: outside every extra camera's window too

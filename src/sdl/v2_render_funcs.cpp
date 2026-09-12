@@ -11,6 +11,7 @@
 #include "render_v2.h"
 #include "v2_gamestate.h"
 #include "v2_ds_layout.h"
+#include "v2_coop.h"        // UX stage 8 step 2: the player badges of the HUD portraits
 extern int v2_dbg_pre_vm_iter;   // game-frame counter (v2_vm.cpp), C++ linkage — declared once at file scope (clang rejects block externs inside extern "C" functions)
 
 // Task #21 obj-trace ring (defined in v2_vm.cpp).
@@ -384,6 +385,20 @@ void v2_swap_render_buf() {
         { const int r = v2_view_rows(); v2_display_fullscreen = (r > 176) ? r : 0; }   // 0 = HUD layout, else the map rows shown
         extern uint8_t v2_display_hud_buf[];
         memcpy(v2_display_hud_buf, v2_hud_buf, 320 * 64);
+        // UX stage 8 step 2 (co-op): which player holds each viking, and where
+        // its portrait sits in the HUD art (ds:[vk-0x7A84] -> the VGA offset of
+        // v2_draw_hud_portrait) — the presenter paints the P1/P2/P3 badges.
+        { extern uint8_t* v2_vm_get_shadow_ds();
+          const uint8_t* sh = v2_vm_get_shadow_ds();
+          for (int vk = 0; vk < 3; vk++) {
+              V2DisplayBadge& b = v2_display_badge[vk];
+              b.owner = -1;
+              if (!sh || g_v2_coop_players <= 1) continue;
+              uint16_t vga_off = *(const uint16_t*)(sh + (uint16_t)(vk * 2 - 0x7A84));
+              b.x = (vga_off % 86) * 4 + 3;
+              b.y = vga_off / 86;
+              b.owner = v2_coop_owner((uint16_t)(vk * 2));
+          } }
         v2_smooth_capture();          // UX stage 9: the tick snapshot for the interpolating presenter
 #else
         v2_display_fullscreen = 0;   // verification build presents the shadow-VGA window only
@@ -442,6 +457,7 @@ extern "C" void v2_publish_dac_palette(void) {
 SDL_Color v2_display_palette[256] = {};
 bool v2_display_palette_valid = false;
 uint8_t v2_display_hud_buf[320*64] = {};
+V2DisplayBadge v2_display_badge[3] = {};   // UX stage 8 step 2 (co-op): the player badge per viking portrait
 
 void v2_set_m2c_base(void* base) {
     if (!v2_m2c_base) v2_m2c_base = (uint8_t*)base;

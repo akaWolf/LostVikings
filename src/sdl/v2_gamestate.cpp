@@ -7,6 +7,7 @@
 // that no byte has two owners.
 
 #include "v2_gamestate.h"
+#include "v2_coop.h"        // UX stage 8 step 2: the co-op line of the golden dump
 #ifndef _WIN32
 #include <sys/syscall.h>   // SYS_gettid for the evac diff lines (Linux; mingw has neither)
 #endif
@@ -195,7 +196,24 @@ extern "C" void headless_golden_dump(void) {
                 v2_gs_evac_check_calls);
         v2_gs_evac_check(shd);
     }
-    if (gp && shd) { v2_gs_dump_text(shd, gp); done = 1; }
+    if (gp && shd) {
+        v2_gs_dump_text(shd, gp); done = 1;
+        // UX stage 8 step 2 (co-op): the players' vikings and cameras — game
+        // state outside the DS; absent from every one-player dump (the canon).
+        if (g_v2_coop_players > 1) {
+            FILE* f = fopen(gp, "a");
+            if (f) {
+                fprintf(f, "coop players=%d", g_v2_coop_players);
+                for (int k = 0; k < g_v2_coop_players; k++) {
+                    const V2CoopPlayer& p = g_coop.p[k];
+                    if (k > 0 && p.cam_valid) fprintf(f, " | P%d act=%04X cam=%04X,%04X", k + 1, p.active, p.cam_x, p.cam_y);
+                    else                      fprintf(f, " | P%d act=%04X cam=-", k + 1, p.active);
+                }
+                fprintf(f, "\n");
+                fclose(f);
+            }
+        }
+    }
     const char* sp = getenv("V2_SAVE_STATE");
     if (sp && shd) { v2_state_save(sp); done = 1; }
 }

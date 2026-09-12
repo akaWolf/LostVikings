@@ -28,6 +28,7 @@
 #include "render_v2.h"
 #include "v2_ds_layout.h"
 #include "v2_ui.h"
+#include "v2_coop.h"        // UX stage 8 step 2: the local player's camera
 #include <SDL2/SDL.h>
 #include <atomic>
 #include <cstdio>
@@ -59,6 +60,11 @@ struct Snap {
     uint64_t t;                 // SDL_GetPerformanceCounter at capture
     bool valid, tile_frame, fullscreen;
     int w;                      // the frame width the tick rendered at (v2_fbw; UX stage 9 step 4)
+    // UX stage 8 step 2: the logical cameras of players 2..3 at this tick
+    // (game state, captured with the DS on the game thread)
+    int players;
+    uint16_t cam_x[V2_COOP_MAX], cam_y[V2_COOP_MAX];
+    bool cam_valid[V2_COOP_MAX];
 };
 // g_frame[0/1] = the two newest GAME-frame snapshots (positions/camera),
 // g_flip = the newest page flip (sprite frames, UI, FS map)
@@ -94,6 +100,12 @@ static void fill(Snap& S, const uint8_t* s) {
     S.tile_frame = v2_last_frame_tiles;
     S.fullscreen = v2_scene_fullscreen() != 0;
     S.w = v2_fbw;
+    S.players = g_v2_coop_players;
+    for (int k = 0; k < V2_COOP_MAX; k++) {
+        S.cam_x[k] = g_coop.p[k].cam_x;
+        S.cam_y[k] = g_coop.p[k].cam_y;
+        S.cam_valid[k] = (k > 0) && g_coop.p[k].cam_valid;
+    }
     S.valid = true;
 }
 
@@ -119,7 +131,17 @@ void v2_smooth_capture(void) {
 // first tick) — the caller shows the tick frame as before.
 bool v2_smooth_render(uint8_t* out) {
     v2_options_ensure_loaded();
-    if (!v2_options.smooth.load()) { v2_smooth_last_reason = 1; return false; }
+    // UX stage 8 step 2: a client whose player has his own camera renders his
+    // own frame even with SMOOTH off (then t = 1: the newest tick's positions
+    // behind his camera); the tick frame the game thread drew is player 1's.
+    const int local = g_v2_local_player;
+    bool own_cam = false;
+    {
+        std::lock_guard<std::mutex> lock(g_mx);
+        own_cam = g_fcur >= 0 && local > 0 && local < g_frame[g_fcur].players && g_frame[g_fcur].cam_valid[local];
+    }
+    const bool smooth_on = v2_options.smooth.load();
+    if (!smooth_on && !own_cam) { v2_smooth_last_reason = 1; return false; }
     {
         std::lock_guard<std::mutex> lock(g_mx);
         if (g_fcur < 0 || !g_flip.valid) { v2_smooth_last_reason = 2; return false; }
@@ -141,21 +163,43 @@ bool v2_smooth_render(uint8_t* out) {
     const Snap& L = g_flip_local;
     const double freq = (double)SDL_GetPerformanceFrequency();
     const double period = (double)(C.t - P.t) / freq;               // s between the two game frames
-    if (period < 0.020 || period > 0.120) { v2_smooth_last_reason = 7; return false; }   // a stall or a pause: no lerp
-    double t = (double)(SDL_GetPerformanceCounter() - C.t) / freq / period;
-    if (t < 0.0) t = 0.0;
-    if (t > 1.0) t = 1.0;
+    double t;
+    if (!smooth_on) t = 1.0;                                        // own camera, no interpolation: the newest tick
+    else {
+        if (period < 0.020 || period > 0.120) {                     // a stall or a pause: no lerp
+            if (!own_cam) { v2_smooth_last_reason = 7; return false; }
+            t = 1.0;
+        } else {
+            t = (double)(SDL_GetPerformanceCounter() - C.t) / freq / period;
+            if (t < 0.0) t = 0.0;
+            if (t > 1.0) t = 1.0;
+        }
+    }
     v2_smooth_last_t = (float)t;
     v2_smooth_last_reason = 0;
 
     memcpy(g_work, L.ds, DS_SIZE);      // the newest flip: sprite frames, UI, everything not interpolated
-    // camera: viewport + the tile-scroll state derived from it (vp >> 3)
-    int16_t cx = rd16(C.ds, DS_VIEWPORT_X), px = rd16(P.ds, DS_VIEWPORT_X);
-    int16_t cy = rd16(C.ds, DS_VIEWPORT_Y), py = rd16(P.ds, DS_VIEWPORT_Y);
-    if (cx != px || cy != py) {
-        if (cx - px <= V2_SMOOTH_MAX_STEP && px - cx <= V2_SMOOTH_MAX_STEP &&
+    // camera: viewport + the tile-scroll state derived from it (vp >> 3) —
+    // the DS viewport, or (UX stage 8 step 2) the local player's own camera
+    const bool own_valid = own_cam && C.cam_valid[local] && P.cam_valid[local];
+    int16_t cx = own_valid ? (int16_t)C.cam_x[local] : rd16(C.ds, DS_VIEWPORT_X);
+    int16_t px = own_valid ? (int16_t)P.cam_x[local] : rd16(P.ds, DS_VIEWPORT_X);
+    int16_t cy = own_valid ? (int16_t)C.cam_y[local] : rd16(C.ds, DS_VIEWPORT_Y);
+    int16_t py = own_valid ? (int16_t)P.cam_y[local] : rd16(P.ds, DS_VIEWPORT_Y);
+    if (own_cam && !own_valid) { cx = px = rd16(L.ds, DS_VIEWPORT_X); cy = py = rd16(L.ds, DS_VIEWPORT_Y); }
+    {
+        // player 1's path is the stage 9 one: the flip's camera unless the
+        // tick moved it by an interpolable step; an own camera is always
+        // written (the flip carries the DS camera, not this player's)
+        bool write = own_cam;
+        int16_t vx = cx, vy = cy;                                   // the newest tick's camera
+        if ((cx != px || cy != py) &&
+            cx - px <= V2_SMOOTH_MAX_STEP && px - cx <= V2_SMOOTH_MAX_STEP &&
             cy - py <= V2_SMOOTH_MAX_STEP && py - cy <= V2_SMOOTH_MAX_STEP) {
-            int16_t vx = lerp16(px, cx, t), vy = lerp16(py, cy, t);
+            vx = lerp16(px, cx, t); vy = lerp16(py, cy, t);
+            write = true;
+        }
+        if (write) {
             if (vx < 0) vx = 0;
             if (vy < 0) vy = 0;
             wr16(g_work, DS_VIEWPORT_X, vx);

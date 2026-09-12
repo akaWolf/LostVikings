@@ -150,6 +150,27 @@ void render_callback_v2(void* state)
                     if (x0 + 320 + d - 1 < FW) row[x0 + 320 + d - 1] = art[319 - off];   // right wing
                 }
             }
+            // UX stage 8 step 2 (co-op): the player's number in the corner of
+            // the portrait of the viking he holds — the DOS letter look (body
+            // colour 2, the (+1,+1) shadow 1: black/white on 1/2 in every
+            // level palette).
+            static const char* const DIGIT[3][5] = {
+                { ".#.", "##.", ".#.", ".#.", "###" },
+                { "###", "..#", "###", "#..", "###" },
+                { "###", "..#", "###", "..#", "###" },
+            };
+            for (int vk = 0; vk < 3; vk++) {
+                const V2DisplayBadge& b = v2_display_badge[vk];
+                if (b.owner < 0 || b.owner > 2) continue;
+                const int bx = x0 + b.x + 1, by = b.y + 1;
+                for (int r = 0; r < 5; r++)
+                    for (int c = 0; c < 3; c++) {
+                        if (DIGIT[b.owner][r][c] != '#') continue;
+                        const int px = bx + c, py = by + r;
+                        if (py + 1 < 64 && px + 1 < FW) sbuf[(176 + py + 1) * V2_FB_MAX_W + px + 1] = 1;   // shadow
+                        if (py < 64 && px < FW)         sbuf[(176 + py) * V2_FB_MAX_W + px] = 2;           // body
+                    }
+            }
         }
     }
 }
