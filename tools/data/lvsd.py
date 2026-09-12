@@ -33,6 +33,9 @@ Usage (repo root):
   lvsd.py check [CID ...]              decompile+compile == reference bytes
   lvsd.py seed                         write the initial names dictionary
   lvsd.py ref [out.md]                 write the statement reference (LVD_REFERENCE.md)
+  lvsd.py rename CID NAME|@ADDR NEW [--all]   rename a state / anim / palette label (by address in the dictionary)
+  lvsd.py rename-class XX NEW [CID]    rename a class (global, or in one script)
+  lvsd.py propagate SRC [DST ...]      copy state names to the other scripts by owner set + code signature
 """
 import sys, os, re, json, struct, importlib.util, collections
 
@@ -1347,6 +1350,9 @@ def check(cids):
         dup = sorted({x for x in labels if labels.count(x) > 1})
         if dup:
             print(f'{cid:X}: DUPLICATE label names (a state, anim or palette share a name — confusing in the text and for the editor anchors): {dup[:8]}'); ok = False
+        tails = sorted({x for x in labels if x.endswith('_w') or '__' in x})
+        if tails:
+            print(f'{cid:X}: SUSPICIOUS names (a dedupe tail `_w` or a double underscore — a batch rename went wrong): {tails[:8]}'); ok = False
     if os.path.exists(REF_PATH):
         fresh = open(REF_PATH, encoding='utf-8').read() == reference_md()
         print('LVD_REFERENCE.md ' + ('up to date' if fresh else 'STALE — run lvsd.py ref')); ok &= fresh
@@ -1474,11 +1480,119 @@ def seed_names():
     print(f'names: {len(d["states"])} states, {len(d["classes"])} classes -> {NAMES_PATH}')
 
 
+def save_names(d):
+    json.dump(d, open(NAMES_PATH, 'w', encoding='utf-8'), indent=1, ensure_ascii=False)
+
+
+def label_table(cid, names):
+    """{display name: [(section, addr)]} of the labels of chunk cid — states
+    (S_xxxx -> 'states'), anims (A_ -> 'anims'), palettes (P_ -> 'pals') — as
+    the decompiler shows them (dictionary name, else the automatic one)."""
+    text = canonical_text(cid); out = {}
+    for m in re.finditer(r'^([SAP])_([0-9A-F]{4}):', text, re.M):
+        kind, a = m.group(1), int(m.group(2), 16); lbl = f'{kind}_{a:04X}'
+        nm = names.state(cid, lbl) if kind == 'S' else names.anim(cid, lbl) if kind == 'A' else names.pal(cid, lbl)
+        out.setdefault(nm, []).append(({'S': 'states', 'A': 'anims', 'P': 'pals'}[kind], a))
+    return out
+
+
+def rename(cid, old, new, all_scripts=False):
+    """Rename one label of chunk cid — a state/func/inner label, an anim or a
+    palette — by its displayed name or by `@ADDR`; the dictionary entry is
+    written by address, so the automatic numbering of the other labels cannot
+    shift it. `all_scripts`: the same rename in every script that shows the
+    name (each resolved by its own address). Refuses a name another label of
+    the script already carries. Returns the number of scripts changed."""
+    if not re.fullmatch(r'[A-Za-z_]\w*', new): raise SystemExit(f'bad label name {new!r}')
+    names = Names(); d = names.d; n = 0
+    for c in (range(0x1C1, 0x1C7) if all_scripts else [cid]):
+        tab = label_table(c, names)
+        if old.startswith('@'):
+            want = int(old[1:], 16); hits = [(sec, a) for lst in tab.values() for sec, a in lst if a == want]
+        else: hits = tab.get(old, [])
+        if not hits:
+            if not all_scripts: print(f'{c:X}: no label {old}')
+            continue
+        if len(hits) > 1: print(f'{c:X}: {old} names {len(hits)} labels — use @ADDR'); continue
+        if new in tab and tab[new] != hits: print(f'{c:X}: {new} already names {tab[new]}'); continue
+        sec, a = hits[0]; d[sec][f'{c:X}:{a:04X}'] = new; n += 1
+        print(f'{c:X}: {old} @{a:04X} -> {new} ({sec})')
+    if n: save_names(d)
+    return n
+
+
+def rename_class(t, new, cid=None):
+    """Class name (global `*:XX`, or `CID:XX` when cid is given); refuses a name
+    another class carries in the same scope."""
+    if not re.fullmatch(r'[A-Za-z_]\w*', new): raise SystemExit(f'bad class name {new!r}')
+    names = Names(); d = names.d; key = f'{cid:X}:{t:02X}' if cid is not None else f'*:{t:02X}'
+    clash = [k for k, v in d['classes'].items() if v == new and k != key and (k.startswith('*:') or cid is None or k.startswith(f'{cid:X}:'))]
+    if clash: print(f'{new} already names class {clash[0]}'); return 0
+    print(f'class {key}: {d["classes"].get(key, f"t{t:02X}")} -> {new}'); d['classes'][key] = new; save_names(d); return 1
+
+
+def state_sigs(cid, names):
+    """[(display name, addr, signature)] of the states of chunk cid in text
+    order; the signature is the statement list with jump targets and anim
+    labels normalised, so equal code compares equal across scripts."""
+    text, _ = decompile_text(cid, canonical_text(cid), names); out = []; cur = None
+    for l in text.splitlines():
+        m = re.match(r'^(state|func|  )\s*(\S+):\s*;\s*@([0-9A-F]{4})', l)
+        if m: cur = [m.group(2), int(m.group(3), 16), []]; out.append(cur); continue
+        if l.startswith(('anim ', 'class ', 'blob', 'palette')): cur = None; continue
+        if cur and l.startswith('    '):
+            s = l.split(';')[0].strip()
+            s = re.sub(r'\b(goto|call) \S+', r'\1 L', s); s = re.sub(r'-> \S+', '-> L', s); s = re.sub(r'\banim \S+', 'anim A', s)
+            cur[2].append(s)
+    return [(n, a, tuple(b)) for n, a, b in out]
+
+
+def propagate(src, dsts):
+    """Copy the dictionary state names of script src to the scripts dsts: a
+    state of a destination that has no dictionary name yet takes the name of
+    the source state with the same owner set (the classes whose code reaches
+    it) and the same signature, when both sides have exactly one such state
+    and the name is free there. Bodies of one statement are never matched."""
+    names = Names(); d = names.d; ls = mod('lvs_struct')
+    cwd = os.getcwd(); os.chdir(ROOT)
+    try: own = {c: ls.owners_of_states(c) for c in [src] + list(dsts)}
+    finally: os.chdir(cwd)
+    hand = {}
+    for n, a, sig in state_sigs(src, names):
+        if f'{src:X}:{a:04X}' in d['states'] and len(sig) >= 2:
+            hand.setdefault((frozenset(own[src].get(a, ())), sig), set()).add(n)
+    total = 0
+    for c in dsts:
+        T = state_sigs(c, names); have = {n for n, a, s in T}; added = skipped = 0
+        for n, a, sig in T:
+            if f'{c:X}:{a:04X}' in d['states'] or len(sig) < 2: continue
+            cands = hand.get((frozenset(own[c].get(a, ())), sig))
+            if not cands or len(cands) != 1: continue
+            nm = next(iter(cands))
+            if nm in have: skipped += 1; continue
+            d['states'][f'{c:X}:{a:04X}'] = nm; have.add(nm); added += 1
+        total += added
+        print(f'{c:X}: +{added} names from {src:X}' + (f', {skipped} skipped (name taken)' if skipped else ''))
+    if total: save_names(d)
+    return total
+
+
 def main():
     a = sys.argv[1:]
     if not a: print(__doc__); return 1
     cmd = a[0]
     if cmd == 'seed': seed_names(); return 0
+    if cmd == 'rename':
+        all_ = '--all' in a; args = [x for x in a[1:] if x != '--all']
+        if len(args) != 3: print('usage: lvsd.py rename CID NAME|@ADDR NEW [--all]'); return 1
+        return 0 if rename(int(args[0], 16), args[1], args[2], all_) else 1
+    if cmd == 'rename-class':
+        if len(a) < 3: print('usage: lvsd.py rename-class XX NEW [CID]'); return 1
+        return 0 if rename_class(int(a[1], 16), a[2], int(a[3], 16) if len(a) > 3 else None) else 1
+    if cmd == 'propagate':
+        if len(a) < 2: print('usage: lvsd.py propagate SRC_CID [DST_CID ...]'); return 1
+        src = int(a[1], 16); dsts = [int(x, 16) for x in a[2:]] or [c for c in range(0x1C1, 0x1C7) if c != src]
+        propagate(src, dsts); return 0
     if cmd == 'ref':
         out = a[1] if len(a) > 1 else REF_PATH
         open(out, 'w', encoding='utf-8').write(reference_md()); print('wrote', out); return 0

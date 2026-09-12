@@ -261,7 +261,16 @@ object in one script (`1C2:4A`); they follow the manual and the walkthroughs
 (keys, bombs, force fields, teleporters, striped doors; green/red aliens,
 T-rex, caveman, snail, scorpion, mummy, spear guard, pounders, gun robot).
 Hand anim names take `<class>_a_<what>` so they never collide with a state
-name (`lvsd check` refuses a name shared by a state and an anim).
+name (`lvsd check` refuses a name shared by a state and an anim, and flags a
+`_w` tail or a double underscore left by a batch rename).
+Change names with the tool, not by editing the automatic numbers: the
+`shared_XX_N` / `<class>_N` numbering shifts whenever a dictionary name is
+added, so a batch keyed by those numbers lands on the wrong states.
+`lvsd.py rename CID NAME NEW` (or `@ADDR NEW`, `--all` for every script that
+shows NAME) writes the entry by address; `lvsd.py rename-class XX NEW [CID]`
+renames a class; `lvsd.py propagate SRC [DST ...]` copies the state names of
+one script to the others where the same code (owner set + normalised
+statements) has no name yet.
 
 ## Editor
 
