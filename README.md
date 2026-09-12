@@ -228,6 +228,44 @@ bundle directory, with `DATA.DAT` and the two images beside `vikings`,
 writes `content/` there. The pack itself is never redistributed: it is
 derived from `DATA.DAT` and the console images.
 
+## Sound options
+
+F1 → SOUND < PC | SNES | SC55 | MT32 > (saved as `sound_mode=` in
+`v2_options.cfg`). What each one needs:
+
+- **PC** — the original: the game's Sound Blaster Pro / AdLib driver
+  running in the interpreter, its OPL3 register stream rendered by the
+  Nuked OPL3 core. Nothing to add.
+- **SNES** — the SNES DE music and effects: the console's SPC driver and
+  its banks, converted from the SNES image into the content pack. Needs
+  `content/` (the section above); takes effect at the next level.
+- **SC55** — the game as an owner of a Roland SC-55 heard it in 1992:
+  the game runs its own MT-32 configuration and the module on the MIDI
+  cable is an emulated SC-55 (Nuked-SC55). Needs the module's ROM images
+  in `roms/sc55/` of the working directory (the bundle directory), or
+  `sc55_roms=<dir>` in `v2_options.cfg`, named as Nuked-SC55 names them
+  — the set is detected by the files present: SC-55mk2 `rom1.bin
+  rom2.bin waverom1.bin waverom2.bin rom_sm.bin`; SC-55 (mk1)
+  `sc55_rom1.bin sc55_rom2.bin sc55_waverom1.bin sc55_waverom2.bin
+  sc55_waverom3.bin`; the SC-55st, CM-300/SCC-1, SCB-55 and SC-155 sets
+  under their Nuked-SC55 names likewise.
+- **MT32** — the game's own MT-32 configuration on an emulated MT-32
+  (Munt): its MT-32 driver, the 64 custom timbres and the MT-32
+  arrangements of the music — the machine the music was written for.
+  Needs the module's ROMs in `roms/mt32/` (or `mt32_roms=<dir>`): a
+  control ROM and a PCM ROM of an MT-32 or CM-32L version Munt knows
+  (`MT32_CONTROL.ROM` + `MT32_PCM.ROM`, `CM32L_CONTROL.ROM` +
+  `CM32L_PCM.ROM` ...); the files are recognised by content, the names
+  do not matter.
+
+The ROM images are Roland's and are not included. Without them you keep
+the PC sound and a short message on the screen says what is missing
+(the log line `V2-SC55:` / `V2-MT32:` has the detail). A module boots
+for a few seconds after the switch. For a check, `V2_MT32_DUMP=<file.mid>`
+writes the MIDI stream the module receives (MT32 and SC55) and
+`V2_MIDI_DUMP=<file.mid>` the FM driver's own events, as standard MIDI
+files.
+
 ## CLI options
 
 The three entry points have different surfaces.

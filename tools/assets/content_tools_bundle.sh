@@ -32,6 +32,8 @@ writes content/ (~25 MB) there; vikings picks it up by itself. Needs python3.
 For the twelve languages put strings/locale.strings and lv_snes_strings.json
 from the Blizzard Arcade Collection's assets/ folder beside DATA.DAT as well
 (or pass --bac <that assets folder>); without them the pack is English only.
-See README.md, "Console content".
+See README.md, "Console content". The SNES sound option needs this pack too; the
+SC55 and MT32 options need the modules' ROM images in roms/sc55/ and roms/mt32/
+beside vikings — README.md, "Sound options".
 EOF
 echo "content-tools: $(find "$DEST" -type f | wc -l) files -> $DEST"
