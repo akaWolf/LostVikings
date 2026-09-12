@@ -160,6 +160,12 @@ A channel value is a literal, `self.f`, `[g]`, `partner.f`, `random()`, or the
 low-level `ch5` / `ub6(XX)` / `ub7(XXXX)`; a channel target is `self.f`,
 `[g]`, `partner.f` or `drop`.
 
+Sounds: `sfx NAME vol V` plays sequence NAME (op 02; the word is V<<8 |
+sequence — the PC driver reads the sequence byte, V is the console's volume
+byte kept for the SNES build), `sfx_stop NAME` stops it (op 04). NAME comes
+from the `sfx` dictionary (`speech_blip`, `arrow_break`, `slide_loop`, …) or
+is the sequence number.
+
 Anything without a nicer form keeps its engine name (`res_deduct(partner)`,
 `cmdq_push(6, N)`, `pal_shade(r,g,b)`, `mark_anim_sub`, …) or the raw
 `opXX <hex>`.
@@ -273,7 +279,11 @@ three bytes per line, a remainder as `blob`.
 `tools/data/lvs_names.json` — `states` (`"1C1:3853": "baleog_spawn"`),
 `classes` (`"*:01": "erik"`, or per script `"1C1:10"`), `anims`
 (`"1C1:2618": "erik_a_walk"`), `pals` (`"1C6:3BF6": "pal_trex_blue"`),
-`mem` (`"023C": "crane_ctl_0"` — DS words, global to the six scripts), `sfx`.
+`mem` (`"023C": "crane_ctl_0"` — DS words, global to the six scripts), `sfx`
+(`"1C": "arrow_break"` — the sound sequences: `sfx arrow_break vol 0x7F` /
+`sfx_stop slide_loop` in object code and `sfx zap vol 0x7F` in anim streams;
+a number is always accepted instead of the name), `fields` (`"state_18a5":
+"event"` — object fields over the OBJ_* names).
 Anim names come from the states that set the stream (`scorpion_a_attack` from
 `scorpion_attack`), `_cont` for a continuation reached only from another
 stream, `_sub` for a called sub-stream, `<class>_a_default` for a stream no

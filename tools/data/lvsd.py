@@ -106,6 +106,15 @@ class Names:
         (its dictionary alias, `#idx` when the name is not unique)."""
         idx = next(i for i, n in self.fld_orig.items() if n == orig)
         return self.fld(idx)
+    # sounds -------------------------------------------------------------
+    def sfx(self, i):
+        """sequence id -> dictionary name ('sfx': "1C": "arrow_break"), else the number."""
+        return self.d.get('sfx', {}).get(f'{i:02X}', imm(i))
+    def sfx_parse(self, tok):
+        if re.fullmatch(r'0x[0-9A-Fa-f]+|\d+', tok): return int(tok, 0)
+        c = [int(k, 16) for k, v in self.d.get('sfx', {}).items() if v == tok]
+        if len(c) != 1: raise ValueError(f'unknown sound {tok!r}')
+        return c[0]
     def fld_parse(self, tok):
         if '#' in tok:
             n, i = tok.split('#', 1); idx = int(i, 16)
@@ -396,8 +405,8 @@ ANIM_RX = {
 }
 
 
-def anim_render(cmd, toks, aname):
-    """`a XX <hex|label>` tokens -> statement text (aname: label token -> name)."""
+def anim_render(cmd, toks, aname, names=None):
+    """`a XX <hex|label>` tokens -> statement text (aname: label token -> name; names: the sound names)."""
     kw, kd = ANIM[cmd]
     body = bytes.fromhex(toks[0]) if toks and not toks[0].startswith(('A_', '=')) else b''
     def need(n):
@@ -408,7 +417,7 @@ def anim_render(cmd, toks, aname):
     if kd == 'b16': need(1); return f'{kw} {imm(body[0])} #16'
     if kd == 'sb': need(1); return f'{kw} {body[0] - 256 if body[0] >= 128 else body[0]}'
     if kd == 'w': need(2); return f'{kw} {imm(struct.unpack_from("<H", body)[0])}'
-    if kd == 'sfx': need(2); return f'{kw} {imm(body[0])} vol {imm(body[1])}'
+    if kd == 'sfx': need(2); return f'{kw} {names.sfx(body[0]) if names else imm(body[0])} vol {imm(body[1])}'
     if kd == 'b*': return kw + (' ' + ', '.join(imm(b) for b in body) if body else '')
     if kd == 'sw*':
         if len(body) % 2: raise ValueError(f'anim cmd {cmd:02X}: odd operand length {len(body)}')
@@ -428,9 +437,13 @@ def _aw(v, signed=False):
     return v & 0xFFFF
 
 
-def anim_parse(text, alabel):
-    """statement text -> `a XX ...` line (alabel: name -> label token)."""
-    for cmd in (0x00, 0x02, 0x04, 0x16):
+def anim_parse(text, alabel, names=None):
+    """statement text -> `a XX ...` line (alabel: name -> label token; names: the sound names)."""
+    m = re.match(r'^sfx (\S+) vol (0x[0-9A-Fa-f]+|\d+)$', text)
+    if m:
+        sid = names.sfx_parse(m.group(1)) if names else int(m.group(1), 0)
+        return 'a 02 ' + bytes([_ab(sid), _ab(int(m.group(2), 0))]).hex()
+    for cmd in (0x00, 0x04, 0x16):
         m = ANIM_RX[cmd].match(text)
         if m:
             vals = [_ab(int(x, 0)) for x in m.groups()]
@@ -809,7 +822,7 @@ def decompile_text(cid, text, names):
         if p[0] == 'a':
             flush()
             if dmode != 'anim': raise ValueError(f'{cid:X}.lvsf:{lineno}: anim code under a code label ({raw!r})')
-            out.append('    ' + anim_render(int(p[1], 16), p[2:], anim_name)); stats['anim'] += 1; continue
+            out.append('    ' + anim_render(int(p[1], 16), p[2:], anim_name, names)); stats['anim'] += 1; continue
         if p[0] == 'blob' and dmode == 'pal':                 # the palette block behind a P_ label: 16 colours of 3 DAC bytes
             flush(); b = bytes.fromhex(p[1]) if len(p) > 1 else b''
             for k in range(len(b) // 3):
@@ -835,6 +848,10 @@ def decompile_text(cid, text, names):
             flush(); out.append(f'    {"goto" if op == 0x03 else "call"} {tgt_name(sym[0])}'); continue
         if op == 0x19:
             flush(); out.append(f'    anim {anim_name(sym[0])}'); continue
+        if op == 0x02 and len(body) == 2:      # sfx: the low byte is the sequence, the high byte the console's volume (the PC reads the low byte)
+            flush(); out.append(f'    sfx {names.sfx(body[0])} vol {imm(body[1])}'); continue
+        if op == 0x04 and len(body) == 1:
+            flush(); out.append(f'    sfx_stop {names.sfx(body[0])}'); continue
         if op == 0x13:
             flush()
             if sym and sym[0] == 'd9': out.append(f'    palette {names.pal(cid, sym[1])}')
@@ -1337,6 +1354,10 @@ class Lowerer:
             return [f'o {0x03 if w[0] == "goto" else 0x05:02X} {self.label(w[1])}']
         if w[0] == 'anim' and len(w) == 2: return [f'o 19 {self.alabel(w[1])}']
         if w[0] == 'palette' and len(w) == 2: return ['o 13 d9 ' + self.plabel(w[1])]
+        ms = re.match(r'^sfx (\S+) vol (0x[0-9A-Fa-f]+|\d+)$', s)
+        if ms: return ['o 02 ' + struct.pack('<H', (int(ms.group(2), 0) << 8) | self.N.sfx_parse(ms.group(1))).hex()]
+        ms = re.match(r'^sfx_stop (\S+)$', s)
+        if ms: return ['o 04 %02x' % self.N.sfx_parse(ms.group(1))]
         m13 = OP13_RX.match(s)
         if m13:
             sub = next(k for k, v in OP13.items() if v == m13.group(1))
@@ -1457,7 +1478,7 @@ class Lowerer:
                 if mi:
                     out.append(self.label(mi.group(1)) + ':'); mode = 'code'; continue
                 if (code.startswith('    ') or code.startswith('\t')) and mode == 'anim':   # an anim statement
-                    out.append(anim_parse(raw, self.alabel)); continue
+                    out.append(anim_parse(raw, self.alabel, self.N)); continue
                 if (code.startswith('    ') or code.startswith('\t')) and mode == 'pal':    # a palette colour
                     mp = re.match(r'^rgb (\d+), (\d+), (\d+)$', raw)
                     if not mp: raise ValueError(f'expected `rgb r, g, b` under a palette label: {raw!r}')
@@ -1658,6 +1679,8 @@ def reference_md():
           '* `hurt partner event=K amount=A facing` — `partner.event = K`, `partner.event_arg = A`, `partner.event_arg = setbit(partner.event_arg, 0x8000, bit(self.flags & 0x40))`.',
           '* `anim_by_viking erik=A, baleog=B, olaf=C goto L [fallthrough]` — `select self.anim_idx: 0 -> b, 2 -> c`, `anim A`, `goto L`, then the states `b: anim B; goto L` and `c: anim C; goto L` (or `anim C` falling through); the two side states are written by the compiler.',
           '* `loop X:` — a state whose last statement is `goto X`; the header implies it.',
+          '* `sfx NAME vol V` (op 02: the word V<<8 | sequence — the PC plays the low byte, V is the console\'s volume byte) and `sfx_stop NAME` (op 04); '
+          'NAME is the `sfx` dictionary name of the sequence or its number; the anim command `sfx NAME vol V` uses the same names.',
           '* `func NAME:` with inner labels `  NAME:`; `call F(self.f = N, [g] = N, acc = X)` — Functions.', '',
           '## Anim code', '', 'Under an `anim NAME:` header. Lists carry one value per sub-sprite (masked: per matching one).', '',
           '| cmd | statement | operands | meaning |', '|---|---|---|---|']

@@ -248,6 +248,7 @@ a, b, l = channel targets: `self.f`, `[g]`, `partner.f`, `drop`.
 * `hurt partner event=K amount=A facing` — `partner.event = K`, `partner.event_arg = A`, `partner.event_arg = setbit(partner.event_arg, 0x8000, bit(self.flags & 0x40))`.
 * `anim_by_viking erik=A, baleog=B, olaf=C goto L [fallthrough]` — `select self.anim_idx: 0 -> b, 2 -> c`, `anim A`, `goto L`, then the states `b: anim B; goto L` and `c: anim C; goto L` (or `anim C` falling through); the two side states are written by the compiler.
 * `loop X:` — a state whose last statement is `goto X`; the header implies it.
+* `sfx NAME vol V` (op 02: the word V<<8 | sequence — the PC plays the low byte, V is the console's volume byte) and `sfx_stop NAME` (op 04); NAME is the `sfx` dictionary name of the sequence or its number; the anim command `sfx NAME vol V` uses the same names.
 * `func NAME:` with inner labels `  NAME:`; `call F(self.f = N, [g] = N, acc = X)` — Functions.
 
 ## Anim code
