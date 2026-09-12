@@ -1337,6 +1337,10 @@ def check(cids):
         print(f'{cid:X}: {stats["stmt"]} statements, {stats["sugar"]} folded, {stats["states"]} states — '
               f'{"IDENTICAL" if same else f"DIFF at 0x{diff:04X} (len {len(img)} vs {len(ref)})"}')
         ok &= same
+        labels = re.findall(r'^(?:state|func|anim|palette|  )\s*([A-Za-z_]\w*):', text, re.M)
+        dup = sorted({x for x in labels if labels.count(x) > 1})
+        if dup:
+            print(f'{cid:X}: DUPLICATE label names (a state, anim or palette share a name — confusing in the text and for the editor anchors): {dup[:8]}'); ok = False
     if os.path.exists(REF_PATH):
         fresh = open(REF_PATH, encoding='utf-8').read() == reference_md()
         print('LVD_REFERENCE.md ' + ('up to date' if fresh else 'STALE — run lvsd.py ref')); ok &= fresh

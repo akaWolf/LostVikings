@@ -247,7 +247,13 @@ three bytes per line, a remainder as `blob`.
 (`"1C1:2618": "erik_walk"`), `sfx`.
 `lvsd.py seed` fills the record entries (`<class>_anim` / `<class>_spawn`);
 everything else is named by hand as the scripts get understood. A name is a
-view: renaming a state changes no byte.
+view: renaming a state changes no byte. Class names are global (`*:XX`) —
+the class table is the same in the six scripts — unless a type is a different
+object in one script (`1C2:4A`); they follow the manual and the walkthroughs
+(keys, bombs, force fields, teleporters, striped doors; green/red aliens,
+T-rex, caveman, snail, scorpion, mummy, spear guard, pounders, gun robot).
+Hand anim names take `<class>_a_<what>` so they never collide with a state
+name (`lvsd check` refuses a name shared by a state and an anim).
 
 ## Editor
 
