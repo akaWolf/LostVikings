@@ -2506,13 +2506,17 @@ static bool v2_locale_activate(int idx) {
     return true;
 }
 // text index -> record pointer (sub_12515): the bank's record when it has one
-static inline uint16_t v2_text_ptr_of(const uint8_t* seg001, uint16_t idx) {
+// External linkage: the transpiled executors (src/sdl/gen/*.gen.inc, separate
+// TUs — v2_vm_gen.h declares them) inline sub_12515 / sub_12529 for op 41/44
+// and must read through the same two accessors, or the level dialogues of the
+// canonical worlds stay English while the interpreted ones translate.
+uint16_t v2_text_ptr_of(const uint8_t* seg001, uint16_t idx) {
     if (v2_lang_on && idx < v2_lang_nstr && v2_lang_offs[idx])
         return (uint16_t)(0x8000 + v2_lang_offs[idx]);
     return *(const uint16_t*)(seg001 + (uint16_t)(idx << 1));
 }
 // one byte of a text record by its (possibly virtual) seg001 pointer
-static inline uint8_t v2_text_byte(const uint8_t* seg001, uint16_t ptr) {
+uint8_t v2_text_byte(const uint8_t* seg001, uint16_t ptr) {
     if (v2_lang_on && ptr >= 0x8000) return v2_lang_bank[ptr - 0x8000];
     return seg001[ptr];
 }

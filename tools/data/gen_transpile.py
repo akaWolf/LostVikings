@@ -1385,13 +1385,18 @@ def inline_wave6(op, body, kind, tgt, nxt, pc):
         u = _ch_get(L, '_r0', c0, body, o)
         if u is None: return None
         o += u
-        L.append('  { uint16_t _tp = *(uint16_t*)(v2_m2c_base + 0x9480 + (uint16_t)(_r0 * 2));')
+        # UX stage 6: the text index and the record bytes go through the same
+        # accessors as the interpreter's sub_12515 / sub_12529 (v2_vm.cpp
+        # v2_text_ptr_of / v2_text_byte): the active language bank first, the
+        # canonical seg001 table otherwise — a direct read here left every
+        # level dialogue English while the interpreted worlds translated.
+        L.append('  { uint16_t _tp = v2_text_ptr_of(v2_m2c_base + 0x9480, _r0);   // the language bank first')
         L.append('    vm.ds_write(DS_TEXT_IDX, _tp); }   // sub_12515 tail')
         if op in (0x41, 0x44):
             L.append('  { uint16_t _ti = vm.ds_read(DS_TEXT_IDX);')
-            L.append('    uint8_t* _s1 = v2_m2c_base + 0x9480;')
-            L.append('    vm.ds_write(DS_SCRATCH_34, (uint16_t)_s1[_ti]);')
-            L.append('    vm.ds_write(DS_SCRATCH_36, (uint16_t)_s1[(uint16_t)(_ti + 1)]); }')
+            L.append('    const uint8_t* _s1 = v2_m2c_base + 0x9480;')
+            L.append('    vm.ds_write(DS_SCRATCH_34, (uint16_t)v2_text_byte(_s1, _ti));')
+            L.append('    vm.ds_write(DS_SCRATCH_36, (uint16_t)v2_text_byte(_s1, (uint16_t)(_ti + 1))); }')
             c12543 = (w016 >> 3) & 7
             if c12543 > 5: return None
             u = _ch_get(L, '_v2v', c12543, body, o)

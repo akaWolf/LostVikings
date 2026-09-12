@@ -608,12 +608,12 @@ static __attribute__((noinline)) bool v2_gen_exec_1c5_p0(V2VM& vm, int& max_ops)
           vm.ds_write(DS_MODE_WORD, 0x0D00);   // sub_1250b mode word
           vm.ch4_mul_clobber = false;
           const uint16_t _r0 = 0x010D;
-          { uint16_t _tp = *(uint16_t*)(v2_m2c_base + 0x9480 + (uint16_t)(_r0 * 2));
+          { uint16_t _tp = v2_text_ptr_of(v2_m2c_base + 0x9480, _r0);   // the language bank first
             vm.ds_write(DS_TEXT_IDX, _tp); }   // sub_12515 tail
           { uint16_t _ti = vm.ds_read(DS_TEXT_IDX);
-            uint8_t* _s1 = v2_m2c_base + 0x9480;
-            vm.ds_write(DS_SCRATCH_34, (uint16_t)_s1[_ti]);
-            vm.ds_write(DS_SCRATCH_36, (uint16_t)_s1[(uint16_t)(_ti + 1)]); }
+            const uint8_t* _s1 = v2_m2c_base + 0x9480;
+            vm.ds_write(DS_SCRATCH_34, (uint16_t)v2_text_byte(_s1, _ti));
+            vm.ds_write(DS_SCRATCH_36, (uint16_t)v2_text_byte(_s1, (uint16_t)(_ti + 1))); }
           vm.ch4_mul_clobber = false;
           const uint16_t _v2v = 0x0006;
           vm.ch4_mul_clobber = false;
@@ -29270,12 +29270,12 @@ static __attribute__((noinline)) bool v2_gen_exec_1c5_p5(V2VM& vm, int& max_ops)
           vm.ds_write(DS_MODE_WORD, 0x0F00);   // sub_1250b mode word
           vm.ch4_mul_clobber = false;
           const uint16_t _r0 = 0x010F;
-          { uint16_t _tp = *(uint16_t*)(v2_m2c_base + 0x9480 + (uint16_t)(_r0 * 2));
+          { uint16_t _tp = v2_text_ptr_of(v2_m2c_base + 0x9480, _r0);   // the language bank first
             vm.ds_write(DS_TEXT_IDX, _tp); }   // sub_12515 tail
           { uint16_t _ti = vm.ds_read(DS_TEXT_IDX);
-            uint8_t* _s1 = v2_m2c_base + 0x9480;
-            vm.ds_write(DS_SCRATCH_34, (uint16_t)_s1[_ti]);
-            vm.ds_write(DS_SCRATCH_36, (uint16_t)_s1[(uint16_t)(_ti + 1)]); }
+            const uint8_t* _s1 = v2_m2c_base + 0x9480;
+            vm.ds_write(DS_SCRATCH_34, (uint16_t)v2_text_byte(_s1, _ti));
+            vm.ds_write(DS_SCRATCH_36, (uint16_t)v2_text_byte(_s1, (uint16_t)(_ti + 1))); }
           vm.ch4_mul_clobber = false;
           const uint16_t _v2v = 0x0006;
           vm.ch4_mul_clobber = false;
@@ -29602,12 +29602,12 @@ static __attribute__((noinline)) bool v2_gen_exec_1c5_p5(V2VM& vm, int& max_ops)
           vm.ds_write(DS_MODE_WORD, 0x0F00);   // sub_1250b mode word
           vm.ch4_mul_clobber = false;
           const uint16_t _r0 = 0x010F;
-          { uint16_t _tp = *(uint16_t*)(v2_m2c_base + 0x9480 + (uint16_t)(_r0 * 2));
+          { uint16_t _tp = v2_text_ptr_of(v2_m2c_base + 0x9480, _r0);   // the language bank first
             vm.ds_write(DS_TEXT_IDX, _tp); }   // sub_12515 tail
           { uint16_t _ti = vm.ds_read(DS_TEXT_IDX);
-            uint8_t* _s1 = v2_m2c_base + 0x9480;
-            vm.ds_write(DS_SCRATCH_34, (uint16_t)_s1[_ti]);
-            vm.ds_write(DS_SCRATCH_36, (uint16_t)_s1[(uint16_t)(_ti + 1)]); }
+            const uint8_t* _s1 = v2_m2c_base + 0x9480;
+            vm.ds_write(DS_SCRATCH_34, (uint16_t)v2_text_byte(_s1, _ti));
+            vm.ds_write(DS_SCRATCH_36, (uint16_t)v2_text_byte(_s1, (uint16_t)(_ti + 1))); }
           vm.ch4_mul_clobber = false;
           const uint16_t _v2v = 0x0006;
           vm.ch4_mul_clobber = false;
@@ -29890,7 +29890,7 @@ static __attribute__((noinline)) bool v2_gen_exec_1c5_p5(V2VM& vm, int& max_ops)
           vm.ds_write(DS_MODE_WORD, 0x0500);   // sub_1250b mode word
           vm.ch4_mul_clobber = false;
           const uint16_t _r0 = 0x0005;
-          { uint16_t _tp = *(uint16_t*)(v2_m2c_base + 0x9480 + (uint16_t)(_r0 * 2));
+          { uint16_t _tp = v2_text_ptr_of(v2_m2c_base + 0x9480, _r0);   // the language bank first
             vm.ds_write(DS_TEXT_IDX, _tp); }   // sub_12515 tail
           vm.ch4_mul_clobber = false;
           const uint16_t _px = 0x000F;
@@ -29939,7 +29939,7 @@ static __attribute__((noinline)) bool v2_gen_exec_1c5_p5(V2VM& vm, int& max_ops)
           vm.ds_write(DS_MODE_WORD, 0x0600);   // sub_1250b mode word
           vm.ch4_mul_clobber = false;
           const uint16_t _r0 = 0x0006;
-          { uint16_t _tp = *(uint16_t*)(v2_m2c_base + 0x9480 + (uint16_t)(_r0 * 2));
+          { uint16_t _tp = v2_text_ptr_of(v2_m2c_base + 0x9480, _r0);   // the language bank first
             vm.ds_write(DS_TEXT_IDX, _tp); }   // sub_12515 tail
           vm.ch4_mul_clobber = false;
           const uint16_t _px = 0x0015;
@@ -29994,7 +29994,7 @@ static __attribute__((noinline)) bool v2_gen_exec_1c5_p5(V2VM& vm, int& max_ops)
           vm.ds_write(DS_MODE_WORD, 0x0600);   // sub_1250b mode word
           vm.ch4_mul_clobber = false;
           const uint16_t _r0 = 0x0006;
-          { uint16_t _tp = *(uint16_t*)(v2_m2c_base + 0x9480 + (uint16_t)(_r0 * 2));
+          { uint16_t _tp = v2_text_ptr_of(v2_m2c_base + 0x9480, _r0);   // the language bank first
             vm.ds_write(DS_TEXT_IDX, _tp); }   // sub_12515 tail
           vm.ch4_mul_clobber = false;
           const uint16_t _px = 0x000F;
@@ -30029,7 +30029,7 @@ static __attribute__((noinline)) bool v2_gen_exec_1c5_p5(V2VM& vm, int& max_ops)
           vm.ds_write(DS_MODE_WORD, 0x0500);   // sub_1250b mode word
           vm.ch4_mul_clobber = false;
           const uint16_t _r0 = 0x0005;
-          { uint16_t _tp = *(uint16_t*)(v2_m2c_base + 0x9480 + (uint16_t)(_r0 * 2));
+          { uint16_t _tp = v2_text_ptr_of(v2_m2c_base + 0x9480, _r0);   // the language bank first
             vm.ds_write(DS_TEXT_IDX, _tp); }   // sub_12515 tail
           vm.ch4_mul_clobber = false;
           const uint16_t _px = 0x000F;
@@ -30058,7 +30058,7 @@ static __attribute__((noinline)) bool v2_gen_exec_1c5_p5(V2VM& vm, int& max_ops)
           vm.ds_write(DS_MODE_WORD, 0x0400);   // sub_1250b mode word
           vm.ch4_mul_clobber = false;
           const uint16_t _r0 = 0x0004;
-          { uint16_t _tp = *(uint16_t*)(v2_m2c_base + 0x9480 + (uint16_t)(_r0 * 2));
+          { uint16_t _tp = v2_text_ptr_of(v2_m2c_base + 0x9480, _r0);   // the language bank first
             vm.ds_write(DS_TEXT_IDX, _tp); }   // sub_12515 tail
           vm.ch4_mul_clobber = false;
           const uint16_t _px = 0x0015;
@@ -30649,12 +30649,12 @@ static __attribute__((noinline)) bool v2_gen_exec_1c5_p5(V2VM& vm, int& max_ops)
           vm.ds_write(DS_MODE_WORD, 0x0D00);   // sub_1250b mode word
           vm.ch4_mul_clobber = false;
           const uint16_t _r0 = 0x010D;
-          { uint16_t _tp = *(uint16_t*)(v2_m2c_base + 0x9480 + (uint16_t)(_r0 * 2));
+          { uint16_t _tp = v2_text_ptr_of(v2_m2c_base + 0x9480, _r0);   // the language bank first
             vm.ds_write(DS_TEXT_IDX, _tp); }   // sub_12515 tail
           { uint16_t _ti = vm.ds_read(DS_TEXT_IDX);
-            uint8_t* _s1 = v2_m2c_base + 0x9480;
-            vm.ds_write(DS_SCRATCH_34, (uint16_t)_s1[_ti]);
-            vm.ds_write(DS_SCRATCH_36, (uint16_t)_s1[(uint16_t)(_ti + 1)]); }
+            const uint8_t* _s1 = v2_m2c_base + 0x9480;
+            vm.ds_write(DS_SCRATCH_34, (uint16_t)v2_text_byte(_s1, _ti));
+            vm.ds_write(DS_SCRATCH_36, (uint16_t)v2_text_byte(_s1, (uint16_t)(_ti + 1))); }
           vm.ch4_mul_clobber = false;
           const uint16_t _v2v = 0x0006;
           vm.ch4_mul_clobber = false;
@@ -83989,12 +83989,12 @@ static __attribute__((noinline)) bool v2_gen_exec_1c5_p15(V2VM& vm, int& max_ops
           vm.ch4_mul_clobber = false;
           vm.si_track = 0x0206;
           const uint16_t _r0 = v2gs(vm.shadow).script_vars(1);
-          { uint16_t _tp = *(uint16_t*)(v2_m2c_base + 0x9480 + (uint16_t)(_r0 * 2));
+          { uint16_t _tp = v2_text_ptr_of(v2_m2c_base + 0x9480, _r0);   // the language bank first
             vm.ds_write(DS_TEXT_IDX, _tp); }   // sub_12515 tail
           { uint16_t _ti = vm.ds_read(DS_TEXT_IDX);
-            uint8_t* _s1 = v2_m2c_base + 0x9480;
-            vm.ds_write(DS_SCRATCH_34, (uint16_t)_s1[_ti]);
-            vm.ds_write(DS_SCRATCH_36, (uint16_t)_s1[(uint16_t)(_ti + 1)]); }
+            const uint8_t* _s1 = v2_m2c_base + 0x9480;
+            vm.ds_write(DS_SCRATCH_34, (uint16_t)v2_text_byte(_s1, _ti));
+            vm.ds_write(DS_SCRATCH_36, (uint16_t)v2_text_byte(_s1, (uint16_t)(_ti + 1))); }
           vm.ch4_mul_clobber = false;
           const uint16_t _v2v = 0x0006;
           { uint16_t _w14 = vm.ds_read(DS_SCRATCH_34);
@@ -89944,12 +89944,12 @@ static __attribute__((noinline)) bool v2_gen_exec_1c5_p16(V2VM& vm, int& max_ops
           vm.ds_write(DS_MODE_WORD, 0xD900);   // sub_1250b mode word
           vm.ch4_mul_clobber = false;
           const uint16_t _r0 = 0x00D9;
-          { uint16_t _tp = *(uint16_t*)(v2_m2c_base + 0x9480 + (uint16_t)(_r0 * 2));
+          { uint16_t _tp = v2_text_ptr_of(v2_m2c_base + 0x9480, _r0);   // the language bank first
             vm.ds_write(DS_TEXT_IDX, _tp); }   // sub_12515 tail
           { uint16_t _ti = vm.ds_read(DS_TEXT_IDX);
-            uint8_t* _s1 = v2_m2c_base + 0x9480;
-            vm.ds_write(DS_SCRATCH_34, (uint16_t)_s1[_ti]);
-            vm.ds_write(DS_SCRATCH_36, (uint16_t)_s1[(uint16_t)(_ti + 1)]); }
+            const uint8_t* _s1 = v2_m2c_base + 0x9480;
+            vm.ds_write(DS_SCRATCH_34, (uint16_t)v2_text_byte(_s1, _ti));
+            vm.ds_write(DS_SCRATCH_36, (uint16_t)v2_text_byte(_s1, (uint16_t)(_ti + 1))); }
           vm.ch4_mul_clobber = false;
           const uint16_t _v2v = 0x0005;
           { uint16_t _w14 = vm.ds_read(DS_SCRATCH_34);
@@ -90107,12 +90107,12 @@ static __attribute__((noinline)) bool v2_gen_exec_1c5_p16(V2VM& vm, int& max_ops
           vm.ds_write(DS_MODE_WORD, 0xDA00);   // sub_1250b mode word
           vm.ch4_mul_clobber = false;
           const uint16_t _r0 = 0x00DA;
-          { uint16_t _tp = *(uint16_t*)(v2_m2c_base + 0x9480 + (uint16_t)(_r0 * 2));
+          { uint16_t _tp = v2_text_ptr_of(v2_m2c_base + 0x9480, _r0);   // the language bank first
             vm.ds_write(DS_TEXT_IDX, _tp); }   // sub_12515 tail
           { uint16_t _ti = vm.ds_read(DS_TEXT_IDX);
-            uint8_t* _s1 = v2_m2c_base + 0x9480;
-            vm.ds_write(DS_SCRATCH_34, (uint16_t)_s1[_ti]);
-            vm.ds_write(DS_SCRATCH_36, (uint16_t)_s1[(uint16_t)(_ti + 1)]); }
+            const uint8_t* _s1 = v2_m2c_base + 0x9480;
+            vm.ds_write(DS_SCRATCH_34, (uint16_t)v2_text_byte(_s1, _ti));
+            vm.ds_write(DS_SCRATCH_36, (uint16_t)v2_text_byte(_s1, (uint16_t)(_ti + 1))); }
           vm.ch4_mul_clobber = false;
           const uint16_t _v2v = 0x0002;
           { uint16_t _w14 = vm.ds_read(DS_SCRATCH_34);
@@ -90270,12 +90270,12 @@ static __attribute__((noinline)) bool v2_gen_exec_1c5_p16(V2VM& vm, int& max_ops
           vm.ds_write(DS_MODE_WORD, 0xDB00);   // sub_1250b mode word
           vm.ch4_mul_clobber = false;
           const uint16_t _r0 = 0x00DB;
-          { uint16_t _tp = *(uint16_t*)(v2_m2c_base + 0x9480 + (uint16_t)(_r0 * 2));
+          { uint16_t _tp = v2_text_ptr_of(v2_m2c_base + 0x9480, _r0);   // the language bank first
             vm.ds_write(DS_TEXT_IDX, _tp); }   // sub_12515 tail
           { uint16_t _ti = vm.ds_read(DS_TEXT_IDX);
-            uint8_t* _s1 = v2_m2c_base + 0x9480;
-            vm.ds_write(DS_SCRATCH_34, (uint16_t)_s1[_ti]);
-            vm.ds_write(DS_SCRATCH_36, (uint16_t)_s1[(uint16_t)(_ti + 1)]); }
+            const uint8_t* _s1 = v2_m2c_base + 0x9480;
+            vm.ds_write(DS_SCRATCH_34, (uint16_t)v2_text_byte(_s1, _ti));
+            vm.ds_write(DS_SCRATCH_36, (uint16_t)v2_text_byte(_s1, (uint16_t)(_ti + 1))); }
           vm.ch4_mul_clobber = false;
           const uint16_t _v2v = 0x0002;
           { uint16_t _w14 = vm.ds_read(DS_SCRATCH_34);
@@ -91172,12 +91172,12 @@ static __attribute__((noinline)) bool v2_gen_exec_1c5_p16(V2VM& vm, int& max_ops
           vm.ds_write(DS_MODE_WORD, 0xC200);   // sub_1250b mode word
           vm.ch4_mul_clobber = false;
           const uint16_t _r0 = 0x00C2;
-          { uint16_t _tp = *(uint16_t*)(v2_m2c_base + 0x9480 + (uint16_t)(_r0 * 2));
+          { uint16_t _tp = v2_text_ptr_of(v2_m2c_base + 0x9480, _r0);   // the language bank first
             vm.ds_write(DS_TEXT_IDX, _tp); }   // sub_12515 tail
           { uint16_t _ti = vm.ds_read(DS_TEXT_IDX);
-            uint8_t* _s1 = v2_m2c_base + 0x9480;
-            vm.ds_write(DS_SCRATCH_34, (uint16_t)_s1[_ti]);
-            vm.ds_write(DS_SCRATCH_36, (uint16_t)_s1[(uint16_t)(_ti + 1)]); }
+            const uint8_t* _s1 = v2_m2c_base + 0x9480;
+            vm.ds_write(DS_SCRATCH_34, (uint16_t)v2_text_byte(_s1, _ti));
+            vm.ds_write(DS_SCRATCH_36, (uint16_t)v2_text_byte(_s1, (uint16_t)(_ti + 1))); }
           vm.ch4_mul_clobber = false;
           const uint16_t _v2v = 0x0005;
           { uint16_t _w14 = vm.ds_read(DS_SCRATCH_34);
@@ -91335,12 +91335,12 @@ static __attribute__((noinline)) bool v2_gen_exec_1c5_p16(V2VM& vm, int& max_ops
           vm.ds_write(DS_MODE_WORD, 0xC300);   // sub_1250b mode word
           vm.ch4_mul_clobber = false;
           const uint16_t _r0 = 0x00C3;
-          { uint16_t _tp = *(uint16_t*)(v2_m2c_base + 0x9480 + (uint16_t)(_r0 * 2));
+          { uint16_t _tp = v2_text_ptr_of(v2_m2c_base + 0x9480, _r0);   // the language bank first
             vm.ds_write(DS_TEXT_IDX, _tp); }   // sub_12515 tail
           { uint16_t _ti = vm.ds_read(DS_TEXT_IDX);
-            uint8_t* _s1 = v2_m2c_base + 0x9480;
-            vm.ds_write(DS_SCRATCH_34, (uint16_t)_s1[_ti]);
-            vm.ds_write(DS_SCRATCH_36, (uint16_t)_s1[(uint16_t)(_ti + 1)]); }
+            const uint8_t* _s1 = v2_m2c_base + 0x9480;
+            vm.ds_write(DS_SCRATCH_34, (uint16_t)v2_text_byte(_s1, _ti));
+            vm.ds_write(DS_SCRATCH_36, (uint16_t)v2_text_byte(_s1, (uint16_t)(_ti + 1))); }
           vm.ch4_mul_clobber = false;
           const uint16_t _v2v = 0x0002;
           { uint16_t _w14 = vm.ds_read(DS_SCRATCH_34);
@@ -91498,12 +91498,12 @@ static __attribute__((noinline)) bool v2_gen_exec_1c5_p16(V2VM& vm, int& max_ops
           vm.ds_write(DS_MODE_WORD, 0xC400);   // sub_1250b mode word
           vm.ch4_mul_clobber = false;
           const uint16_t _r0 = 0x00C4;
-          { uint16_t _tp = *(uint16_t*)(v2_m2c_base + 0x9480 + (uint16_t)(_r0 * 2));
+          { uint16_t _tp = v2_text_ptr_of(v2_m2c_base + 0x9480, _r0);   // the language bank first
             vm.ds_write(DS_TEXT_IDX, _tp); }   // sub_12515 tail
           { uint16_t _ti = vm.ds_read(DS_TEXT_IDX);
-            uint8_t* _s1 = v2_m2c_base + 0x9480;
-            vm.ds_write(DS_SCRATCH_34, (uint16_t)_s1[_ti]);
-            vm.ds_write(DS_SCRATCH_36, (uint16_t)_s1[(uint16_t)(_ti + 1)]); }
+            const uint8_t* _s1 = v2_m2c_base + 0x9480;
+            vm.ds_write(DS_SCRATCH_34, (uint16_t)v2_text_byte(_s1, _ti));
+            vm.ds_write(DS_SCRATCH_36, (uint16_t)v2_text_byte(_s1, (uint16_t)(_ti + 1))); }
           vm.ch4_mul_clobber = false;
           const uint16_t _v2v = 0x0002;
           { uint16_t _w14 = vm.ds_read(DS_SCRATCH_34);
@@ -91682,12 +91682,12 @@ static __attribute__((noinline)) bool v2_gen_exec_1c5_p16(V2VM& vm, int& max_ops
           vm.ds_write(DS_MODE_WORD, 0xC500);   // sub_1250b mode word
           vm.ch4_mul_clobber = false;
           const uint16_t _r0 = 0x00C5;
-          { uint16_t _tp = *(uint16_t*)(v2_m2c_base + 0x9480 + (uint16_t)(_r0 * 2));
+          { uint16_t _tp = v2_text_ptr_of(v2_m2c_base + 0x9480, _r0);   // the language bank first
             vm.ds_write(DS_TEXT_IDX, _tp); }   // sub_12515 tail
           { uint16_t _ti = vm.ds_read(DS_TEXT_IDX);
-            uint8_t* _s1 = v2_m2c_base + 0x9480;
-            vm.ds_write(DS_SCRATCH_34, (uint16_t)_s1[_ti]);
-            vm.ds_write(DS_SCRATCH_36, (uint16_t)_s1[(uint16_t)(_ti + 1)]); }
+            const uint8_t* _s1 = v2_m2c_base + 0x9480;
+            vm.ds_write(DS_SCRATCH_34, (uint16_t)v2_text_byte(_s1, _ti));
+            vm.ds_write(DS_SCRATCH_36, (uint16_t)v2_text_byte(_s1, (uint16_t)(_ti + 1))); }
           vm.ch4_mul_clobber = false;
           const uint16_t _v2v = 0x0000;
           { uint16_t _w14 = vm.ds_read(DS_SCRATCH_34);
@@ -91845,12 +91845,12 @@ static __attribute__((noinline)) bool v2_gen_exec_1c5_p16(V2VM& vm, int& max_ops
           vm.ds_write(DS_MODE_WORD, 0xC600);   // sub_1250b mode word
           vm.ch4_mul_clobber = false;
           const uint16_t _r0 = 0x00C6;
-          { uint16_t _tp = *(uint16_t*)(v2_m2c_base + 0x9480 + (uint16_t)(_r0 * 2));
+          { uint16_t _tp = v2_text_ptr_of(v2_m2c_base + 0x9480, _r0);   // the language bank first
             vm.ds_write(DS_TEXT_IDX, _tp); }   // sub_12515 tail
           { uint16_t _ti = vm.ds_read(DS_TEXT_IDX);
-            uint8_t* _s1 = v2_m2c_base + 0x9480;
-            vm.ds_write(DS_SCRATCH_34, (uint16_t)_s1[_ti]);
-            vm.ds_write(DS_SCRATCH_36, (uint16_t)_s1[(uint16_t)(_ti + 1)]); }
+            const uint8_t* _s1 = v2_m2c_base + 0x9480;
+            vm.ds_write(DS_SCRATCH_34, (uint16_t)v2_text_byte(_s1, _ti));
+            vm.ds_write(DS_SCRATCH_36, (uint16_t)v2_text_byte(_s1, (uint16_t)(_ti + 1))); }
           vm.ch4_mul_clobber = false;
           const uint16_t _v2v = 0x0003;
           { uint16_t _w14 = vm.ds_read(DS_SCRATCH_34);
@@ -92008,12 +92008,12 @@ static __attribute__((noinline)) bool v2_gen_exec_1c5_p16(V2VM& vm, int& max_ops
           vm.ds_write(DS_MODE_WORD, 0xC700);   // sub_1250b mode word
           vm.ch4_mul_clobber = false;
           const uint16_t _r0 = 0x00C7;
-          { uint16_t _tp = *(uint16_t*)(v2_m2c_base + 0x9480 + (uint16_t)(_r0 * 2));
+          { uint16_t _tp = v2_text_ptr_of(v2_m2c_base + 0x9480, _r0);   // the language bank first
             vm.ds_write(DS_TEXT_IDX, _tp); }   // sub_12515 tail
           { uint16_t _ti = vm.ds_read(DS_TEXT_IDX);
-            uint8_t* _s1 = v2_m2c_base + 0x9480;
-            vm.ds_write(DS_SCRATCH_34, (uint16_t)_s1[_ti]);
-            vm.ds_write(DS_SCRATCH_36, (uint16_t)_s1[(uint16_t)(_ti + 1)]); }
+            const uint8_t* _s1 = v2_m2c_base + 0x9480;
+            vm.ds_write(DS_SCRATCH_34, (uint16_t)v2_text_byte(_s1, _ti));
+            vm.ds_write(DS_SCRATCH_36, (uint16_t)v2_text_byte(_s1, (uint16_t)(_ti + 1))); }
           vm.ch4_mul_clobber = false;
           const uint16_t _v2v = 0x0000;
           { uint16_t _w14 = vm.ds_read(DS_SCRATCH_34);
@@ -92171,12 +92171,12 @@ static __attribute__((noinline)) bool v2_gen_exec_1c5_p16(V2VM& vm, int& max_ops
           vm.ds_write(DS_MODE_WORD, 0xC800);   // sub_1250b mode word
           vm.ch4_mul_clobber = false;
           const uint16_t _r0 = 0x00C8;
-          { uint16_t _tp = *(uint16_t*)(v2_m2c_base + 0x9480 + (uint16_t)(_r0 * 2));
+          { uint16_t _tp = v2_text_ptr_of(v2_m2c_base + 0x9480, _r0);   // the language bank first
             vm.ds_write(DS_TEXT_IDX, _tp); }   // sub_12515 tail
           { uint16_t _ti = vm.ds_read(DS_TEXT_IDX);
-            uint8_t* _s1 = v2_m2c_base + 0x9480;
-            vm.ds_write(DS_SCRATCH_34, (uint16_t)_s1[_ti]);
-            vm.ds_write(DS_SCRATCH_36, (uint16_t)_s1[(uint16_t)(_ti + 1)]); }
+            const uint8_t* _s1 = v2_m2c_base + 0x9480;
+            vm.ds_write(DS_SCRATCH_34, (uint16_t)v2_text_byte(_s1, _ti));
+            vm.ds_write(DS_SCRATCH_36, (uint16_t)v2_text_byte(_s1, (uint16_t)(_ti + 1))); }
           vm.ch4_mul_clobber = false;
           const uint16_t _v2v = 0x0002;
           { uint16_t _w14 = vm.ds_read(DS_SCRATCH_34);
@@ -92355,12 +92355,12 @@ static __attribute__((noinline)) bool v2_gen_exec_1c5_p16(V2VM& vm, int& max_ops
           vm.ds_write(DS_MODE_WORD, 0xC900);   // sub_1250b mode word
           vm.ch4_mul_clobber = false;
           const uint16_t _r0 = 0x00C9;
-          { uint16_t _tp = *(uint16_t*)(v2_m2c_base + 0x9480 + (uint16_t)(_r0 * 2));
+          { uint16_t _tp = v2_text_ptr_of(v2_m2c_base + 0x9480, _r0);   // the language bank first
             vm.ds_write(DS_TEXT_IDX, _tp); }   // sub_12515 tail
           { uint16_t _ti = vm.ds_read(DS_TEXT_IDX);
-            uint8_t* _s1 = v2_m2c_base + 0x9480;
-            vm.ds_write(DS_SCRATCH_34, (uint16_t)_s1[_ti]);
-            vm.ds_write(DS_SCRATCH_36, (uint16_t)_s1[(uint16_t)(_ti + 1)]); }
+            const uint8_t* _s1 = v2_m2c_base + 0x9480;
+            vm.ds_write(DS_SCRATCH_34, (uint16_t)v2_text_byte(_s1, _ti));
+            vm.ds_write(DS_SCRATCH_36, (uint16_t)v2_text_byte(_s1, (uint16_t)(_ti + 1))); }
           vm.ch4_mul_clobber = false;
           const uint16_t _v2v = 0x0000;
           { uint16_t _w14 = vm.ds_read(DS_SCRATCH_34);
@@ -92518,12 +92518,12 @@ static __attribute__((noinline)) bool v2_gen_exec_1c5_p16(V2VM& vm, int& max_ops
           vm.ds_write(DS_MODE_WORD, 0xCA00);   // sub_1250b mode word
           vm.ch4_mul_clobber = false;
           const uint16_t _r0 = 0x00CA;
-          { uint16_t _tp = *(uint16_t*)(v2_m2c_base + 0x9480 + (uint16_t)(_r0 * 2));
+          { uint16_t _tp = v2_text_ptr_of(v2_m2c_base + 0x9480, _r0);   // the language bank first
             vm.ds_write(DS_TEXT_IDX, _tp); }   // sub_12515 tail
           { uint16_t _ti = vm.ds_read(DS_TEXT_IDX);
-            uint8_t* _s1 = v2_m2c_base + 0x9480;
-            vm.ds_write(DS_SCRATCH_34, (uint16_t)_s1[_ti]);
-            vm.ds_write(DS_SCRATCH_36, (uint16_t)_s1[(uint16_t)(_ti + 1)]); }
+            const uint8_t* _s1 = v2_m2c_base + 0x9480;
+            vm.ds_write(DS_SCRATCH_34, (uint16_t)v2_text_byte(_s1, _ti));
+            vm.ds_write(DS_SCRATCH_36, (uint16_t)v2_text_byte(_s1, (uint16_t)(_ti + 1))); }
           vm.ch4_mul_clobber = false;
           const uint16_t _v2v = 0x0003;
           { uint16_t _w14 = vm.ds_read(DS_SCRATCH_34);
@@ -92681,12 +92681,12 @@ static __attribute__((noinline)) bool v2_gen_exec_1c5_p16(V2VM& vm, int& max_ops
           vm.ds_write(DS_MODE_WORD, 0xCB00);   // sub_1250b mode word
           vm.ch4_mul_clobber = false;
           const uint16_t _r0 = 0x00CB;
-          { uint16_t _tp = *(uint16_t*)(v2_m2c_base + 0x9480 + (uint16_t)(_r0 * 2));
+          { uint16_t _tp = v2_text_ptr_of(v2_m2c_base + 0x9480, _r0);   // the language bank first
             vm.ds_write(DS_TEXT_IDX, _tp); }   // sub_12515 tail
           { uint16_t _ti = vm.ds_read(DS_TEXT_IDX);
-            uint8_t* _s1 = v2_m2c_base + 0x9480;
-            vm.ds_write(DS_SCRATCH_34, (uint16_t)_s1[_ti]);
-            vm.ds_write(DS_SCRATCH_36, (uint16_t)_s1[(uint16_t)(_ti + 1)]); }
+            const uint8_t* _s1 = v2_m2c_base + 0x9480;
+            vm.ds_write(DS_SCRATCH_34, (uint16_t)v2_text_byte(_s1, _ti));
+            vm.ds_write(DS_SCRATCH_36, (uint16_t)v2_text_byte(_s1, (uint16_t)(_ti + 1))); }
           vm.ch4_mul_clobber = false;
           const uint16_t _v2v = 0x0000;
           { uint16_t _w14 = vm.ds_read(DS_SCRATCH_34);
@@ -93388,12 +93388,12 @@ static __attribute__((noinline)) bool v2_gen_exec_1c5_p17(V2VM& vm, int& max_ops
           vm.ds_write(DS_MODE_WORD, 0xCC00);   // sub_1250b mode word
           vm.ch4_mul_clobber = false;
           const uint16_t _r0 = 0x00CC;
-          { uint16_t _tp = *(uint16_t*)(v2_m2c_base + 0x9480 + (uint16_t)(_r0 * 2));
+          { uint16_t _tp = v2_text_ptr_of(v2_m2c_base + 0x9480, _r0);   // the language bank first
             vm.ds_write(DS_TEXT_IDX, _tp); }   // sub_12515 tail
           { uint16_t _ti = vm.ds_read(DS_TEXT_IDX);
-            uint8_t* _s1 = v2_m2c_base + 0x9480;
-            vm.ds_write(DS_SCRATCH_34, (uint16_t)_s1[_ti]);
-            vm.ds_write(DS_SCRATCH_36, (uint16_t)_s1[(uint16_t)(_ti + 1)]); }
+            const uint8_t* _s1 = v2_m2c_base + 0x9480;
+            vm.ds_write(DS_SCRATCH_34, (uint16_t)v2_text_byte(_s1, _ti));
+            vm.ds_write(DS_SCRATCH_36, (uint16_t)v2_text_byte(_s1, (uint16_t)(_ti + 1))); }
           vm.ch4_mul_clobber = false;
           const uint16_t _v2v = 0x0000;
           { uint16_t _w14 = vm.ds_read(DS_SCRATCH_34);
@@ -93551,12 +93551,12 @@ static __attribute__((noinline)) bool v2_gen_exec_1c5_p17(V2VM& vm, int& max_ops
           vm.ds_write(DS_MODE_WORD, 0xCD00);   // sub_1250b mode word
           vm.ch4_mul_clobber = false;
           const uint16_t _r0 = 0x00CD;
-          { uint16_t _tp = *(uint16_t*)(v2_m2c_base + 0x9480 + (uint16_t)(_r0 * 2));
+          { uint16_t _tp = v2_text_ptr_of(v2_m2c_base + 0x9480, _r0);   // the language bank first
             vm.ds_write(DS_TEXT_IDX, _tp); }   // sub_12515 tail
           { uint16_t _ti = vm.ds_read(DS_TEXT_IDX);
-            uint8_t* _s1 = v2_m2c_base + 0x9480;
-            vm.ds_write(DS_SCRATCH_34, (uint16_t)_s1[_ti]);
-            vm.ds_write(DS_SCRATCH_36, (uint16_t)_s1[(uint16_t)(_ti + 1)]); }
+            const uint8_t* _s1 = v2_m2c_base + 0x9480;
+            vm.ds_write(DS_SCRATCH_34, (uint16_t)v2_text_byte(_s1, _ti));
+            vm.ds_write(DS_SCRATCH_36, (uint16_t)v2_text_byte(_s1, (uint16_t)(_ti + 1))); }
           vm.ch4_mul_clobber = false;
           const uint16_t _v2v = 0x0003;
           { uint16_t _w14 = vm.ds_read(DS_SCRATCH_34);
@@ -93714,12 +93714,12 @@ static __attribute__((noinline)) bool v2_gen_exec_1c5_p17(V2VM& vm, int& max_ops
           vm.ds_write(DS_MODE_WORD, 0xCE00);   // sub_1250b mode word
           vm.ch4_mul_clobber = false;
           const uint16_t _r0 = 0x00CE;
-          { uint16_t _tp = *(uint16_t*)(v2_m2c_base + 0x9480 + (uint16_t)(_r0 * 2));
+          { uint16_t _tp = v2_text_ptr_of(v2_m2c_base + 0x9480, _r0);   // the language bank first
             vm.ds_write(DS_TEXT_IDX, _tp); }   // sub_12515 tail
           { uint16_t _ti = vm.ds_read(DS_TEXT_IDX);
-            uint8_t* _s1 = v2_m2c_base + 0x9480;
-            vm.ds_write(DS_SCRATCH_34, (uint16_t)_s1[_ti]);
-            vm.ds_write(DS_SCRATCH_36, (uint16_t)_s1[(uint16_t)(_ti + 1)]); }
+            const uint8_t* _s1 = v2_m2c_base + 0x9480;
+            vm.ds_write(DS_SCRATCH_34, (uint16_t)v2_text_byte(_s1, _ti));
+            vm.ds_write(DS_SCRATCH_36, (uint16_t)v2_text_byte(_s1, (uint16_t)(_ti + 1))); }
           vm.ch4_mul_clobber = false;
           const uint16_t _v2v = 0x0000;
           { uint16_t _w14 = vm.ds_read(DS_SCRATCH_34);
@@ -93898,12 +93898,12 @@ static __attribute__((noinline)) bool v2_gen_exec_1c5_p17(V2VM& vm, int& max_ops
           vm.ds_write(DS_MODE_WORD, 0xCF00);   // sub_1250b mode word
           vm.ch4_mul_clobber = false;
           const uint16_t _r0 = 0x00CF;
-          { uint16_t _tp = *(uint16_t*)(v2_m2c_base + 0x9480 + (uint16_t)(_r0 * 2));
+          { uint16_t _tp = v2_text_ptr_of(v2_m2c_base + 0x9480, _r0);   // the language bank first
             vm.ds_write(DS_TEXT_IDX, _tp); }   // sub_12515 tail
           { uint16_t _ti = vm.ds_read(DS_TEXT_IDX);
-            uint8_t* _s1 = v2_m2c_base + 0x9480;
-            vm.ds_write(DS_SCRATCH_34, (uint16_t)_s1[_ti]);
-            vm.ds_write(DS_SCRATCH_36, (uint16_t)_s1[(uint16_t)(_ti + 1)]); }
+            const uint8_t* _s1 = v2_m2c_base + 0x9480;
+            vm.ds_write(DS_SCRATCH_34, (uint16_t)v2_text_byte(_s1, _ti));
+            vm.ds_write(DS_SCRATCH_36, (uint16_t)v2_text_byte(_s1, (uint16_t)(_ti + 1))); }
           vm.ch4_mul_clobber = false;
           const uint16_t _v2v = 0x0000;
           { uint16_t _w14 = vm.ds_read(DS_SCRATCH_34);
@@ -94061,12 +94061,12 @@ static __attribute__((noinline)) bool v2_gen_exec_1c5_p17(V2VM& vm, int& max_ops
           vm.ds_write(DS_MODE_WORD, 0xD000);   // sub_1250b mode word
           vm.ch4_mul_clobber = false;
           const uint16_t _r0 = 0x00D0;
-          { uint16_t _tp = *(uint16_t*)(v2_m2c_base + 0x9480 + (uint16_t)(_r0 * 2));
+          { uint16_t _tp = v2_text_ptr_of(v2_m2c_base + 0x9480, _r0);   // the language bank first
             vm.ds_write(DS_TEXT_IDX, _tp); }   // sub_12515 tail
           { uint16_t _ti = vm.ds_read(DS_TEXT_IDX);
-            uint8_t* _s1 = v2_m2c_base + 0x9480;
-            vm.ds_write(DS_SCRATCH_34, (uint16_t)_s1[_ti]);
-            vm.ds_write(DS_SCRATCH_36, (uint16_t)_s1[(uint16_t)(_ti + 1)]); }
+            const uint8_t* _s1 = v2_m2c_base + 0x9480;
+            vm.ds_write(DS_SCRATCH_34, (uint16_t)v2_text_byte(_s1, _ti));
+            vm.ds_write(DS_SCRATCH_36, (uint16_t)v2_text_byte(_s1, (uint16_t)(_ti + 1))); }
           vm.ch4_mul_clobber = false;
           const uint16_t _v2v = 0x0000;
           { uint16_t _w14 = vm.ds_read(DS_SCRATCH_34);
@@ -94224,12 +94224,12 @@ static __attribute__((noinline)) bool v2_gen_exec_1c5_p17(V2VM& vm, int& max_ops
           vm.ds_write(DS_MODE_WORD, 0xD100);   // sub_1250b mode word
           vm.ch4_mul_clobber = false;
           const uint16_t _r0 = 0x00D1;
-          { uint16_t _tp = *(uint16_t*)(v2_m2c_base + 0x9480 + (uint16_t)(_r0 * 2));
+          { uint16_t _tp = v2_text_ptr_of(v2_m2c_base + 0x9480, _r0);   // the language bank first
             vm.ds_write(DS_TEXT_IDX, _tp); }   // sub_12515 tail
           { uint16_t _ti = vm.ds_read(DS_TEXT_IDX);
-            uint8_t* _s1 = v2_m2c_base + 0x9480;
-            vm.ds_write(DS_SCRATCH_34, (uint16_t)_s1[_ti]);
-            vm.ds_write(DS_SCRATCH_36, (uint16_t)_s1[(uint16_t)(_ti + 1)]); }
+            const uint8_t* _s1 = v2_m2c_base + 0x9480;
+            vm.ds_write(DS_SCRATCH_34, (uint16_t)v2_text_byte(_s1, _ti));
+            vm.ds_write(DS_SCRATCH_36, (uint16_t)v2_text_byte(_s1, (uint16_t)(_ti + 1))); }
           vm.ch4_mul_clobber = false;
           const uint16_t _v2v = 0x0000;
           { uint16_t _w14 = vm.ds_read(DS_SCRATCH_34);
@@ -94408,12 +94408,12 @@ static __attribute__((noinline)) bool v2_gen_exec_1c5_p17(V2VM& vm, int& max_ops
           vm.ds_write(DS_MODE_WORD, 0xD200);   // sub_1250b mode word
           vm.ch4_mul_clobber = false;
           const uint16_t _r0 = 0x00D2;
-          { uint16_t _tp = *(uint16_t*)(v2_m2c_base + 0x9480 + (uint16_t)(_r0 * 2));
+          { uint16_t _tp = v2_text_ptr_of(v2_m2c_base + 0x9480, _r0);   // the language bank first
             vm.ds_write(DS_TEXT_IDX, _tp); }   // sub_12515 tail
           { uint16_t _ti = vm.ds_read(DS_TEXT_IDX);
-            uint8_t* _s1 = v2_m2c_base + 0x9480;
-            vm.ds_write(DS_SCRATCH_34, (uint16_t)_s1[_ti]);
-            vm.ds_write(DS_SCRATCH_36, (uint16_t)_s1[(uint16_t)(_ti + 1)]); }
+            const uint8_t* _s1 = v2_m2c_base + 0x9480;
+            vm.ds_write(DS_SCRATCH_34, (uint16_t)v2_text_byte(_s1, _ti));
+            vm.ds_write(DS_SCRATCH_36, (uint16_t)v2_text_byte(_s1, (uint16_t)(_ti + 1))); }
           vm.ch4_mul_clobber = false;
           const uint16_t _v2v = 0x0001;
           { uint16_t _w14 = vm.ds_read(DS_SCRATCH_34);
@@ -94571,12 +94571,12 @@ static __attribute__((noinline)) bool v2_gen_exec_1c5_p17(V2VM& vm, int& max_ops
           vm.ds_write(DS_MODE_WORD, 0xD300);   // sub_1250b mode word
           vm.ch4_mul_clobber = false;
           const uint16_t _r0 = 0x00D3;
-          { uint16_t _tp = *(uint16_t*)(v2_m2c_base + 0x9480 + (uint16_t)(_r0 * 2));
+          { uint16_t _tp = v2_text_ptr_of(v2_m2c_base + 0x9480, _r0);   // the language bank first
             vm.ds_write(DS_TEXT_IDX, _tp); }   // sub_12515 tail
           { uint16_t _ti = vm.ds_read(DS_TEXT_IDX);
-            uint8_t* _s1 = v2_m2c_base + 0x9480;
-            vm.ds_write(DS_SCRATCH_34, (uint16_t)_s1[_ti]);
-            vm.ds_write(DS_SCRATCH_36, (uint16_t)_s1[(uint16_t)(_ti + 1)]); }
+            const uint8_t* _s1 = v2_m2c_base + 0x9480;
+            vm.ds_write(DS_SCRATCH_34, (uint16_t)v2_text_byte(_s1, _ti));
+            vm.ds_write(DS_SCRATCH_36, (uint16_t)v2_text_byte(_s1, (uint16_t)(_ti + 1))); }
           vm.ch4_mul_clobber = false;
           const uint16_t _v2v = 0x0001;
           { uint16_t _w14 = vm.ds_read(DS_SCRATCH_34);
@@ -94734,12 +94734,12 @@ static __attribute__((noinline)) bool v2_gen_exec_1c5_p17(V2VM& vm, int& max_ops
           vm.ds_write(DS_MODE_WORD, 0xD400);   // sub_1250b mode word
           vm.ch4_mul_clobber = false;
           const uint16_t _r0 = 0x00D4;
-          { uint16_t _tp = *(uint16_t*)(v2_m2c_base + 0x9480 + (uint16_t)(_r0 * 2));
+          { uint16_t _tp = v2_text_ptr_of(v2_m2c_base + 0x9480, _r0);   // the language bank first
             vm.ds_write(DS_TEXT_IDX, _tp); }   // sub_12515 tail
           { uint16_t _ti = vm.ds_read(DS_TEXT_IDX);
-            uint8_t* _s1 = v2_m2c_base + 0x9480;
-            vm.ds_write(DS_SCRATCH_34, (uint16_t)_s1[_ti]);
-            vm.ds_write(DS_SCRATCH_36, (uint16_t)_s1[(uint16_t)(_ti + 1)]); }
+            const uint8_t* _s1 = v2_m2c_base + 0x9480;
+            vm.ds_write(DS_SCRATCH_34, (uint16_t)v2_text_byte(_s1, _ti));
+            vm.ds_write(DS_SCRATCH_36, (uint16_t)v2_text_byte(_s1, (uint16_t)(_ti + 1))); }
           vm.ch4_mul_clobber = false;
           const uint16_t _v2v = 0x0001;
           { uint16_t _w14 = vm.ds_read(DS_SCRATCH_34);
@@ -94918,12 +94918,12 @@ static __attribute__((noinline)) bool v2_gen_exec_1c5_p17(V2VM& vm, int& max_ops
           vm.ds_write(DS_MODE_WORD, 0xD500);   // sub_1250b mode word
           vm.ch4_mul_clobber = false;
           const uint16_t _r0 = 0x00D5;
-          { uint16_t _tp = *(uint16_t*)(v2_m2c_base + 0x9480 + (uint16_t)(_r0 * 2));
+          { uint16_t _tp = v2_text_ptr_of(v2_m2c_base + 0x9480, _r0);   // the language bank first
             vm.ds_write(DS_TEXT_IDX, _tp); }   // sub_12515 tail
           { uint16_t _ti = vm.ds_read(DS_TEXT_IDX);
-            uint8_t* _s1 = v2_m2c_base + 0x9480;
-            vm.ds_write(DS_SCRATCH_34, (uint16_t)_s1[_ti]);
-            vm.ds_write(DS_SCRATCH_36, (uint16_t)_s1[(uint16_t)(_ti + 1)]); }
+            const uint8_t* _s1 = v2_m2c_base + 0x9480;
+            vm.ds_write(DS_SCRATCH_34, (uint16_t)v2_text_byte(_s1, _ti));
+            vm.ds_write(DS_SCRATCH_36, (uint16_t)v2_text_byte(_s1, (uint16_t)(_ti + 1))); }
           vm.ch4_mul_clobber = false;
           const uint16_t _v2v = 0x0002;
           { uint16_t _w14 = vm.ds_read(DS_SCRATCH_34);
@@ -95081,12 +95081,12 @@ static __attribute__((noinline)) bool v2_gen_exec_1c5_p17(V2VM& vm, int& max_ops
           vm.ds_write(DS_MODE_WORD, 0xD600);   // sub_1250b mode word
           vm.ch4_mul_clobber = false;
           const uint16_t _r0 = 0x00D6;
-          { uint16_t _tp = *(uint16_t*)(v2_m2c_base + 0x9480 + (uint16_t)(_r0 * 2));
+          { uint16_t _tp = v2_text_ptr_of(v2_m2c_base + 0x9480, _r0);   // the language bank first
             vm.ds_write(DS_TEXT_IDX, _tp); }   // sub_12515 tail
           { uint16_t _ti = vm.ds_read(DS_TEXT_IDX);
-            uint8_t* _s1 = v2_m2c_base + 0x9480;
-            vm.ds_write(DS_SCRATCH_34, (uint16_t)_s1[_ti]);
-            vm.ds_write(DS_SCRATCH_36, (uint16_t)_s1[(uint16_t)(_ti + 1)]); }
+            const uint8_t* _s1 = v2_m2c_base + 0x9480;
+            vm.ds_write(DS_SCRATCH_34, (uint16_t)v2_text_byte(_s1, _ti));
+            vm.ds_write(DS_SCRATCH_36, (uint16_t)v2_text_byte(_s1, (uint16_t)(_ti + 1))); }
           vm.ch4_mul_clobber = false;
           const uint16_t _v2v = 0x0005;
           { uint16_t _w14 = vm.ds_read(DS_SCRATCH_34);
@@ -95244,12 +95244,12 @@ static __attribute__((noinline)) bool v2_gen_exec_1c5_p17(V2VM& vm, int& max_ops
           vm.ds_write(DS_MODE_WORD, 0xD700);   // sub_1250b mode word
           vm.ch4_mul_clobber = false;
           const uint16_t _r0 = 0x00D7;
-          { uint16_t _tp = *(uint16_t*)(v2_m2c_base + 0x9480 + (uint16_t)(_r0 * 2));
+          { uint16_t _tp = v2_text_ptr_of(v2_m2c_base + 0x9480, _r0);   // the language bank first
             vm.ds_write(DS_TEXT_IDX, _tp); }   // sub_12515 tail
           { uint16_t _ti = vm.ds_read(DS_TEXT_IDX);
-            uint8_t* _s1 = v2_m2c_base + 0x9480;
-            vm.ds_write(DS_SCRATCH_34, (uint16_t)_s1[_ti]);
-            vm.ds_write(DS_SCRATCH_36, (uint16_t)_s1[(uint16_t)(_ti + 1)]); }
+            const uint8_t* _s1 = v2_m2c_base + 0x9480;
+            vm.ds_write(DS_SCRATCH_34, (uint16_t)v2_text_byte(_s1, _ti));
+            vm.ds_write(DS_SCRATCH_36, (uint16_t)v2_text_byte(_s1, (uint16_t)(_ti + 1))); }
           vm.ch4_mul_clobber = false;
           const uint16_t _v2v = 0x0002;
           { uint16_t _w14 = vm.ds_read(DS_SCRATCH_34);
@@ -95336,12 +95336,12 @@ static __attribute__((noinline)) bool v2_gen_exec_1c5_p17(V2VM& vm, int& max_ops
           vm.ds_write(DS_MODE_WORD, 0xD800);   // sub_1250b mode word
           vm.ch4_mul_clobber = false;
           const uint16_t _r0 = 0x00D8;
-          { uint16_t _tp = *(uint16_t*)(v2_m2c_base + 0x9480 + (uint16_t)(_r0 * 2));
+          { uint16_t _tp = v2_text_ptr_of(v2_m2c_base + 0x9480, _r0);   // the language bank first
             vm.ds_write(DS_TEXT_IDX, _tp); }   // sub_12515 tail
           { uint16_t _ti = vm.ds_read(DS_TEXT_IDX);
-            uint8_t* _s1 = v2_m2c_base + 0x9480;
-            vm.ds_write(DS_SCRATCH_34, (uint16_t)_s1[_ti]);
-            vm.ds_write(DS_SCRATCH_36, (uint16_t)_s1[(uint16_t)(_ti + 1)]); }
+            const uint8_t* _s1 = v2_m2c_base + 0x9480;
+            vm.ds_write(DS_SCRATCH_34, (uint16_t)v2_text_byte(_s1, _ti));
+            vm.ds_write(DS_SCRATCH_36, (uint16_t)v2_text_byte(_s1, (uint16_t)(_ti + 1))); }
           vm.ch4_mul_clobber = false;
           const uint16_t _v2v = 0x0002;
           { uint16_t _w14 = vm.ds_read(DS_SCRATCH_34);
@@ -98261,12 +98261,12 @@ static __attribute__((noinline)) bool v2_gen_exec_1c5_p17(V2VM& vm, int& max_ops
           vm.ds_write(DS_MODE_WORD, 0x0D00);   // sub_1250b mode word
           vm.ch4_mul_clobber = false;
           const uint16_t _r0 = 0x010D;
-          { uint16_t _tp = *(uint16_t*)(v2_m2c_base + 0x9480 + (uint16_t)(_r0 * 2));
+          { uint16_t _tp = v2_text_ptr_of(v2_m2c_base + 0x9480, _r0);   // the language bank first
             vm.ds_write(DS_TEXT_IDX, _tp); }   // sub_12515 tail
           { uint16_t _ti = vm.ds_read(DS_TEXT_IDX);
-            uint8_t* _s1 = v2_m2c_base + 0x9480;
-            vm.ds_write(DS_SCRATCH_34, (uint16_t)_s1[_ti]);
-            vm.ds_write(DS_SCRATCH_36, (uint16_t)_s1[(uint16_t)(_ti + 1)]); }
+            const uint8_t* _s1 = v2_m2c_base + 0x9480;
+            vm.ds_write(DS_SCRATCH_34, (uint16_t)v2_text_byte(_s1, _ti));
+            vm.ds_write(DS_SCRATCH_36, (uint16_t)v2_text_byte(_s1, (uint16_t)(_ti + 1))); }
           vm.ch4_mul_clobber = false;
           const uint16_t _v2v = 0x0006;
           vm.ch4_mul_clobber = false;
@@ -98770,12 +98770,12 @@ static __attribute__((noinline)) bool v2_gen_exec_1c5_p17(V2VM& vm, int& max_ops
           vm.ds_write(DS_MODE_WORD, 0xBF00);   // sub_1250b mode word
           vm.ch4_mul_clobber = false;
           const uint16_t _r0 = 0x00BF;
-          { uint16_t _tp = *(uint16_t*)(v2_m2c_base + 0x9480 + (uint16_t)(_r0 * 2));
+          { uint16_t _tp = v2_text_ptr_of(v2_m2c_base + 0x9480, _r0);   // the language bank first
             vm.ds_write(DS_TEXT_IDX, _tp); }   // sub_12515 tail
           { uint16_t _ti = vm.ds_read(DS_TEXT_IDX);
-            uint8_t* _s1 = v2_m2c_base + 0x9480;
-            vm.ds_write(DS_SCRATCH_34, (uint16_t)_s1[_ti]);
-            vm.ds_write(DS_SCRATCH_36, (uint16_t)_s1[(uint16_t)(_ti + 1)]); }
+            const uint8_t* _s1 = v2_m2c_base + 0x9480;
+            vm.ds_write(DS_SCRATCH_34, (uint16_t)v2_text_byte(_s1, _ti));
+            vm.ds_write(DS_SCRATCH_36, (uint16_t)v2_text_byte(_s1, (uint16_t)(_ti + 1))); }
           vm.ch4_mul_clobber = false;
           const uint16_t _v2v = 0x0001;
           { uint16_t _w14 = vm.ds_read(DS_SCRATCH_34);
@@ -98933,12 +98933,12 @@ static __attribute__((noinline)) bool v2_gen_exec_1c5_p17(V2VM& vm, int& max_ops
           vm.ds_write(DS_MODE_WORD, 0xC000);   // sub_1250b mode word
           vm.ch4_mul_clobber = false;
           const uint16_t _r0 = 0x00C0;
-          { uint16_t _tp = *(uint16_t*)(v2_m2c_base + 0x9480 + (uint16_t)(_r0 * 2));
+          { uint16_t _tp = v2_text_ptr_of(v2_m2c_base + 0x9480, _r0);   // the language bank first
             vm.ds_write(DS_TEXT_IDX, _tp); }   // sub_12515 tail
           { uint16_t _ti = vm.ds_read(DS_TEXT_IDX);
-            uint8_t* _s1 = v2_m2c_base + 0x9480;
-            vm.ds_write(DS_SCRATCH_34, (uint16_t)_s1[_ti]);
-            vm.ds_write(DS_SCRATCH_36, (uint16_t)_s1[(uint16_t)(_ti + 1)]); }
+            const uint8_t* _s1 = v2_m2c_base + 0x9480;
+            vm.ds_write(DS_SCRATCH_34, (uint16_t)v2_text_byte(_s1, _ti));
+            vm.ds_write(DS_SCRATCH_36, (uint16_t)v2_text_byte(_s1, (uint16_t)(_ti + 1))); }
           vm.ch4_mul_clobber = false;
           const uint16_t _v2v = 0x0004;
           { uint16_t _w14 = vm.ds_read(DS_SCRATCH_34);
@@ -99096,12 +99096,12 @@ static __attribute__((noinline)) bool v2_gen_exec_1c5_p17(V2VM& vm, int& max_ops
           vm.ds_write(DS_MODE_WORD, 0xC100);   // sub_1250b mode word
           vm.ch4_mul_clobber = false;
           const uint16_t _r0 = 0x00C1;
-          { uint16_t _tp = *(uint16_t*)(v2_m2c_base + 0x9480 + (uint16_t)(_r0 * 2));
+          { uint16_t _tp = v2_text_ptr_of(v2_m2c_base + 0x9480, _r0);   // the language bank first
             vm.ds_write(DS_TEXT_IDX, _tp); }   // sub_12515 tail
           { uint16_t _ti = vm.ds_read(DS_TEXT_IDX);
-            uint8_t* _s1 = v2_m2c_base + 0x9480;
-            vm.ds_write(DS_SCRATCH_34, (uint16_t)_s1[_ti]);
-            vm.ds_write(DS_SCRATCH_36, (uint16_t)_s1[(uint16_t)(_ti + 1)]); }
+            const uint8_t* _s1 = v2_m2c_base + 0x9480;
+            vm.ds_write(DS_SCRATCH_34, (uint16_t)v2_text_byte(_s1, _ti));
+            vm.ds_write(DS_SCRATCH_36, (uint16_t)v2_text_byte(_s1, (uint16_t)(_ti + 1))); }
           vm.ch4_mul_clobber = false;
           const uint16_t _v2v = 0x0001;
           { uint16_t _w14 = vm.ds_read(DS_SCRATCH_34);
@@ -99975,12 +99975,12 @@ static __attribute__((noinline)) bool v2_gen_exec_1c5_p18(V2VM& vm, int& max_ops
           vm.ds_write(DS_MODE_WORD, 0x1900);   // sub_1250b mode word
           vm.ch4_mul_clobber = false;
           const uint16_t _r0 = 0x0119;
-          { uint16_t _tp = *(uint16_t*)(v2_m2c_base + 0x9480 + (uint16_t)(_r0 * 2));
+          { uint16_t _tp = v2_text_ptr_of(v2_m2c_base + 0x9480, _r0);   // the language bank first
             vm.ds_write(DS_TEXT_IDX, _tp); }   // sub_12515 tail
           { uint16_t _ti = vm.ds_read(DS_TEXT_IDX);
-            uint8_t* _s1 = v2_m2c_base + 0x9480;
-            vm.ds_write(DS_SCRATCH_34, (uint16_t)_s1[_ti]);
-            vm.ds_write(DS_SCRATCH_36, (uint16_t)_s1[(uint16_t)(_ti + 1)]); }
+            const uint8_t* _s1 = v2_m2c_base + 0x9480;
+            vm.ds_write(DS_SCRATCH_34, (uint16_t)v2_text_byte(_s1, _ti));
+            vm.ds_write(DS_SCRATCH_36, (uint16_t)v2_text_byte(_s1, (uint16_t)(_ti + 1))); }
           vm.ch4_mul_clobber = false;
           const uint16_t _v2v = 0x0000;
           { uint16_t _w14 = vm.ds_read(DS_SCRATCH_34);
@@ -100138,12 +100138,12 @@ static __attribute__((noinline)) bool v2_gen_exec_1c5_p18(V2VM& vm, int& max_ops
           vm.ds_write(DS_MODE_WORD, 0x1A08);   // sub_1250b mode word
           vm.ch4_mul_clobber = false;
           const uint16_t _r0 = 0x011A;
-          { uint16_t _tp = *(uint16_t*)(v2_m2c_base + 0x9480 + (uint16_t)(_r0 * 2));
+          { uint16_t _tp = v2_text_ptr_of(v2_m2c_base + 0x9480, _r0);   // the language bank first
             vm.ds_write(DS_TEXT_IDX, _tp); }   // sub_12515 tail
           { uint16_t _ti = vm.ds_read(DS_TEXT_IDX);
-            uint8_t* _s1 = v2_m2c_base + 0x9480;
-            vm.ds_write(DS_SCRATCH_34, (uint16_t)_s1[_ti]);
-            vm.ds_write(DS_SCRATCH_36, (uint16_t)_s1[(uint16_t)(_ti + 1)]); }
+            const uint8_t* _s1 = v2_m2c_base + 0x9480;
+            vm.ds_write(DS_SCRATCH_34, (uint16_t)v2_text_byte(_s1, _ti));
+            vm.ds_write(DS_SCRATCH_36, (uint16_t)v2_text_byte(_s1, (uint16_t)(_ti + 1))); }
           vm.ch4_mul_clobber = false;
           uint16_t _v2v_a = (uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x187D) /* self.state_187d */;
           vm.si_track = (uint16_t)(_v2v_a - OBJ_FIELD_BASE);
@@ -100232,12 +100232,12 @@ static __attribute__((noinline)) bool v2_gen_exec_1c5_p18(V2VM& vm, int& max_ops
           vm.ds_write(DS_MODE_WORD, 0x1B08);   // sub_1250b mode word
           vm.ch4_mul_clobber = false;
           const uint16_t _r0 = 0x011B;
-          { uint16_t _tp = *(uint16_t*)(v2_m2c_base + 0x9480 + (uint16_t)(_r0 * 2));
+          { uint16_t _tp = v2_text_ptr_of(v2_m2c_base + 0x9480, _r0);   // the language bank first
             vm.ds_write(DS_TEXT_IDX, _tp); }   // sub_12515 tail
           { uint16_t _ti = vm.ds_read(DS_TEXT_IDX);
-            uint8_t* _s1 = v2_m2c_base + 0x9480;
-            vm.ds_write(DS_SCRATCH_34, (uint16_t)_s1[_ti]);
-            vm.ds_write(DS_SCRATCH_36, (uint16_t)_s1[(uint16_t)(_ti + 1)]); }
+            const uint8_t* _s1 = v2_m2c_base + 0x9480;
+            vm.ds_write(DS_SCRATCH_34, (uint16_t)v2_text_byte(_s1, _ti));
+            vm.ds_write(DS_SCRATCH_36, (uint16_t)v2_text_byte(_s1, (uint16_t)(_ti + 1))); }
           vm.ch4_mul_clobber = false;
           uint16_t _v2v_a = (uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x187D) /* self.state_187d */;
           vm.si_track = (uint16_t)(_v2v_a - OBJ_FIELD_BASE);
@@ -100397,12 +100397,12 @@ static __attribute__((noinline)) bool v2_gen_exec_1c5_p18(V2VM& vm, int& max_ops
           vm.ds_write(DS_MODE_WORD, 0x1C08);   // sub_1250b mode word
           vm.ch4_mul_clobber = false;
           const uint16_t _r0 = 0x011C;
-          { uint16_t _tp = *(uint16_t*)(v2_m2c_base + 0x9480 + (uint16_t)(_r0 * 2));
+          { uint16_t _tp = v2_text_ptr_of(v2_m2c_base + 0x9480, _r0);   // the language bank first
             vm.ds_write(DS_TEXT_IDX, _tp); }   // sub_12515 tail
           { uint16_t _ti = vm.ds_read(DS_TEXT_IDX);
-            uint8_t* _s1 = v2_m2c_base + 0x9480;
-            vm.ds_write(DS_SCRATCH_34, (uint16_t)_s1[_ti]);
-            vm.ds_write(DS_SCRATCH_36, (uint16_t)_s1[(uint16_t)(_ti + 1)]); }
+            const uint8_t* _s1 = v2_m2c_base + 0x9480;
+            vm.ds_write(DS_SCRATCH_34, (uint16_t)v2_text_byte(_s1, _ti));
+            vm.ds_write(DS_SCRATCH_36, (uint16_t)v2_text_byte(_s1, (uint16_t)(_ti + 1))); }
           vm.ch4_mul_clobber = false;
           uint16_t _v2v_a = (uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x187D) /* self.state_187d */;
           vm.si_track = (uint16_t)(_v2v_a - OBJ_FIELD_BASE);
@@ -100568,12 +100568,12 @@ static __attribute__((noinline)) bool v2_gen_exec_1c5_p18(V2VM& vm, int& max_ops
           vm.ds_write(DS_MODE_WORD, 0x1D00);   // sub_1250b mode word
           vm.ch4_mul_clobber = false;
           const uint16_t _r0 = 0x011D;
-          { uint16_t _tp = *(uint16_t*)(v2_m2c_base + 0x9480 + (uint16_t)(_r0 * 2));
+          { uint16_t _tp = v2_text_ptr_of(v2_m2c_base + 0x9480, _r0);   // the language bank first
             vm.ds_write(DS_TEXT_IDX, _tp); }   // sub_12515 tail
           { uint16_t _ti = vm.ds_read(DS_TEXT_IDX);
-            uint8_t* _s1 = v2_m2c_base + 0x9480;
-            vm.ds_write(DS_SCRATCH_34, (uint16_t)_s1[_ti]);
-            vm.ds_write(DS_SCRATCH_36, (uint16_t)_s1[(uint16_t)(_ti + 1)]); }
+            const uint8_t* _s1 = v2_m2c_base + 0x9480;
+            vm.ds_write(DS_SCRATCH_34, (uint16_t)v2_text_byte(_s1, _ti));
+            vm.ds_write(DS_SCRATCH_36, (uint16_t)v2_text_byte(_s1, (uint16_t)(_ti + 1))); }
           vm.ch4_mul_clobber = false;
           const uint16_t _v2v = 0x0000;
           { uint16_t _w14 = vm.ds_read(DS_SCRATCH_34);
@@ -100731,12 +100731,12 @@ static __attribute__((noinline)) bool v2_gen_exec_1c5_p18(V2VM& vm, int& max_ops
           vm.ds_write(DS_MODE_WORD, 0x1E08);   // sub_1250b mode word
           vm.ch4_mul_clobber = false;
           const uint16_t _r0 = 0x011E;
-          { uint16_t _tp = *(uint16_t*)(v2_m2c_base + 0x9480 + (uint16_t)(_r0 * 2));
+          { uint16_t _tp = v2_text_ptr_of(v2_m2c_base + 0x9480, _r0);   // the language bank first
             vm.ds_write(DS_TEXT_IDX, _tp); }   // sub_12515 tail
           { uint16_t _ti = vm.ds_read(DS_TEXT_IDX);
-            uint8_t* _s1 = v2_m2c_base + 0x9480;
-            vm.ds_write(DS_SCRATCH_34, (uint16_t)_s1[_ti]);
-            vm.ds_write(DS_SCRATCH_36, (uint16_t)_s1[(uint16_t)(_ti + 1)]); }
+            const uint8_t* _s1 = v2_m2c_base + 0x9480;
+            vm.ds_write(DS_SCRATCH_34, (uint16_t)v2_text_byte(_s1, _ti));
+            vm.ds_write(DS_SCRATCH_36, (uint16_t)v2_text_byte(_s1, (uint16_t)(_ti + 1))); }
           vm.ch4_mul_clobber = false;
           uint16_t _v2v_a = (uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x187D) /* self.state_187d */;
           vm.si_track = (uint16_t)(_v2v_a - OBJ_FIELD_BASE);
@@ -100896,12 +100896,12 @@ static __attribute__((noinline)) bool v2_gen_exec_1c5_p18(V2VM& vm, int& max_ops
           vm.ds_write(DS_MODE_WORD, 0x1F08);   // sub_1250b mode word
           vm.ch4_mul_clobber = false;
           const uint16_t _r0 = 0x011F;
-          { uint16_t _tp = *(uint16_t*)(v2_m2c_base + 0x9480 + (uint16_t)(_r0 * 2));
+          { uint16_t _tp = v2_text_ptr_of(v2_m2c_base + 0x9480, _r0);   // the language bank first
             vm.ds_write(DS_TEXT_IDX, _tp); }   // sub_12515 tail
           { uint16_t _ti = vm.ds_read(DS_TEXT_IDX);
-            uint8_t* _s1 = v2_m2c_base + 0x9480;
-            vm.ds_write(DS_SCRATCH_34, (uint16_t)_s1[_ti]);
-            vm.ds_write(DS_SCRATCH_36, (uint16_t)_s1[(uint16_t)(_ti + 1)]); }
+            const uint8_t* _s1 = v2_m2c_base + 0x9480;
+            vm.ds_write(DS_SCRATCH_34, (uint16_t)v2_text_byte(_s1, _ti));
+            vm.ds_write(DS_SCRATCH_36, (uint16_t)v2_text_byte(_s1, (uint16_t)(_ti + 1))); }
           vm.ch4_mul_clobber = false;
           uint16_t _v2v_a = (uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x187D) /* self.state_187d */;
           vm.si_track = (uint16_t)(_v2v_a - OBJ_FIELD_BASE);
@@ -101067,12 +101067,12 @@ static __attribute__((noinline)) bool v2_gen_exec_1c5_p18(V2VM& vm, int& max_ops
           vm.ds_write(DS_MODE_WORD, 0x2008);   // sub_1250b mode word
           vm.ch4_mul_clobber = false;
           const uint16_t _r0 = 0x0120;
-          { uint16_t _tp = *(uint16_t*)(v2_m2c_base + 0x9480 + (uint16_t)(_r0 * 2));
+          { uint16_t _tp = v2_text_ptr_of(v2_m2c_base + 0x9480, _r0);   // the language bank first
             vm.ds_write(DS_TEXT_IDX, _tp); }   // sub_12515 tail
           { uint16_t _ti = vm.ds_read(DS_TEXT_IDX);
-            uint8_t* _s1 = v2_m2c_base + 0x9480;
-            vm.ds_write(DS_SCRATCH_34, (uint16_t)_s1[_ti]);
-            vm.ds_write(DS_SCRATCH_36, (uint16_t)_s1[(uint16_t)(_ti + 1)]); }
+            const uint8_t* _s1 = v2_m2c_base + 0x9480;
+            vm.ds_write(DS_SCRATCH_34, (uint16_t)v2_text_byte(_s1, _ti));
+            vm.ds_write(DS_SCRATCH_36, (uint16_t)v2_text_byte(_s1, (uint16_t)(_ti + 1))); }
           vm.ch4_mul_clobber = false;
           uint16_t _v2v_a = (uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x187D) /* self.state_187d */;
           vm.si_track = (uint16_t)(_v2v_a - OBJ_FIELD_BASE);
@@ -101232,12 +101232,12 @@ static __attribute__((noinline)) bool v2_gen_exec_1c5_p18(V2VM& vm, int& max_ops
           vm.ds_write(DS_MODE_WORD, 0x2108);   // sub_1250b mode word
           vm.ch4_mul_clobber = false;
           const uint16_t _r0 = 0x0121;
-          { uint16_t _tp = *(uint16_t*)(v2_m2c_base + 0x9480 + (uint16_t)(_r0 * 2));
+          { uint16_t _tp = v2_text_ptr_of(v2_m2c_base + 0x9480, _r0);   // the language bank first
             vm.ds_write(DS_TEXT_IDX, _tp); }   // sub_12515 tail
           { uint16_t _ti = vm.ds_read(DS_TEXT_IDX);
-            uint8_t* _s1 = v2_m2c_base + 0x9480;
-            vm.ds_write(DS_SCRATCH_34, (uint16_t)_s1[_ti]);
-            vm.ds_write(DS_SCRATCH_36, (uint16_t)_s1[(uint16_t)(_ti + 1)]); }
+            const uint8_t* _s1 = v2_m2c_base + 0x9480;
+            vm.ds_write(DS_SCRATCH_34, (uint16_t)v2_text_byte(_s1, _ti));
+            vm.ds_write(DS_SCRATCH_36, (uint16_t)v2_text_byte(_s1, (uint16_t)(_ti + 1))); }
           vm.ch4_mul_clobber = false;
           uint16_t _v2v_a = (uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x187D) /* self.state_187d */;
           vm.si_track = (uint16_t)(_v2v_a - OBJ_FIELD_BASE);
@@ -101397,12 +101397,12 @@ static __attribute__((noinline)) bool v2_gen_exec_1c5_p18(V2VM& vm, int& max_ops
           vm.ds_write(DS_MODE_WORD, 0x2200);   // sub_1250b mode word
           vm.ch4_mul_clobber = false;
           const uint16_t _r0 = 0x0122;
-          { uint16_t _tp = *(uint16_t*)(v2_m2c_base + 0x9480 + (uint16_t)(_r0 * 2));
+          { uint16_t _tp = v2_text_ptr_of(v2_m2c_base + 0x9480, _r0);   // the language bank first
             vm.ds_write(DS_TEXT_IDX, _tp); }   // sub_12515 tail
           { uint16_t _ti = vm.ds_read(DS_TEXT_IDX);
-            uint8_t* _s1 = v2_m2c_base + 0x9480;
-            vm.ds_write(DS_SCRATCH_34, (uint16_t)_s1[_ti]);
-            vm.ds_write(DS_SCRATCH_36, (uint16_t)_s1[(uint16_t)(_ti + 1)]); }
+            const uint8_t* _s1 = v2_m2c_base + 0x9480;
+            vm.ds_write(DS_SCRATCH_34, (uint16_t)v2_text_byte(_s1, _ti));
+            vm.ds_write(DS_SCRATCH_36, (uint16_t)v2_text_byte(_s1, (uint16_t)(_ti + 1))); }
           vm.ch4_mul_clobber = false;
           const uint16_t _v2v = 0x0000;
           { uint16_t _w14 = vm.ds_read(DS_SCRATCH_34);
@@ -101560,12 +101560,12 @@ static __attribute__((noinline)) bool v2_gen_exec_1c5_p18(V2VM& vm, int& max_ops
           vm.ds_write(DS_MODE_WORD, 0x2308);   // sub_1250b mode word
           vm.ch4_mul_clobber = false;
           const uint16_t _r0 = 0x0123;
-          { uint16_t _tp = *(uint16_t*)(v2_m2c_base + 0x9480 + (uint16_t)(_r0 * 2));
+          { uint16_t _tp = v2_text_ptr_of(v2_m2c_base + 0x9480, _r0);   // the language bank first
             vm.ds_write(DS_TEXT_IDX, _tp); }   // sub_12515 tail
           { uint16_t _ti = vm.ds_read(DS_TEXT_IDX);
-            uint8_t* _s1 = v2_m2c_base + 0x9480;
-            vm.ds_write(DS_SCRATCH_34, (uint16_t)_s1[_ti]);
-            vm.ds_write(DS_SCRATCH_36, (uint16_t)_s1[(uint16_t)(_ti + 1)]); }
+            const uint8_t* _s1 = v2_m2c_base + 0x9480;
+            vm.ds_write(DS_SCRATCH_34, (uint16_t)v2_text_byte(_s1, _ti));
+            vm.ds_write(DS_SCRATCH_36, (uint16_t)v2_text_byte(_s1, (uint16_t)(_ti + 1))); }
           vm.ch4_mul_clobber = false;
           uint16_t _v2v_a = (uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x187D) /* self.state_187d */;
           vm.si_track = (uint16_t)(_v2v_a - OBJ_FIELD_BASE);
@@ -101731,12 +101731,12 @@ static __attribute__((noinline)) bool v2_gen_exec_1c5_p18(V2VM& vm, int& max_ops
           vm.ds_write(DS_MODE_WORD, 0x2400);   // sub_1250b mode word
           vm.ch4_mul_clobber = false;
           const uint16_t _r0 = 0x0124;
-          { uint16_t _tp = *(uint16_t*)(v2_m2c_base + 0x9480 + (uint16_t)(_r0 * 2));
+          { uint16_t _tp = v2_text_ptr_of(v2_m2c_base + 0x9480, _r0);   // the language bank first
             vm.ds_write(DS_TEXT_IDX, _tp); }   // sub_12515 tail
           { uint16_t _ti = vm.ds_read(DS_TEXT_IDX);
-            uint8_t* _s1 = v2_m2c_base + 0x9480;
-            vm.ds_write(DS_SCRATCH_34, (uint16_t)_s1[_ti]);
-            vm.ds_write(DS_SCRATCH_36, (uint16_t)_s1[(uint16_t)(_ti + 1)]); }
+            const uint8_t* _s1 = v2_m2c_base + 0x9480;
+            vm.ds_write(DS_SCRATCH_34, (uint16_t)v2_text_byte(_s1, _ti));
+            vm.ds_write(DS_SCRATCH_36, (uint16_t)v2_text_byte(_s1, (uint16_t)(_ti + 1))); }
           vm.ch4_mul_clobber = false;
           const uint16_t _v2v = 0x0000;
           { uint16_t _w14 = vm.ds_read(DS_SCRATCH_34);
@@ -101894,12 +101894,12 @@ static __attribute__((noinline)) bool v2_gen_exec_1c5_p18(V2VM& vm, int& max_ops
           vm.ds_write(DS_MODE_WORD, 0x2508);   // sub_1250b mode word
           vm.ch4_mul_clobber = false;
           const uint16_t _r0 = 0x0125;
-          { uint16_t _tp = *(uint16_t*)(v2_m2c_base + 0x9480 + (uint16_t)(_r0 * 2));
+          { uint16_t _tp = v2_text_ptr_of(v2_m2c_base + 0x9480, _r0);   // the language bank first
             vm.ds_write(DS_TEXT_IDX, _tp); }   // sub_12515 tail
           { uint16_t _ti = vm.ds_read(DS_TEXT_IDX);
-            uint8_t* _s1 = v2_m2c_base + 0x9480;
-            vm.ds_write(DS_SCRATCH_34, (uint16_t)_s1[_ti]);
-            vm.ds_write(DS_SCRATCH_36, (uint16_t)_s1[(uint16_t)(_ti + 1)]); }
+            const uint8_t* _s1 = v2_m2c_base + 0x9480;
+            vm.ds_write(DS_SCRATCH_34, (uint16_t)v2_text_byte(_s1, _ti));
+            vm.ds_write(DS_SCRATCH_36, (uint16_t)v2_text_byte(_s1, (uint16_t)(_ti + 1))); }
           vm.ch4_mul_clobber = false;
           uint16_t _v2v_a = (uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x187D) /* self.state_187d */;
           vm.si_track = (uint16_t)(_v2v_a - OBJ_FIELD_BASE);
@@ -102059,12 +102059,12 @@ static __attribute__((noinline)) bool v2_gen_exec_1c5_p18(V2VM& vm, int& max_ops
           vm.ds_write(DS_MODE_WORD, 0x2608);   // sub_1250b mode word
           vm.ch4_mul_clobber = false;
           const uint16_t _r0 = 0x0126;
-          { uint16_t _tp = *(uint16_t*)(v2_m2c_base + 0x9480 + (uint16_t)(_r0 * 2));
+          { uint16_t _tp = v2_text_ptr_of(v2_m2c_base + 0x9480, _r0);   // the language bank first
             vm.ds_write(DS_TEXT_IDX, _tp); }   // sub_12515 tail
           { uint16_t _ti = vm.ds_read(DS_TEXT_IDX);
-            uint8_t* _s1 = v2_m2c_base + 0x9480;
-            vm.ds_write(DS_SCRATCH_34, (uint16_t)_s1[_ti]);
-            vm.ds_write(DS_SCRATCH_36, (uint16_t)_s1[(uint16_t)(_ti + 1)]); }
+            const uint8_t* _s1 = v2_m2c_base + 0x9480;
+            vm.ds_write(DS_SCRATCH_34, (uint16_t)v2_text_byte(_s1, _ti));
+            vm.ds_write(DS_SCRATCH_36, (uint16_t)v2_text_byte(_s1, (uint16_t)(_ti + 1))); }
           vm.ch4_mul_clobber = false;
           uint16_t _v2v_a = (uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x187D) /* self.state_187d */;
           vm.si_track = (uint16_t)(_v2v_a - OBJ_FIELD_BASE);
@@ -102224,12 +102224,12 @@ static __attribute__((noinline)) bool v2_gen_exec_1c5_p18(V2VM& vm, int& max_ops
           vm.ds_write(DS_MODE_WORD, 0x2700);   // sub_1250b mode word
           vm.ch4_mul_clobber = false;
           const uint16_t _r0 = 0x0127;
-          { uint16_t _tp = *(uint16_t*)(v2_m2c_base + 0x9480 + (uint16_t)(_r0 * 2));
+          { uint16_t _tp = v2_text_ptr_of(v2_m2c_base + 0x9480, _r0);   // the language bank first
             vm.ds_write(DS_TEXT_IDX, _tp); }   // sub_12515 tail
           { uint16_t _ti = vm.ds_read(DS_TEXT_IDX);
-            uint8_t* _s1 = v2_m2c_base + 0x9480;
-            vm.ds_write(DS_SCRATCH_34, (uint16_t)_s1[_ti]);
-            vm.ds_write(DS_SCRATCH_36, (uint16_t)_s1[(uint16_t)(_ti + 1)]); }
+            const uint8_t* _s1 = v2_m2c_base + 0x9480;
+            vm.ds_write(DS_SCRATCH_34, (uint16_t)v2_text_byte(_s1, _ti));
+            vm.ds_write(DS_SCRATCH_36, (uint16_t)v2_text_byte(_s1, (uint16_t)(_ti + 1))); }
           vm.ch4_mul_clobber = false;
           const uint16_t _v2v = 0x0000;
           { uint16_t _w14 = vm.ds_read(DS_SCRATCH_34);
@@ -102393,12 +102393,12 @@ static __attribute__((noinline)) bool v2_gen_exec_1c5_p18(V2VM& vm, int& max_ops
           vm.ds_write(DS_MODE_WORD, 0x2808);   // sub_1250b mode word
           vm.ch4_mul_clobber = false;
           const uint16_t _r0 = 0x0128;
-          { uint16_t _tp = *(uint16_t*)(v2_m2c_base + 0x9480 + (uint16_t)(_r0 * 2));
+          { uint16_t _tp = v2_text_ptr_of(v2_m2c_base + 0x9480, _r0);   // the language bank first
             vm.ds_write(DS_TEXT_IDX, _tp); }   // sub_12515 tail
           { uint16_t _ti = vm.ds_read(DS_TEXT_IDX);
-            uint8_t* _s1 = v2_m2c_base + 0x9480;
-            vm.ds_write(DS_SCRATCH_34, (uint16_t)_s1[_ti]);
-            vm.ds_write(DS_SCRATCH_36, (uint16_t)_s1[(uint16_t)(_ti + 1)]); }
+            const uint8_t* _s1 = v2_m2c_base + 0x9480;
+            vm.ds_write(DS_SCRATCH_34, (uint16_t)v2_text_byte(_s1, _ti));
+            vm.ds_write(DS_SCRATCH_36, (uint16_t)v2_text_byte(_s1, (uint16_t)(_ti + 1))); }
           vm.ch4_mul_clobber = false;
           uint16_t _v2v_a = (uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x187D) /* self.state_187d */;
           vm.si_track = (uint16_t)(_v2v_a - OBJ_FIELD_BASE);
@@ -102558,12 +102558,12 @@ static __attribute__((noinline)) bool v2_gen_exec_1c5_p18(V2VM& vm, int& max_ops
           vm.ds_write(DS_MODE_WORD, 0x2900);   // sub_1250b mode word
           vm.ch4_mul_clobber = false;
           const uint16_t _r0 = 0x0129;
-          { uint16_t _tp = *(uint16_t*)(v2_m2c_base + 0x9480 + (uint16_t)(_r0 * 2));
+          { uint16_t _tp = v2_text_ptr_of(v2_m2c_base + 0x9480, _r0);   // the language bank first
             vm.ds_write(DS_TEXT_IDX, _tp); }   // sub_12515 tail
           { uint16_t _ti = vm.ds_read(DS_TEXT_IDX);
-            uint8_t* _s1 = v2_m2c_base + 0x9480;
-            vm.ds_write(DS_SCRATCH_34, (uint16_t)_s1[_ti]);
-            vm.ds_write(DS_SCRATCH_36, (uint16_t)_s1[(uint16_t)(_ti + 1)]); }
+            const uint8_t* _s1 = v2_m2c_base + 0x9480;
+            vm.ds_write(DS_SCRATCH_34, (uint16_t)v2_text_byte(_s1, _ti));
+            vm.ds_write(DS_SCRATCH_36, (uint16_t)v2_text_byte(_s1, (uint16_t)(_ti + 1))); }
           vm.ch4_mul_clobber = false;
           const uint16_t _v2v = 0x0000;
           { uint16_t _w14 = vm.ds_read(DS_SCRATCH_34);
@@ -102721,12 +102721,12 @@ static __attribute__((noinline)) bool v2_gen_exec_1c5_p18(V2VM& vm, int& max_ops
           vm.ds_write(DS_MODE_WORD, 0x2A08);   // sub_1250b mode word
           vm.ch4_mul_clobber = false;
           const uint16_t _r0 = 0x012A;
-          { uint16_t _tp = *(uint16_t*)(v2_m2c_base + 0x9480 + (uint16_t)(_r0 * 2));
+          { uint16_t _tp = v2_text_ptr_of(v2_m2c_base + 0x9480, _r0);   // the language bank first
             vm.ds_write(DS_TEXT_IDX, _tp); }   // sub_12515 tail
           { uint16_t _ti = vm.ds_read(DS_TEXT_IDX);
-            uint8_t* _s1 = v2_m2c_base + 0x9480;
-            vm.ds_write(DS_SCRATCH_34, (uint16_t)_s1[_ti]);
-            vm.ds_write(DS_SCRATCH_36, (uint16_t)_s1[(uint16_t)(_ti + 1)]); }
+            const uint8_t* _s1 = v2_m2c_base + 0x9480;
+            vm.ds_write(DS_SCRATCH_34, (uint16_t)v2_text_byte(_s1, _ti));
+            vm.ds_write(DS_SCRATCH_36, (uint16_t)v2_text_byte(_s1, (uint16_t)(_ti + 1))); }
           vm.ch4_mul_clobber = false;
           uint16_t _v2v_a = (uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x187D) /* self.state_187d */;
           vm.si_track = (uint16_t)(_v2v_a - OBJ_FIELD_BASE);
@@ -102892,12 +102892,12 @@ static __attribute__((noinline)) bool v2_gen_exec_1c5_p18(V2VM& vm, int& max_ops
           vm.ds_write(DS_MODE_WORD, 0x2B08);   // sub_1250b mode word
           vm.ch4_mul_clobber = false;
           const uint16_t _r0 = 0x012B;
-          { uint16_t _tp = *(uint16_t*)(v2_m2c_base + 0x9480 + (uint16_t)(_r0 * 2));
+          { uint16_t _tp = v2_text_ptr_of(v2_m2c_base + 0x9480, _r0);   // the language bank first
             vm.ds_write(DS_TEXT_IDX, _tp); }   // sub_12515 tail
           { uint16_t _ti = vm.ds_read(DS_TEXT_IDX);
-            uint8_t* _s1 = v2_m2c_base + 0x9480;
-            vm.ds_write(DS_SCRATCH_34, (uint16_t)_s1[_ti]);
-            vm.ds_write(DS_SCRATCH_36, (uint16_t)_s1[(uint16_t)(_ti + 1)]); }
+            const uint8_t* _s1 = v2_m2c_base + 0x9480;
+            vm.ds_write(DS_SCRATCH_34, (uint16_t)v2_text_byte(_s1, _ti));
+            vm.ds_write(DS_SCRATCH_36, (uint16_t)v2_text_byte(_s1, (uint16_t)(_ti + 1))); }
           vm.ch4_mul_clobber = false;
           uint16_t _v2v_a = (uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x187D) /* self.state_187d */;
           vm.si_track = (uint16_t)(_v2v_a - OBJ_FIELD_BASE);
@@ -103057,12 +103057,12 @@ static __attribute__((noinline)) bool v2_gen_exec_1c5_p18(V2VM& vm, int& max_ops
           vm.ds_write(DS_MODE_WORD, 0x2C00);   // sub_1250b mode word
           vm.ch4_mul_clobber = false;
           const uint16_t _r0 = 0x012C;
-          { uint16_t _tp = *(uint16_t*)(v2_m2c_base + 0x9480 + (uint16_t)(_r0 * 2));
+          { uint16_t _tp = v2_text_ptr_of(v2_m2c_base + 0x9480, _r0);   // the language bank first
             vm.ds_write(DS_TEXT_IDX, _tp); }   // sub_12515 tail
           { uint16_t _ti = vm.ds_read(DS_TEXT_IDX);
-            uint8_t* _s1 = v2_m2c_base + 0x9480;
-            vm.ds_write(DS_SCRATCH_34, (uint16_t)_s1[_ti]);
-            vm.ds_write(DS_SCRATCH_36, (uint16_t)_s1[(uint16_t)(_ti + 1)]); }
+            const uint8_t* _s1 = v2_m2c_base + 0x9480;
+            vm.ds_write(DS_SCRATCH_34, (uint16_t)v2_text_byte(_s1, _ti));
+            vm.ds_write(DS_SCRATCH_36, (uint16_t)v2_text_byte(_s1, (uint16_t)(_ti + 1))); }
           vm.ch4_mul_clobber = false;
           const uint16_t _v2v = 0x0000;
           { uint16_t _w14 = vm.ds_read(DS_SCRATCH_34);
@@ -103220,12 +103220,12 @@ static __attribute__((noinline)) bool v2_gen_exec_1c5_p18(V2VM& vm, int& max_ops
           vm.ds_write(DS_MODE_WORD, 0x2D08);   // sub_1250b mode word
           vm.ch4_mul_clobber = false;
           const uint16_t _r0 = 0x012D;
-          { uint16_t _tp = *(uint16_t*)(v2_m2c_base + 0x9480 + (uint16_t)(_r0 * 2));
+          { uint16_t _tp = v2_text_ptr_of(v2_m2c_base + 0x9480, _r0);   // the language bank first
             vm.ds_write(DS_TEXT_IDX, _tp); }   // sub_12515 tail
           { uint16_t _ti = vm.ds_read(DS_TEXT_IDX);
-            uint8_t* _s1 = v2_m2c_base + 0x9480;
-            vm.ds_write(DS_SCRATCH_34, (uint16_t)_s1[_ti]);
-            vm.ds_write(DS_SCRATCH_36, (uint16_t)_s1[(uint16_t)(_ti + 1)]); }
+            const uint8_t* _s1 = v2_m2c_base + 0x9480;
+            vm.ds_write(DS_SCRATCH_34, (uint16_t)v2_text_byte(_s1, _ti));
+            vm.ds_write(DS_SCRATCH_36, (uint16_t)v2_text_byte(_s1, (uint16_t)(_ti + 1))); }
           vm.ch4_mul_clobber = false;
           uint16_t _v2v_a = (uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x187D) /* self.state_187d */;
           vm.si_track = (uint16_t)(_v2v_a - OBJ_FIELD_BASE);
@@ -103391,12 +103391,12 @@ static __attribute__((noinline)) bool v2_gen_exec_1c5_p18(V2VM& vm, int& max_ops
           vm.ds_write(DS_MODE_WORD, 0x2E00);   // sub_1250b mode word
           vm.ch4_mul_clobber = false;
           const uint16_t _r0 = 0x012E;
-          { uint16_t _tp = *(uint16_t*)(v2_m2c_base + 0x9480 + (uint16_t)(_r0 * 2));
+          { uint16_t _tp = v2_text_ptr_of(v2_m2c_base + 0x9480, _r0);   // the language bank first
             vm.ds_write(DS_TEXT_IDX, _tp); }   // sub_12515 tail
           { uint16_t _ti = vm.ds_read(DS_TEXT_IDX);
-            uint8_t* _s1 = v2_m2c_base + 0x9480;
-            vm.ds_write(DS_SCRATCH_34, (uint16_t)_s1[_ti]);
-            vm.ds_write(DS_SCRATCH_36, (uint16_t)_s1[(uint16_t)(_ti + 1)]); }
+            const uint8_t* _s1 = v2_m2c_base + 0x9480;
+            vm.ds_write(DS_SCRATCH_34, (uint16_t)v2_text_byte(_s1, _ti));
+            vm.ds_write(DS_SCRATCH_36, (uint16_t)v2_text_byte(_s1, (uint16_t)(_ti + 1))); }
           vm.ch4_mul_clobber = false;
           const uint16_t _v2v = 0x0000;
           { uint16_t _w14 = vm.ds_read(DS_SCRATCH_34);
@@ -103554,12 +103554,12 @@ static __attribute__((noinline)) bool v2_gen_exec_1c5_p18(V2VM& vm, int& max_ops
           vm.ds_write(DS_MODE_WORD, 0x2F08);   // sub_1250b mode word
           vm.ch4_mul_clobber = false;
           const uint16_t _r0 = 0x012F;
-          { uint16_t _tp = *(uint16_t*)(v2_m2c_base + 0x9480 + (uint16_t)(_r0 * 2));
+          { uint16_t _tp = v2_text_ptr_of(v2_m2c_base + 0x9480, _r0);   // the language bank first
             vm.ds_write(DS_TEXT_IDX, _tp); }   // sub_12515 tail
           { uint16_t _ti = vm.ds_read(DS_TEXT_IDX);
-            uint8_t* _s1 = v2_m2c_base + 0x9480;
-            vm.ds_write(DS_SCRATCH_34, (uint16_t)_s1[_ti]);
-            vm.ds_write(DS_SCRATCH_36, (uint16_t)_s1[(uint16_t)(_ti + 1)]); }
+            const uint8_t* _s1 = v2_m2c_base + 0x9480;
+            vm.ds_write(DS_SCRATCH_34, (uint16_t)v2_text_byte(_s1, _ti));
+            vm.ds_write(DS_SCRATCH_36, (uint16_t)v2_text_byte(_s1, (uint16_t)(_ti + 1))); }
           vm.ch4_mul_clobber = false;
           uint16_t _v2v_a = (uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x187D) /* self.state_187d */;
           vm.si_track = (uint16_t)(_v2v_a - OBJ_FIELD_BASE);
@@ -103725,12 +103725,12 @@ static __attribute__((noinline)) bool v2_gen_exec_1c5_p18(V2VM& vm, int& max_ops
           vm.ds_write(DS_MODE_WORD, 0x3000);   // sub_1250b mode word
           vm.ch4_mul_clobber = false;
           const uint16_t _r0 = 0x0130;
-          { uint16_t _tp = *(uint16_t*)(v2_m2c_base + 0x9480 + (uint16_t)(_r0 * 2));
+          { uint16_t _tp = v2_text_ptr_of(v2_m2c_base + 0x9480, _r0);   // the language bank first
             vm.ds_write(DS_TEXT_IDX, _tp); }   // sub_12515 tail
           { uint16_t _ti = vm.ds_read(DS_TEXT_IDX);
-            uint8_t* _s1 = v2_m2c_base + 0x9480;
-            vm.ds_write(DS_SCRATCH_34, (uint16_t)_s1[_ti]);
-            vm.ds_write(DS_SCRATCH_36, (uint16_t)_s1[(uint16_t)(_ti + 1)]); }
+            const uint8_t* _s1 = v2_m2c_base + 0x9480;
+            vm.ds_write(DS_SCRATCH_34, (uint16_t)v2_text_byte(_s1, _ti));
+            vm.ds_write(DS_SCRATCH_36, (uint16_t)v2_text_byte(_s1, (uint16_t)(_ti + 1))); }
           vm.ch4_mul_clobber = false;
           const uint16_t _v2v = 0x0000;
           { uint16_t _w14 = vm.ds_read(DS_SCRATCH_34);
@@ -103888,12 +103888,12 @@ static __attribute__((noinline)) bool v2_gen_exec_1c5_p18(V2VM& vm, int& max_ops
           vm.ds_write(DS_MODE_WORD, 0x3108);   // sub_1250b mode word
           vm.ch4_mul_clobber = false;
           const uint16_t _r0 = 0x0131;
-          { uint16_t _tp = *(uint16_t*)(v2_m2c_base + 0x9480 + (uint16_t)(_r0 * 2));
+          { uint16_t _tp = v2_text_ptr_of(v2_m2c_base + 0x9480, _r0);   // the language bank first
             vm.ds_write(DS_TEXT_IDX, _tp); }   // sub_12515 tail
           { uint16_t _ti = vm.ds_read(DS_TEXT_IDX);
-            uint8_t* _s1 = v2_m2c_base + 0x9480;
-            vm.ds_write(DS_SCRATCH_34, (uint16_t)_s1[_ti]);
-            vm.ds_write(DS_SCRATCH_36, (uint16_t)_s1[(uint16_t)(_ti + 1)]); }
+            const uint8_t* _s1 = v2_m2c_base + 0x9480;
+            vm.ds_write(DS_SCRATCH_34, (uint16_t)v2_text_byte(_s1, _ti));
+            vm.ds_write(DS_SCRATCH_36, (uint16_t)v2_text_byte(_s1, (uint16_t)(_ti + 1))); }
           vm.ch4_mul_clobber = false;
           uint16_t _v2v_a = (uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x187D) /* self.state_187d */;
           vm.si_track = (uint16_t)(_v2v_a - OBJ_FIELD_BASE);
@@ -104053,12 +104053,12 @@ static __attribute__((noinline)) bool v2_gen_exec_1c5_p18(V2VM& vm, int& max_ops
           vm.ds_write(DS_MODE_WORD, 0x3208);   // sub_1250b mode word
           vm.ch4_mul_clobber = false;
           const uint16_t _r0 = 0x0132;
-          { uint16_t _tp = *(uint16_t*)(v2_m2c_base + 0x9480 + (uint16_t)(_r0 * 2));
+          { uint16_t _tp = v2_text_ptr_of(v2_m2c_base + 0x9480, _r0);   // the language bank first
             vm.ds_write(DS_TEXT_IDX, _tp); }   // sub_12515 tail
           { uint16_t _ti = vm.ds_read(DS_TEXT_IDX);
-            uint8_t* _s1 = v2_m2c_base + 0x9480;
-            vm.ds_write(DS_SCRATCH_34, (uint16_t)_s1[_ti]);
-            vm.ds_write(DS_SCRATCH_36, (uint16_t)_s1[(uint16_t)(_ti + 1)]); }
+            const uint8_t* _s1 = v2_m2c_base + 0x9480;
+            vm.ds_write(DS_SCRATCH_34, (uint16_t)v2_text_byte(_s1, _ti));
+            vm.ds_write(DS_SCRATCH_36, (uint16_t)v2_text_byte(_s1, (uint16_t)(_ti + 1))); }
           vm.ch4_mul_clobber = false;
           uint16_t _v2v_a = (uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x187D) /* self.state_187d */;
           vm.si_track = (uint16_t)(_v2v_a - OBJ_FIELD_BASE);
@@ -104291,12 +104291,12 @@ static __attribute__((noinline)) bool v2_gen_exec_1c5_p18(V2VM& vm, int& max_ops
           vm.ds_write(DS_MODE_WORD, 0x3300);   // sub_1250b mode word
           vm.ch4_mul_clobber = false;
           const uint16_t _r0 = 0x0133;
-          { uint16_t _tp = *(uint16_t*)(v2_m2c_base + 0x9480 + (uint16_t)(_r0 * 2));
+          { uint16_t _tp = v2_text_ptr_of(v2_m2c_base + 0x9480, _r0);   // the language bank first
             vm.ds_write(DS_TEXT_IDX, _tp); }   // sub_12515 tail
           { uint16_t _ti = vm.ds_read(DS_TEXT_IDX);
-            uint8_t* _s1 = v2_m2c_base + 0x9480;
-            vm.ds_write(DS_SCRATCH_34, (uint16_t)_s1[_ti]);
-            vm.ds_write(DS_SCRATCH_36, (uint16_t)_s1[(uint16_t)(_ti + 1)]); }
+            const uint8_t* _s1 = v2_m2c_base + 0x9480;
+            vm.ds_write(DS_SCRATCH_34, (uint16_t)v2_text_byte(_s1, _ti));
+            vm.ds_write(DS_SCRATCH_36, (uint16_t)v2_text_byte(_s1, (uint16_t)(_ti + 1))); }
           vm.ch4_mul_clobber = false;
           const uint16_t _v2v = 0x0000;
           { uint16_t _w14 = vm.ds_read(DS_SCRATCH_34);
@@ -104454,12 +104454,12 @@ static __attribute__((noinline)) bool v2_gen_exec_1c5_p18(V2VM& vm, int& max_ops
           vm.ds_write(DS_MODE_WORD, 0x3408);   // sub_1250b mode word
           vm.ch4_mul_clobber = false;
           const uint16_t _r0 = 0x0134;
-          { uint16_t _tp = *(uint16_t*)(v2_m2c_base + 0x9480 + (uint16_t)(_r0 * 2));
+          { uint16_t _tp = v2_text_ptr_of(v2_m2c_base + 0x9480, _r0);   // the language bank first
             vm.ds_write(DS_TEXT_IDX, _tp); }   // sub_12515 tail
           { uint16_t _ti = vm.ds_read(DS_TEXT_IDX);
-            uint8_t* _s1 = v2_m2c_base + 0x9480;
-            vm.ds_write(DS_SCRATCH_34, (uint16_t)_s1[_ti]);
-            vm.ds_write(DS_SCRATCH_36, (uint16_t)_s1[(uint16_t)(_ti + 1)]); }
+            const uint8_t* _s1 = v2_m2c_base + 0x9480;
+            vm.ds_write(DS_SCRATCH_34, (uint16_t)v2_text_byte(_s1, _ti));
+            vm.ds_write(DS_SCRATCH_36, (uint16_t)v2_text_byte(_s1, (uint16_t)(_ti + 1))); }
           vm.ch4_mul_clobber = false;
           uint16_t _v2v_a = (uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x187D) /* self.state_187d */;
           vm.si_track = (uint16_t)(_v2v_a - OBJ_FIELD_BASE);
@@ -104619,12 +104619,12 @@ static __attribute__((noinline)) bool v2_gen_exec_1c5_p18(V2VM& vm, int& max_ops
           vm.ds_write(DS_MODE_WORD, 0x3508);   // sub_1250b mode word
           vm.ch4_mul_clobber = false;
           const uint16_t _r0 = 0x0135;
-          { uint16_t _tp = *(uint16_t*)(v2_m2c_base + 0x9480 + (uint16_t)(_r0 * 2));
+          { uint16_t _tp = v2_text_ptr_of(v2_m2c_base + 0x9480, _r0);   // the language bank first
             vm.ds_write(DS_TEXT_IDX, _tp); }   // sub_12515 tail
           { uint16_t _ti = vm.ds_read(DS_TEXT_IDX);
-            uint8_t* _s1 = v2_m2c_base + 0x9480;
-            vm.ds_write(DS_SCRATCH_34, (uint16_t)_s1[_ti]);
-            vm.ds_write(DS_SCRATCH_36, (uint16_t)_s1[(uint16_t)(_ti + 1)]); }
+            const uint8_t* _s1 = v2_m2c_base + 0x9480;
+            vm.ds_write(DS_SCRATCH_34, (uint16_t)v2_text_byte(_s1, _ti));
+            vm.ds_write(DS_SCRATCH_36, (uint16_t)v2_text_byte(_s1, (uint16_t)(_ti + 1))); }
           vm.ch4_mul_clobber = false;
           uint16_t _v2v_a = (uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x187D) /* self.state_187d */;
           vm.si_track = (uint16_t)(_v2v_a - OBJ_FIELD_BASE);
@@ -104790,12 +104790,12 @@ static __attribute__((noinline)) bool v2_gen_exec_1c5_p18(V2VM& vm, int& max_ops
           vm.ds_write(DS_MODE_WORD, 0x3600);   // sub_1250b mode word
           vm.ch4_mul_clobber = false;
           const uint16_t _r0 = 0x0136;
-          { uint16_t _tp = *(uint16_t*)(v2_m2c_base + 0x9480 + (uint16_t)(_r0 * 2));
+          { uint16_t _tp = v2_text_ptr_of(v2_m2c_base + 0x9480, _r0);   // the language bank first
             vm.ds_write(DS_TEXT_IDX, _tp); }   // sub_12515 tail
           { uint16_t _ti = vm.ds_read(DS_TEXT_IDX);
-            uint8_t* _s1 = v2_m2c_base + 0x9480;
-            vm.ds_write(DS_SCRATCH_34, (uint16_t)_s1[_ti]);
-            vm.ds_write(DS_SCRATCH_36, (uint16_t)_s1[(uint16_t)(_ti + 1)]); }
+            const uint8_t* _s1 = v2_m2c_base + 0x9480;
+            vm.ds_write(DS_SCRATCH_34, (uint16_t)v2_text_byte(_s1, _ti));
+            vm.ds_write(DS_SCRATCH_36, (uint16_t)v2_text_byte(_s1, (uint16_t)(_ti + 1))); }
           vm.ch4_mul_clobber = false;
           const uint16_t _v2v = 0x0000;
           { uint16_t _w14 = vm.ds_read(DS_SCRATCH_34);
@@ -104953,12 +104953,12 @@ static __attribute__((noinline)) bool v2_gen_exec_1c5_p18(V2VM& vm, int& max_ops
           vm.ds_write(DS_MODE_WORD, 0x3708);   // sub_1250b mode word
           vm.ch4_mul_clobber = false;
           const uint16_t _r0 = 0x0137;
-          { uint16_t _tp = *(uint16_t*)(v2_m2c_base + 0x9480 + (uint16_t)(_r0 * 2));
+          { uint16_t _tp = v2_text_ptr_of(v2_m2c_base + 0x9480, _r0);   // the language bank first
             vm.ds_write(DS_TEXT_IDX, _tp); }   // sub_12515 tail
           { uint16_t _ti = vm.ds_read(DS_TEXT_IDX);
-            uint8_t* _s1 = v2_m2c_base + 0x9480;
-            vm.ds_write(DS_SCRATCH_34, (uint16_t)_s1[_ti]);
-            vm.ds_write(DS_SCRATCH_36, (uint16_t)_s1[(uint16_t)(_ti + 1)]); }
+            const uint8_t* _s1 = v2_m2c_base + 0x9480;
+            vm.ds_write(DS_SCRATCH_34, (uint16_t)v2_text_byte(_s1, _ti));
+            vm.ds_write(DS_SCRATCH_36, (uint16_t)v2_text_byte(_s1, (uint16_t)(_ti + 1))); }
           vm.ch4_mul_clobber = false;
           uint16_t _v2v_a = (uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x187D) /* self.state_187d */;
           vm.si_track = (uint16_t)(_v2v_a - OBJ_FIELD_BASE);
@@ -105118,12 +105118,12 @@ static __attribute__((noinline)) bool v2_gen_exec_1c5_p18(V2VM& vm, int& max_ops
           vm.ds_write(DS_MODE_WORD, 0x3800);   // sub_1250b mode word
           vm.ch4_mul_clobber = false;
           const uint16_t _r0 = 0x0138;
-          { uint16_t _tp = *(uint16_t*)(v2_m2c_base + 0x9480 + (uint16_t)(_r0 * 2));
+          { uint16_t _tp = v2_text_ptr_of(v2_m2c_base + 0x9480, _r0);   // the language bank first
             vm.ds_write(DS_TEXT_IDX, _tp); }   // sub_12515 tail
           { uint16_t _ti = vm.ds_read(DS_TEXT_IDX);
-            uint8_t* _s1 = v2_m2c_base + 0x9480;
-            vm.ds_write(DS_SCRATCH_34, (uint16_t)_s1[_ti]);
-            vm.ds_write(DS_SCRATCH_36, (uint16_t)_s1[(uint16_t)(_ti + 1)]); }
+            const uint8_t* _s1 = v2_m2c_base + 0x9480;
+            vm.ds_write(DS_SCRATCH_34, (uint16_t)v2_text_byte(_s1, _ti));
+            vm.ds_write(DS_SCRATCH_36, (uint16_t)v2_text_byte(_s1, (uint16_t)(_ti + 1))); }
           vm.ch4_mul_clobber = false;
           const uint16_t _v2v = 0x0000;
           { uint16_t _w14 = vm.ds_read(DS_SCRATCH_34);
@@ -105281,12 +105281,12 @@ static __attribute__((noinline)) bool v2_gen_exec_1c5_p18(V2VM& vm, int& max_ops
           vm.ds_write(DS_MODE_WORD, 0x3908);   // sub_1250b mode word
           vm.ch4_mul_clobber = false;
           const uint16_t _r0 = 0x0139;
-          { uint16_t _tp = *(uint16_t*)(v2_m2c_base + 0x9480 + (uint16_t)(_r0 * 2));
+          { uint16_t _tp = v2_text_ptr_of(v2_m2c_base + 0x9480, _r0);   // the language bank first
             vm.ds_write(DS_TEXT_IDX, _tp); }   // sub_12515 tail
           { uint16_t _ti = vm.ds_read(DS_TEXT_IDX);
-            uint8_t* _s1 = v2_m2c_base + 0x9480;
-            vm.ds_write(DS_SCRATCH_34, (uint16_t)_s1[_ti]);
-            vm.ds_write(DS_SCRATCH_36, (uint16_t)_s1[(uint16_t)(_ti + 1)]); }
+            const uint8_t* _s1 = v2_m2c_base + 0x9480;
+            vm.ds_write(DS_SCRATCH_34, (uint16_t)v2_text_byte(_s1, _ti));
+            vm.ds_write(DS_SCRATCH_36, (uint16_t)v2_text_byte(_s1, (uint16_t)(_ti + 1))); }
           vm.ch4_mul_clobber = false;
           uint16_t _v2v_a = (uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x187D) /* self.state_187d */;
           vm.si_track = (uint16_t)(_v2v_a - OBJ_FIELD_BASE);
@@ -105446,12 +105446,12 @@ static __attribute__((noinline)) bool v2_gen_exec_1c5_p18(V2VM& vm, int& max_ops
           vm.ds_write(DS_MODE_WORD, 0x3A00);   // sub_1250b mode word
           vm.ch4_mul_clobber = false;
           const uint16_t _r0 = 0x013A;
-          { uint16_t _tp = *(uint16_t*)(v2_m2c_base + 0x9480 + (uint16_t)(_r0 * 2));
+          { uint16_t _tp = v2_text_ptr_of(v2_m2c_base + 0x9480, _r0);   // the language bank first
             vm.ds_write(DS_TEXT_IDX, _tp); }   // sub_12515 tail
           { uint16_t _ti = vm.ds_read(DS_TEXT_IDX);
-            uint8_t* _s1 = v2_m2c_base + 0x9480;
-            vm.ds_write(DS_SCRATCH_34, (uint16_t)_s1[_ti]);
-            vm.ds_write(DS_SCRATCH_36, (uint16_t)_s1[(uint16_t)(_ti + 1)]); }
+            const uint8_t* _s1 = v2_m2c_base + 0x9480;
+            vm.ds_write(DS_SCRATCH_34, (uint16_t)v2_text_byte(_s1, _ti));
+            vm.ds_write(DS_SCRATCH_36, (uint16_t)v2_text_byte(_s1, (uint16_t)(_ti + 1))); }
           vm.ch4_mul_clobber = false;
           const uint16_t _v2v = 0x0000;
           { uint16_t _w14 = vm.ds_read(DS_SCRATCH_34);
@@ -105615,12 +105615,12 @@ static __attribute__((noinline)) bool v2_gen_exec_1c5_p18(V2VM& vm, int& max_ops
           vm.ds_write(DS_MODE_WORD, 0x3B08);   // sub_1250b mode word
           vm.ch4_mul_clobber = false;
           const uint16_t _r0 = 0x013B;
-          { uint16_t _tp = *(uint16_t*)(v2_m2c_base + 0x9480 + (uint16_t)(_r0 * 2));
+          { uint16_t _tp = v2_text_ptr_of(v2_m2c_base + 0x9480, _r0);   // the language bank first
             vm.ds_write(DS_TEXT_IDX, _tp); }   // sub_12515 tail
           { uint16_t _ti = vm.ds_read(DS_TEXT_IDX);
-            uint8_t* _s1 = v2_m2c_base + 0x9480;
-            vm.ds_write(DS_SCRATCH_34, (uint16_t)_s1[_ti]);
-            vm.ds_write(DS_SCRATCH_36, (uint16_t)_s1[(uint16_t)(_ti + 1)]); }
+            const uint8_t* _s1 = v2_m2c_base + 0x9480;
+            vm.ds_write(DS_SCRATCH_34, (uint16_t)v2_text_byte(_s1, _ti));
+            vm.ds_write(DS_SCRATCH_36, (uint16_t)v2_text_byte(_s1, (uint16_t)(_ti + 1))); }
           vm.ch4_mul_clobber = false;
           uint16_t _v2v_a = (uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x187D) /* self.state_187d */;
           vm.si_track = (uint16_t)(_v2v_a - OBJ_FIELD_BASE);
@@ -105780,12 +105780,12 @@ static __attribute__((noinline)) bool v2_gen_exec_1c5_p18(V2VM& vm, int& max_ops
           vm.ds_write(DS_MODE_WORD, 0x3C08);   // sub_1250b mode word
           vm.ch4_mul_clobber = false;
           const uint16_t _r0 = 0x013C;
-          { uint16_t _tp = *(uint16_t*)(v2_m2c_base + 0x9480 + (uint16_t)(_r0 * 2));
+          { uint16_t _tp = v2_text_ptr_of(v2_m2c_base + 0x9480, _r0);   // the language bank first
             vm.ds_write(DS_TEXT_IDX, _tp); }   // sub_12515 tail
           { uint16_t _ti = vm.ds_read(DS_TEXT_IDX);
-            uint8_t* _s1 = v2_m2c_base + 0x9480;
-            vm.ds_write(DS_SCRATCH_34, (uint16_t)_s1[_ti]);
-            vm.ds_write(DS_SCRATCH_36, (uint16_t)_s1[(uint16_t)(_ti + 1)]); }
+            const uint8_t* _s1 = v2_m2c_base + 0x9480;
+            vm.ds_write(DS_SCRATCH_34, (uint16_t)v2_text_byte(_s1, _ti));
+            vm.ds_write(DS_SCRATCH_36, (uint16_t)v2_text_byte(_s1, (uint16_t)(_ti + 1))); }
           vm.ch4_mul_clobber = false;
           uint16_t _v2v_a = (uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x187D) /* self.state_187d */;
           vm.si_track = (uint16_t)(_v2v_a - OBJ_FIELD_BASE);
@@ -105945,12 +105945,12 @@ static __attribute__((noinline)) bool v2_gen_exec_1c5_p18(V2VM& vm, int& max_ops
           vm.ds_write(DS_MODE_WORD, 0x3D00);   // sub_1250b mode word
           vm.ch4_mul_clobber = false;
           const uint16_t _r0 = 0x013D;
-          { uint16_t _tp = *(uint16_t*)(v2_m2c_base + 0x9480 + (uint16_t)(_r0 * 2));
+          { uint16_t _tp = v2_text_ptr_of(v2_m2c_base + 0x9480, _r0);   // the language bank first
             vm.ds_write(DS_TEXT_IDX, _tp); }   // sub_12515 tail
           { uint16_t _ti = vm.ds_read(DS_TEXT_IDX);
-            uint8_t* _s1 = v2_m2c_base + 0x9480;
-            vm.ds_write(DS_SCRATCH_34, (uint16_t)_s1[_ti]);
-            vm.ds_write(DS_SCRATCH_36, (uint16_t)_s1[(uint16_t)(_ti + 1)]); }
+            const uint8_t* _s1 = v2_m2c_base + 0x9480;
+            vm.ds_write(DS_SCRATCH_34, (uint16_t)v2_text_byte(_s1, _ti));
+            vm.ds_write(DS_SCRATCH_36, (uint16_t)v2_text_byte(_s1, (uint16_t)(_ti + 1))); }
           vm.ch4_mul_clobber = false;
           const uint16_t _v2v = 0x0000;
           { uint16_t _w14 = vm.ds_read(DS_SCRATCH_34);
@@ -106108,12 +106108,12 @@ static __attribute__((noinline)) bool v2_gen_exec_1c5_p18(V2VM& vm, int& max_ops
           vm.ds_write(DS_MODE_WORD, 0x3E08);   // sub_1250b mode word
           vm.ch4_mul_clobber = false;
           const uint16_t _r0 = 0x013E;
-          { uint16_t _tp = *(uint16_t*)(v2_m2c_base + 0x9480 + (uint16_t)(_r0 * 2));
+          { uint16_t _tp = v2_text_ptr_of(v2_m2c_base + 0x9480, _r0);   // the language bank first
             vm.ds_write(DS_TEXT_IDX, _tp); }   // sub_12515 tail
           { uint16_t _ti = vm.ds_read(DS_TEXT_IDX);
-            uint8_t* _s1 = v2_m2c_base + 0x9480;
-            vm.ds_write(DS_SCRATCH_34, (uint16_t)_s1[_ti]);
-            vm.ds_write(DS_SCRATCH_36, (uint16_t)_s1[(uint16_t)(_ti + 1)]); }
+            const uint8_t* _s1 = v2_m2c_base + 0x9480;
+            vm.ds_write(DS_SCRATCH_34, (uint16_t)v2_text_byte(_s1, _ti));
+            vm.ds_write(DS_SCRATCH_36, (uint16_t)v2_text_byte(_s1, (uint16_t)(_ti + 1))); }
           vm.ch4_mul_clobber = false;
           uint16_t _v2v_a = (uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x187D) /* self.state_187d */;
           vm.si_track = (uint16_t)(_v2v_a - OBJ_FIELD_BASE);
@@ -106327,12 +106327,12 @@ static __attribute__((noinline)) bool v2_gen_exec_1c5_p18(V2VM& vm, int& max_ops
           vm.ds_write(DS_MODE_WORD, 0x3F08);   // sub_1250b mode word
           vm.ch4_mul_clobber = false;
           const uint16_t _r0 = 0x013F;
-          { uint16_t _tp = *(uint16_t*)(v2_m2c_base + 0x9480 + (uint16_t)(_r0 * 2));
+          { uint16_t _tp = v2_text_ptr_of(v2_m2c_base + 0x9480, _r0);   // the language bank first
             vm.ds_write(DS_TEXT_IDX, _tp); }   // sub_12515 tail
           { uint16_t _ti = vm.ds_read(DS_TEXT_IDX);
-            uint8_t* _s1 = v2_m2c_base + 0x9480;
-            vm.ds_write(DS_SCRATCH_34, (uint16_t)_s1[_ti]);
-            vm.ds_write(DS_SCRATCH_36, (uint16_t)_s1[(uint16_t)(_ti + 1)]); }
+            const uint8_t* _s1 = v2_m2c_base + 0x9480;
+            vm.ds_write(DS_SCRATCH_34, (uint16_t)v2_text_byte(_s1, _ti));
+            vm.ds_write(DS_SCRATCH_36, (uint16_t)v2_text_byte(_s1, (uint16_t)(_ti + 1))); }
           vm.ch4_mul_clobber = false;
           uint16_t _v2v_a = (uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x187D) /* self.state_187d */;
           vm.si_track = (uint16_t)(_v2v_a - OBJ_FIELD_BASE);
@@ -106492,12 +106492,12 @@ static __attribute__((noinline)) bool v2_gen_exec_1c5_p18(V2VM& vm, int& max_ops
           vm.ds_write(DS_MODE_WORD, 0x4008);   // sub_1250b mode word
           vm.ch4_mul_clobber = false;
           const uint16_t _r0 = 0x0140;
-          { uint16_t _tp = *(uint16_t*)(v2_m2c_base + 0x9480 + (uint16_t)(_r0 * 2));
+          { uint16_t _tp = v2_text_ptr_of(v2_m2c_base + 0x9480, _r0);   // the language bank first
             vm.ds_write(DS_TEXT_IDX, _tp); }   // sub_12515 tail
           { uint16_t _ti = vm.ds_read(DS_TEXT_IDX);
-            uint8_t* _s1 = v2_m2c_base + 0x9480;
-            vm.ds_write(DS_SCRATCH_34, (uint16_t)_s1[_ti]);
-            vm.ds_write(DS_SCRATCH_36, (uint16_t)_s1[(uint16_t)(_ti + 1)]); }
+            const uint8_t* _s1 = v2_m2c_base + 0x9480;
+            vm.ds_write(DS_SCRATCH_34, (uint16_t)v2_text_byte(_s1, _ti));
+            vm.ds_write(DS_SCRATCH_36, (uint16_t)v2_text_byte(_s1, (uint16_t)(_ti + 1))); }
           vm.ch4_mul_clobber = false;
           uint16_t _v2v_a = (uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x187D) /* self.state_187d */;
           vm.si_track = (uint16_t)(_v2v_a - OBJ_FIELD_BASE);
@@ -106657,12 +106657,12 @@ static __attribute__((noinline)) bool v2_gen_exec_1c5_p18(V2VM& vm, int& max_ops
           vm.ds_write(DS_MODE_WORD, 0x4100);   // sub_1250b mode word
           vm.ch4_mul_clobber = false;
           const uint16_t _r0 = 0x0141;
-          { uint16_t _tp = *(uint16_t*)(v2_m2c_base + 0x9480 + (uint16_t)(_r0 * 2));
+          { uint16_t _tp = v2_text_ptr_of(v2_m2c_base + 0x9480, _r0);   // the language bank first
             vm.ds_write(DS_TEXT_IDX, _tp); }   // sub_12515 tail
           { uint16_t _ti = vm.ds_read(DS_TEXT_IDX);
-            uint8_t* _s1 = v2_m2c_base + 0x9480;
-            vm.ds_write(DS_SCRATCH_34, (uint16_t)_s1[_ti]);
-            vm.ds_write(DS_SCRATCH_36, (uint16_t)_s1[(uint16_t)(_ti + 1)]); }
+            const uint8_t* _s1 = v2_m2c_base + 0x9480;
+            vm.ds_write(DS_SCRATCH_34, (uint16_t)v2_text_byte(_s1, _ti));
+            vm.ds_write(DS_SCRATCH_36, (uint16_t)v2_text_byte(_s1, (uint16_t)(_ti + 1))); }
           vm.ch4_mul_clobber = false;
           const uint16_t _v2v = 0x0000;
           { uint16_t _w14 = vm.ds_read(DS_SCRATCH_34);
@@ -106749,12 +106749,12 @@ static __attribute__((noinline)) bool v2_gen_exec_1c5_p18(V2VM& vm, int& max_ops
           vm.ds_write(DS_MODE_WORD, 0x4200);   // sub_1250b mode word
           vm.ch4_mul_clobber = false;
           const uint16_t _r0 = 0x0142;
-          { uint16_t _tp = *(uint16_t*)(v2_m2c_base + 0x9480 + (uint16_t)(_r0 * 2));
+          { uint16_t _tp = v2_text_ptr_of(v2_m2c_base + 0x9480, _r0);   // the language bank first
             vm.ds_write(DS_TEXT_IDX, _tp); }   // sub_12515 tail
           { uint16_t _ti = vm.ds_read(DS_TEXT_IDX);
-            uint8_t* _s1 = v2_m2c_base + 0x9480;
-            vm.ds_write(DS_SCRATCH_34, (uint16_t)_s1[_ti]);
-            vm.ds_write(DS_SCRATCH_36, (uint16_t)_s1[(uint16_t)(_ti + 1)]); }
+            const uint8_t* _s1 = v2_m2c_base + 0x9480;
+            vm.ds_write(DS_SCRATCH_34, (uint16_t)v2_text_byte(_s1, _ti));
+            vm.ds_write(DS_SCRATCH_36, (uint16_t)v2_text_byte(_s1, (uint16_t)(_ti + 1))); }
           vm.ch4_mul_clobber = false;
           const uint16_t _v2v = 0x0000;
           { uint16_t _w14 = vm.ds_read(DS_SCRATCH_34);
@@ -106912,12 +106912,12 @@ static __attribute__((noinline)) bool v2_gen_exec_1c5_p18(V2VM& vm, int& max_ops
           vm.ds_write(DS_MODE_WORD, 0x4308);   // sub_1250b mode word
           vm.ch4_mul_clobber = false;
           const uint16_t _r0 = 0x0143;
-          { uint16_t _tp = *(uint16_t*)(v2_m2c_base + 0x9480 + (uint16_t)(_r0 * 2));
+          { uint16_t _tp = v2_text_ptr_of(v2_m2c_base + 0x9480, _r0);   // the language bank first
             vm.ds_write(DS_TEXT_IDX, _tp); }   // sub_12515 tail
           { uint16_t _ti = vm.ds_read(DS_TEXT_IDX);
-            uint8_t* _s1 = v2_m2c_base + 0x9480;
-            vm.ds_write(DS_SCRATCH_34, (uint16_t)_s1[_ti]);
-            vm.ds_write(DS_SCRATCH_36, (uint16_t)_s1[(uint16_t)(_ti + 1)]); }
+            const uint8_t* _s1 = v2_m2c_base + 0x9480;
+            vm.ds_write(DS_SCRATCH_34, (uint16_t)v2_text_byte(_s1, _ti));
+            vm.ds_write(DS_SCRATCH_36, (uint16_t)v2_text_byte(_s1, (uint16_t)(_ti + 1))); }
           vm.ch4_mul_clobber = false;
           uint16_t _v2v_a = (uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x187D) /* self.state_187d */;
           vm.si_track = (uint16_t)(_v2v_a - OBJ_FIELD_BASE);
@@ -107083,12 +107083,12 @@ static __attribute__((noinline)) bool v2_gen_exec_1c5_p18(V2VM& vm, int& max_ops
           vm.ds_write(DS_MODE_WORD, 0x4408);   // sub_1250b mode word
           vm.ch4_mul_clobber = false;
           const uint16_t _r0 = 0x0144;
-          { uint16_t _tp = *(uint16_t*)(v2_m2c_base + 0x9480 + (uint16_t)(_r0 * 2));
+          { uint16_t _tp = v2_text_ptr_of(v2_m2c_base + 0x9480, _r0);   // the language bank first
             vm.ds_write(DS_TEXT_IDX, _tp); }   // sub_12515 tail
           { uint16_t _ti = vm.ds_read(DS_TEXT_IDX);
-            uint8_t* _s1 = v2_m2c_base + 0x9480;
-            vm.ds_write(DS_SCRATCH_34, (uint16_t)_s1[_ti]);
-            vm.ds_write(DS_SCRATCH_36, (uint16_t)_s1[(uint16_t)(_ti + 1)]); }
+            const uint8_t* _s1 = v2_m2c_base + 0x9480;
+            vm.ds_write(DS_SCRATCH_34, (uint16_t)v2_text_byte(_s1, _ti));
+            vm.ds_write(DS_SCRATCH_36, (uint16_t)v2_text_byte(_s1, (uint16_t)(_ti + 1))); }
           vm.ch4_mul_clobber = false;
           uint16_t _v2v_a = (uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x187D) /* self.state_187d */;
           vm.si_track = (uint16_t)(_v2v_a - OBJ_FIELD_BASE);
@@ -107248,12 +107248,12 @@ static __attribute__((noinline)) bool v2_gen_exec_1c5_p18(V2VM& vm, int& max_ops
           vm.ds_write(DS_MODE_WORD, 0x4500);   // sub_1250b mode word
           vm.ch4_mul_clobber = false;
           const uint16_t _r0 = 0x0145;
-          { uint16_t _tp = *(uint16_t*)(v2_m2c_base + 0x9480 + (uint16_t)(_r0 * 2));
+          { uint16_t _tp = v2_text_ptr_of(v2_m2c_base + 0x9480, _r0);   // the language bank first
             vm.ds_write(DS_TEXT_IDX, _tp); }   // sub_12515 tail
           { uint16_t _ti = vm.ds_read(DS_TEXT_IDX);
-            uint8_t* _s1 = v2_m2c_base + 0x9480;
-            vm.ds_write(DS_SCRATCH_34, (uint16_t)_s1[_ti]);
-            vm.ds_write(DS_SCRATCH_36, (uint16_t)_s1[(uint16_t)(_ti + 1)]); }
+            const uint8_t* _s1 = v2_m2c_base + 0x9480;
+            vm.ds_write(DS_SCRATCH_34, (uint16_t)v2_text_byte(_s1, _ti));
+            vm.ds_write(DS_SCRATCH_36, (uint16_t)v2_text_byte(_s1, (uint16_t)(_ti + 1))); }
           vm.ch4_mul_clobber = false;
           const uint16_t _v2v = 0x0000;
           { uint16_t _w14 = vm.ds_read(DS_SCRATCH_34);
@@ -107411,12 +107411,12 @@ static __attribute__((noinline)) bool v2_gen_exec_1c5_p18(V2VM& vm, int& max_ops
           vm.ds_write(DS_MODE_WORD, 0x4608);   // sub_1250b mode word
           vm.ch4_mul_clobber = false;
           const uint16_t _r0 = 0x0146;
-          { uint16_t _tp = *(uint16_t*)(v2_m2c_base + 0x9480 + (uint16_t)(_r0 * 2));
+          { uint16_t _tp = v2_text_ptr_of(v2_m2c_base + 0x9480, _r0);   // the language bank first
             vm.ds_write(DS_TEXT_IDX, _tp); }   // sub_12515 tail
           { uint16_t _ti = vm.ds_read(DS_TEXT_IDX);
-            uint8_t* _s1 = v2_m2c_base + 0x9480;
-            vm.ds_write(DS_SCRATCH_34, (uint16_t)_s1[_ti]);
-            vm.ds_write(DS_SCRATCH_36, (uint16_t)_s1[(uint16_t)(_ti + 1)]); }
+            const uint8_t* _s1 = v2_m2c_base + 0x9480;
+            vm.ds_write(DS_SCRATCH_34, (uint16_t)v2_text_byte(_s1, _ti));
+            vm.ds_write(DS_SCRATCH_36, (uint16_t)v2_text_byte(_s1, (uint16_t)(_ti + 1))); }
           vm.ch4_mul_clobber = false;
           uint16_t _v2v_a = (uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x187D) /* self.state_187d */;
           vm.si_track = (uint16_t)(_v2v_a - OBJ_FIELD_BASE);
@@ -107576,12 +107576,12 @@ static __attribute__((noinline)) bool v2_gen_exec_1c5_p18(V2VM& vm, int& max_ops
           vm.ds_write(DS_MODE_WORD, 0x4700);   // sub_1250b mode word
           vm.ch4_mul_clobber = false;
           const uint16_t _r0 = 0x0147;
-          { uint16_t _tp = *(uint16_t*)(v2_m2c_base + 0x9480 + (uint16_t)(_r0 * 2));
+          { uint16_t _tp = v2_text_ptr_of(v2_m2c_base + 0x9480, _r0);   // the language bank first
             vm.ds_write(DS_TEXT_IDX, _tp); }   // sub_12515 tail
           { uint16_t _ti = vm.ds_read(DS_TEXT_IDX);
-            uint8_t* _s1 = v2_m2c_base + 0x9480;
-            vm.ds_write(DS_SCRATCH_34, (uint16_t)_s1[_ti]);
-            vm.ds_write(DS_SCRATCH_36, (uint16_t)_s1[(uint16_t)(_ti + 1)]); }
+            const uint8_t* _s1 = v2_m2c_base + 0x9480;
+            vm.ds_write(DS_SCRATCH_34, (uint16_t)v2_text_byte(_s1, _ti));
+            vm.ds_write(DS_SCRATCH_36, (uint16_t)v2_text_byte(_s1, (uint16_t)(_ti + 1))); }
           vm.ch4_mul_clobber = false;
           const uint16_t _v2v = 0x0000;
           { uint16_t _w14 = vm.ds_read(DS_SCRATCH_34);
@@ -107701,12 +107701,12 @@ static __attribute__((noinline)) bool v2_gen_exec_1c5_p18(V2VM& vm, int& max_ops
           vm.ds_write(DS_MODE_WORD, 0x4800);   // sub_1250b mode word
           vm.ch4_mul_clobber = false;
           const uint16_t _r0 = 0x0148;
-          { uint16_t _tp = *(uint16_t*)(v2_m2c_base + 0x9480 + (uint16_t)(_r0 * 2));
+          { uint16_t _tp = v2_text_ptr_of(v2_m2c_base + 0x9480, _r0);   // the language bank first
             vm.ds_write(DS_TEXT_IDX, _tp); }   // sub_12515 tail
           { uint16_t _ti = vm.ds_read(DS_TEXT_IDX);
-            uint8_t* _s1 = v2_m2c_base + 0x9480;
-            vm.ds_write(DS_SCRATCH_34, (uint16_t)_s1[_ti]);
-            vm.ds_write(DS_SCRATCH_36, (uint16_t)_s1[(uint16_t)(_ti + 1)]); }
+            const uint8_t* _s1 = v2_m2c_base + 0x9480;
+            vm.ds_write(DS_SCRATCH_34, (uint16_t)v2_text_byte(_s1, _ti));
+            vm.ds_write(DS_SCRATCH_36, (uint16_t)v2_text_byte(_s1, (uint16_t)(_ti + 1))); }
           vm.ch4_mul_clobber = false;
           const uint16_t _v2v = 0x0003;
           vm.ch4_mul_clobber = false;
@@ -107760,12 +107760,12 @@ static __attribute__((noinline)) bool v2_gen_exec_1c5_p18(V2VM& vm, int& max_ops
           vm.ds_write(DS_MODE_WORD, 0x4900);   // sub_1250b mode word
           vm.ch4_mul_clobber = false;
           const uint16_t _r0 = 0x0149;
-          { uint16_t _tp = *(uint16_t*)(v2_m2c_base + 0x9480 + (uint16_t)(_r0 * 2));
+          { uint16_t _tp = v2_text_ptr_of(v2_m2c_base + 0x9480, _r0);   // the language bank first
             vm.ds_write(DS_TEXT_IDX, _tp); }   // sub_12515 tail
           { uint16_t _ti = vm.ds_read(DS_TEXT_IDX);
-            uint8_t* _s1 = v2_m2c_base + 0x9480;
-            vm.ds_write(DS_SCRATCH_34, (uint16_t)_s1[_ti]);
-            vm.ds_write(DS_SCRATCH_36, (uint16_t)_s1[(uint16_t)(_ti + 1)]); }
+            const uint8_t* _s1 = v2_m2c_base + 0x9480;
+            vm.ds_write(DS_SCRATCH_34, (uint16_t)v2_text_byte(_s1, _ti));
+            vm.ds_write(DS_SCRATCH_36, (uint16_t)v2_text_byte(_s1, (uint16_t)(_ti + 1))); }
           vm.ch4_mul_clobber = false;
           const uint16_t _v2v = 0x0003;
           vm.ch4_mul_clobber = false;
@@ -107890,12 +107890,12 @@ static __attribute__((noinline)) bool v2_gen_exec_1c5_p18(V2VM& vm, int& max_ops
           vm.ds_write(DS_MODE_WORD, 0x4A00);   // sub_1250b mode word
           vm.ch4_mul_clobber = false;
           const uint16_t _r0 = 0x014A;
-          { uint16_t _tp = *(uint16_t*)(v2_m2c_base + 0x9480 + (uint16_t)(_r0 * 2));
+          { uint16_t _tp = v2_text_ptr_of(v2_m2c_base + 0x9480, _r0);   // the language bank first
             vm.ds_write(DS_TEXT_IDX, _tp); }   // sub_12515 tail
           { uint16_t _ti = vm.ds_read(DS_TEXT_IDX);
-            uint8_t* _s1 = v2_m2c_base + 0x9480;
-            vm.ds_write(DS_SCRATCH_34, (uint16_t)_s1[_ti]);
-            vm.ds_write(DS_SCRATCH_36, (uint16_t)_s1[(uint16_t)(_ti + 1)]); }
+            const uint8_t* _s1 = v2_m2c_base + 0x9480;
+            vm.ds_write(DS_SCRATCH_34, (uint16_t)v2_text_byte(_s1, _ti));
+            vm.ds_write(DS_SCRATCH_36, (uint16_t)v2_text_byte(_s1, (uint16_t)(_ti + 1))); }
           vm.ch4_mul_clobber = false;
           const uint16_t _v2v = 0x0000;
           { uint16_t _w14 = vm.ds_read(DS_SCRATCH_34);
@@ -108053,12 +108053,12 @@ static __attribute__((noinline)) bool v2_gen_exec_1c5_p18(V2VM& vm, int& max_ops
           vm.ds_write(DS_MODE_WORD, 0x4B08);   // sub_1250b mode word
           vm.ch4_mul_clobber = false;
           const uint16_t _r0 = 0x014B;
-          { uint16_t _tp = *(uint16_t*)(v2_m2c_base + 0x9480 + (uint16_t)(_r0 * 2));
+          { uint16_t _tp = v2_text_ptr_of(v2_m2c_base + 0x9480, _r0);   // the language bank first
             vm.ds_write(DS_TEXT_IDX, _tp); }   // sub_12515 tail
           { uint16_t _ti = vm.ds_read(DS_TEXT_IDX);
-            uint8_t* _s1 = v2_m2c_base + 0x9480;
-            vm.ds_write(DS_SCRATCH_34, (uint16_t)_s1[_ti]);
-            vm.ds_write(DS_SCRATCH_36, (uint16_t)_s1[(uint16_t)(_ti + 1)]); }
+            const uint8_t* _s1 = v2_m2c_base + 0x9480;
+            vm.ds_write(DS_SCRATCH_34, (uint16_t)v2_text_byte(_s1, _ti));
+            vm.ds_write(DS_SCRATCH_36, (uint16_t)v2_text_byte(_s1, (uint16_t)(_ti + 1))); }
           vm.ch4_mul_clobber = false;
           uint16_t _v2v_a = (uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x187D) /* self.state_187d */;
           vm.si_track = (uint16_t)(_v2v_a - OBJ_FIELD_BASE);
@@ -108159,12 +108159,12 @@ static __attribute__((noinline)) bool v2_gen_exec_1c5_p18(V2VM& vm, int& max_ops
           vm.ds_write(DS_MODE_WORD, 0x4C00);   // sub_1250b mode word
           vm.ch4_mul_clobber = false;
           const uint16_t _r0 = 0x014C;
-          { uint16_t _tp = *(uint16_t*)(v2_m2c_base + 0x9480 + (uint16_t)(_r0 * 2));
+          { uint16_t _tp = v2_text_ptr_of(v2_m2c_base + 0x9480, _r0);   // the language bank first
             vm.ds_write(DS_TEXT_IDX, _tp); }   // sub_12515 tail
           { uint16_t _ti = vm.ds_read(DS_TEXT_IDX);
-            uint8_t* _s1 = v2_m2c_base + 0x9480;
-            vm.ds_write(DS_SCRATCH_34, (uint16_t)_s1[_ti]);
-            vm.ds_write(DS_SCRATCH_36, (uint16_t)_s1[(uint16_t)(_ti + 1)]); }
+            const uint8_t* _s1 = v2_m2c_base + 0x9480;
+            vm.ds_write(DS_SCRATCH_34, (uint16_t)v2_text_byte(_s1, _ti));
+            vm.ds_write(DS_SCRATCH_36, (uint16_t)v2_text_byte(_s1, (uint16_t)(_ti + 1))); }
           vm.ch4_mul_clobber = false;
           const uint16_t _v2v = 0x0003;
           vm.ch4_mul_clobber = false;
@@ -108289,12 +108289,12 @@ static __attribute__((noinline)) bool v2_gen_exec_1c5_p18(V2VM& vm, int& max_ops
           vm.ds_write(DS_MODE_WORD, 0x4D00);   // sub_1250b mode word
           vm.ch4_mul_clobber = false;
           const uint16_t _r0 = 0x014D;
-          { uint16_t _tp = *(uint16_t*)(v2_m2c_base + 0x9480 + (uint16_t)(_r0 * 2));
+          { uint16_t _tp = v2_text_ptr_of(v2_m2c_base + 0x9480, _r0);   // the language bank first
             vm.ds_write(DS_TEXT_IDX, _tp); }   // sub_12515 tail
           { uint16_t _ti = vm.ds_read(DS_TEXT_IDX);
-            uint8_t* _s1 = v2_m2c_base + 0x9480;
-            vm.ds_write(DS_SCRATCH_34, (uint16_t)_s1[_ti]);
-            vm.ds_write(DS_SCRATCH_36, (uint16_t)_s1[(uint16_t)(_ti + 1)]); }
+            const uint8_t* _s1 = v2_m2c_base + 0x9480;
+            vm.ds_write(DS_SCRATCH_34, (uint16_t)v2_text_byte(_s1, _ti));
+            vm.ds_write(DS_SCRATCH_36, (uint16_t)v2_text_byte(_s1, (uint16_t)(_ti + 1))); }
           vm.ch4_mul_clobber = false;
           const uint16_t _v2v = 0x0000;
           { uint16_t _w14 = vm.ds_read(DS_SCRATCH_34);
@@ -108393,12 +108393,12 @@ static __attribute__((noinline)) bool v2_gen_exec_1c5_p18(V2VM& vm, int& max_ops
           vm.ds_write(DS_MODE_WORD, 0x4E00);   // sub_1250b mode word
           vm.ch4_mul_clobber = false;
           const uint16_t _r0 = 0x014E;
-          { uint16_t _tp = *(uint16_t*)(v2_m2c_base + 0x9480 + (uint16_t)(_r0 * 2));
+          { uint16_t _tp = v2_text_ptr_of(v2_m2c_base + 0x9480, _r0);   // the language bank first
             vm.ds_write(DS_TEXT_IDX, _tp); }   // sub_12515 tail
           { uint16_t _ti = vm.ds_read(DS_TEXT_IDX);
-            uint8_t* _s1 = v2_m2c_base + 0x9480;
-            vm.ds_write(DS_SCRATCH_34, (uint16_t)_s1[_ti]);
-            vm.ds_write(DS_SCRATCH_36, (uint16_t)_s1[(uint16_t)(_ti + 1)]); }
+            const uint8_t* _s1 = v2_m2c_base + 0x9480;
+            vm.ds_write(DS_SCRATCH_34, (uint16_t)v2_text_byte(_s1, _ti));
+            vm.ds_write(DS_SCRATCH_36, (uint16_t)v2_text_byte(_s1, (uint16_t)(_ti + 1))); }
           vm.ch4_mul_clobber = false;
           const uint16_t _v2v = 0x0003;
           vm.ch4_mul_clobber = false;
@@ -108523,12 +108523,12 @@ static __attribute__((noinline)) bool v2_gen_exec_1c5_p18(V2VM& vm, int& max_ops
           vm.ds_write(DS_MODE_WORD, 0x4F08);   // sub_1250b mode word
           vm.ch4_mul_clobber = false;
           const uint16_t _r0 = 0x014F;
-          { uint16_t _tp = *(uint16_t*)(v2_m2c_base + 0x9480 + (uint16_t)(_r0 * 2));
+          { uint16_t _tp = v2_text_ptr_of(v2_m2c_base + 0x9480, _r0);   // the language bank first
             vm.ds_write(DS_TEXT_IDX, _tp); }   // sub_12515 tail
           { uint16_t _ti = vm.ds_read(DS_TEXT_IDX);
-            uint8_t* _s1 = v2_m2c_base + 0x9480;
-            vm.ds_write(DS_SCRATCH_34, (uint16_t)_s1[_ti]);
-            vm.ds_write(DS_SCRATCH_36, (uint16_t)_s1[(uint16_t)(_ti + 1)]); }
+            const uint8_t* _s1 = v2_m2c_base + 0x9480;
+            vm.ds_write(DS_SCRATCH_34, (uint16_t)v2_text_byte(_s1, _ti));
+            vm.ds_write(DS_SCRATCH_36, (uint16_t)v2_text_byte(_s1, (uint16_t)(_ti + 1))); }
           vm.ch4_mul_clobber = false;
           uint16_t _v2v_a = (uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x187D) /* self.state_187d */;
           vm.si_track = (uint16_t)(_v2v_a - OBJ_FIELD_BASE);
@@ -108629,12 +108629,12 @@ static __attribute__((noinline)) bool v2_gen_exec_1c5_p18(V2VM& vm, int& max_ops
           vm.ds_write(DS_MODE_WORD, 0x5000);   // sub_1250b mode word
           vm.ch4_mul_clobber = false;
           const uint16_t _r0 = 0x0150;
-          { uint16_t _tp = *(uint16_t*)(v2_m2c_base + 0x9480 + (uint16_t)(_r0 * 2));
+          { uint16_t _tp = v2_text_ptr_of(v2_m2c_base + 0x9480, _r0);   // the language bank first
             vm.ds_write(DS_TEXT_IDX, _tp); }   // sub_12515 tail
           { uint16_t _ti = vm.ds_read(DS_TEXT_IDX);
-            uint8_t* _s1 = v2_m2c_base + 0x9480;
-            vm.ds_write(DS_SCRATCH_34, (uint16_t)_s1[_ti]);
-            vm.ds_write(DS_SCRATCH_36, (uint16_t)_s1[(uint16_t)(_ti + 1)]); }
+            const uint8_t* _s1 = v2_m2c_base + 0x9480;
+            vm.ds_write(DS_SCRATCH_34, (uint16_t)v2_text_byte(_s1, _ti));
+            vm.ds_write(DS_SCRATCH_36, (uint16_t)v2_text_byte(_s1, (uint16_t)(_ti + 1))); }
           vm.ch4_mul_clobber = false;
           const uint16_t _v2v = 0x0003;
           vm.ch4_mul_clobber = false;
@@ -108780,12 +108780,12 @@ static __attribute__((noinline)) bool v2_gen_exec_1c5_p18(V2VM& vm, int& max_ops
           vm.ds_write(DS_MODE_WORD, 0x5108);   // sub_1250b mode word
           vm.ch4_mul_clobber = false;
           const uint16_t _r0 = 0x0151;
-          { uint16_t _tp = *(uint16_t*)(v2_m2c_base + 0x9480 + (uint16_t)(_r0 * 2));
+          { uint16_t _tp = v2_text_ptr_of(v2_m2c_base + 0x9480, _r0);   // the language bank first
             vm.ds_write(DS_TEXT_IDX, _tp); }   // sub_12515 tail
           { uint16_t _ti = vm.ds_read(DS_TEXT_IDX);
-            uint8_t* _s1 = v2_m2c_base + 0x9480;
-            vm.ds_write(DS_SCRATCH_34, (uint16_t)_s1[_ti]);
-            vm.ds_write(DS_SCRATCH_36, (uint16_t)_s1[(uint16_t)(_ti + 1)]); }
+            const uint8_t* _s1 = v2_m2c_base + 0x9480;
+            vm.ds_write(DS_SCRATCH_34, (uint16_t)v2_text_byte(_s1, _ti));
+            vm.ds_write(DS_SCRATCH_36, (uint16_t)v2_text_byte(_s1, (uint16_t)(_ti + 1))); }
           vm.ch4_mul_clobber = false;
           uint16_t _v2v_a = (uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x187D) /* self.state_187d */;
           vm.si_track = (uint16_t)(_v2v_a - OBJ_FIELD_BASE);
@@ -109468,12 +109468,12 @@ static __attribute__((noinline)) bool v2_gen_exec_1c5_p19(V2VM& vm, int& max_ops
           vm.ds_write(DS_MODE_WORD, 0x5208);   // sub_1250b mode word
           vm.ch4_mul_clobber = false;
           const uint16_t _r0 = 0x0152;
-          { uint16_t _tp = *(uint16_t*)(v2_m2c_base + 0x9480 + (uint16_t)(_r0 * 2));
+          { uint16_t _tp = v2_text_ptr_of(v2_m2c_base + 0x9480, _r0);   // the language bank first
             vm.ds_write(DS_TEXT_IDX, _tp); }   // sub_12515 tail
           { uint16_t _ti = vm.ds_read(DS_TEXT_IDX);
-            uint8_t* _s1 = v2_m2c_base + 0x9480;
-            vm.ds_write(DS_SCRATCH_34, (uint16_t)_s1[_ti]);
-            vm.ds_write(DS_SCRATCH_36, (uint16_t)_s1[(uint16_t)(_ti + 1)]); }
+            const uint8_t* _s1 = v2_m2c_base + 0x9480;
+            vm.ds_write(DS_SCRATCH_34, (uint16_t)v2_text_byte(_s1, _ti));
+            vm.ds_write(DS_SCRATCH_36, (uint16_t)v2_text_byte(_s1, (uint16_t)(_ti + 1))); }
           vm.ch4_mul_clobber = false;
           uint16_t _v2v_a = (uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x187D) /* self.state_187d */;
           vm.si_track = (uint16_t)(_v2v_a - OBJ_FIELD_BASE);
@@ -109562,12 +109562,12 @@ static __attribute__((noinline)) bool v2_gen_exec_1c5_p19(V2VM& vm, int& max_ops
           vm.ds_write(DS_MODE_WORD, 0x5308);   // sub_1250b mode word
           vm.ch4_mul_clobber = false;
           const uint16_t _r0 = 0x0153;
-          { uint16_t _tp = *(uint16_t*)(v2_m2c_base + 0x9480 + (uint16_t)(_r0 * 2));
+          { uint16_t _tp = v2_text_ptr_of(v2_m2c_base + 0x9480, _r0);   // the language bank first
             vm.ds_write(DS_TEXT_IDX, _tp); }   // sub_12515 tail
           { uint16_t _ti = vm.ds_read(DS_TEXT_IDX);
-            uint8_t* _s1 = v2_m2c_base + 0x9480;
-            vm.ds_write(DS_SCRATCH_34, (uint16_t)_s1[_ti]);
-            vm.ds_write(DS_SCRATCH_36, (uint16_t)_s1[(uint16_t)(_ti + 1)]); }
+            const uint8_t* _s1 = v2_m2c_base + 0x9480;
+            vm.ds_write(DS_SCRATCH_34, (uint16_t)v2_text_byte(_s1, _ti));
+            vm.ds_write(DS_SCRATCH_36, (uint16_t)v2_text_byte(_s1, (uint16_t)(_ti + 1))); }
           vm.ch4_mul_clobber = false;
           uint16_t _v2v_a = (uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x187D) /* self.state_187d */;
           vm.si_track = (uint16_t)(_v2v_a - OBJ_FIELD_BASE);
@@ -109727,12 +109727,12 @@ static __attribute__((noinline)) bool v2_gen_exec_1c5_p19(V2VM& vm, int& max_ops
           vm.ds_write(DS_MODE_WORD, 0x5400);   // sub_1250b mode word
           vm.ch4_mul_clobber = false;
           const uint16_t _r0 = 0x0154;
-          { uint16_t _tp = *(uint16_t*)(v2_m2c_base + 0x9480 + (uint16_t)(_r0 * 2));
+          { uint16_t _tp = v2_text_ptr_of(v2_m2c_base + 0x9480, _r0);   // the language bank first
             vm.ds_write(DS_TEXT_IDX, _tp); }   // sub_12515 tail
           { uint16_t _ti = vm.ds_read(DS_TEXT_IDX);
-            uint8_t* _s1 = v2_m2c_base + 0x9480;
-            vm.ds_write(DS_SCRATCH_34, (uint16_t)_s1[_ti]);
-            vm.ds_write(DS_SCRATCH_36, (uint16_t)_s1[(uint16_t)(_ti + 1)]); }
+            const uint8_t* _s1 = v2_m2c_base + 0x9480;
+            vm.ds_write(DS_SCRATCH_34, (uint16_t)v2_text_byte(_s1, _ti));
+            vm.ds_write(DS_SCRATCH_36, (uint16_t)v2_text_byte(_s1, (uint16_t)(_ti + 1))); }
           vm.ch4_mul_clobber = false;
           const uint16_t _v2v = 0x0000;
           { uint16_t _w14 = vm.ds_read(DS_SCRATCH_34);
@@ -109819,12 +109819,12 @@ static __attribute__((noinline)) bool v2_gen_exec_1c5_p19(V2VM& vm, int& max_ops
           vm.ds_write(DS_MODE_WORD, 0x5500);   // sub_1250b mode word
           vm.ch4_mul_clobber = false;
           const uint16_t _r0 = 0x0155;
-          { uint16_t _tp = *(uint16_t*)(v2_m2c_base + 0x9480 + (uint16_t)(_r0 * 2));
+          { uint16_t _tp = v2_text_ptr_of(v2_m2c_base + 0x9480, _r0);   // the language bank first
             vm.ds_write(DS_TEXT_IDX, _tp); }   // sub_12515 tail
           { uint16_t _ti = vm.ds_read(DS_TEXT_IDX);
-            uint8_t* _s1 = v2_m2c_base + 0x9480;
-            vm.ds_write(DS_SCRATCH_34, (uint16_t)_s1[_ti]);
-            vm.ds_write(DS_SCRATCH_36, (uint16_t)_s1[(uint16_t)(_ti + 1)]); }
+            const uint8_t* _s1 = v2_m2c_base + 0x9480;
+            vm.ds_write(DS_SCRATCH_34, (uint16_t)v2_text_byte(_s1, _ti));
+            vm.ds_write(DS_SCRATCH_36, (uint16_t)v2_text_byte(_s1, (uint16_t)(_ti + 1))); }
           vm.ch4_mul_clobber = false;
           const uint16_t _v2v = 0x0000;
           { uint16_t _w14 = vm.ds_read(DS_SCRATCH_34);
@@ -109982,12 +109982,12 @@ static __attribute__((noinline)) bool v2_gen_exec_1c5_p19(V2VM& vm, int& max_ops
           vm.ds_write(DS_MODE_WORD, 0x5608);   // sub_1250b mode word
           vm.ch4_mul_clobber = false;
           const uint16_t _r0 = 0x0156;
-          { uint16_t _tp = *(uint16_t*)(v2_m2c_base + 0x9480 + (uint16_t)(_r0 * 2));
+          { uint16_t _tp = v2_text_ptr_of(v2_m2c_base + 0x9480, _r0);   // the language bank first
             vm.ds_write(DS_TEXT_IDX, _tp); }   // sub_12515 tail
           { uint16_t _ti = vm.ds_read(DS_TEXT_IDX);
-            uint8_t* _s1 = v2_m2c_base + 0x9480;
-            vm.ds_write(DS_SCRATCH_34, (uint16_t)_s1[_ti]);
-            vm.ds_write(DS_SCRATCH_36, (uint16_t)_s1[(uint16_t)(_ti + 1)]); }
+            const uint8_t* _s1 = v2_m2c_base + 0x9480;
+            vm.ds_write(DS_SCRATCH_34, (uint16_t)v2_text_byte(_s1, _ti));
+            vm.ds_write(DS_SCRATCH_36, (uint16_t)v2_text_byte(_s1, (uint16_t)(_ti + 1))); }
           vm.ch4_mul_clobber = false;
           uint16_t _v2v_a = (uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x187D) /* self.state_187d */;
           vm.si_track = (uint16_t)(_v2v_a - OBJ_FIELD_BASE);
@@ -110147,12 +110147,12 @@ static __attribute__((noinline)) bool v2_gen_exec_1c5_p19(V2VM& vm, int& max_ops
           vm.ds_write(DS_MODE_WORD, 0x5700);   // sub_1250b mode word
           vm.ch4_mul_clobber = false;
           const uint16_t _r0 = 0x0157;
-          { uint16_t _tp = *(uint16_t*)(v2_m2c_base + 0x9480 + (uint16_t)(_r0 * 2));
+          { uint16_t _tp = v2_text_ptr_of(v2_m2c_base + 0x9480, _r0);   // the language bank first
             vm.ds_write(DS_TEXT_IDX, _tp); }   // sub_12515 tail
           { uint16_t _ti = vm.ds_read(DS_TEXT_IDX);
-            uint8_t* _s1 = v2_m2c_base + 0x9480;
-            vm.ds_write(DS_SCRATCH_34, (uint16_t)_s1[_ti]);
-            vm.ds_write(DS_SCRATCH_36, (uint16_t)_s1[(uint16_t)(_ti + 1)]); }
+            const uint8_t* _s1 = v2_m2c_base + 0x9480;
+            vm.ds_write(DS_SCRATCH_34, (uint16_t)v2_text_byte(_s1, _ti));
+            vm.ds_write(DS_SCRATCH_36, (uint16_t)v2_text_byte(_s1, (uint16_t)(_ti + 1))); }
           vm.ch4_mul_clobber = false;
           const uint16_t _v2v = 0x0000;
           { uint16_t _w14 = vm.ds_read(DS_SCRATCH_34);
@@ -110331,12 +110331,12 @@ static __attribute__((noinline)) bool v2_gen_exec_1c5_p19(V2VM& vm, int& max_ops
           vm.ds_write(DS_MODE_WORD, 0x5800);   // sub_1250b mode word
           vm.ch4_mul_clobber = false;
           const uint16_t _r0 = 0x0158;
-          { uint16_t _tp = *(uint16_t*)(v2_m2c_base + 0x9480 + (uint16_t)(_r0 * 2));
+          { uint16_t _tp = v2_text_ptr_of(v2_m2c_base + 0x9480, _r0);   // the language bank first
             vm.ds_write(DS_TEXT_IDX, _tp); }   // sub_12515 tail
           { uint16_t _ti = vm.ds_read(DS_TEXT_IDX);
-            uint8_t* _s1 = v2_m2c_base + 0x9480;
-            vm.ds_write(DS_SCRATCH_34, (uint16_t)_s1[_ti]);
-            vm.ds_write(DS_SCRATCH_36, (uint16_t)_s1[(uint16_t)(_ti + 1)]); }
+            const uint8_t* _s1 = v2_m2c_base + 0x9480;
+            vm.ds_write(DS_SCRATCH_34, (uint16_t)v2_text_byte(_s1, _ti));
+            vm.ds_write(DS_SCRATCH_36, (uint16_t)v2_text_byte(_s1, (uint16_t)(_ti + 1))); }
           vm.ch4_mul_clobber = false;
           const uint16_t _v2v = 0x0000;
           { uint16_t _w14 = vm.ds_read(DS_SCRATCH_34);
@@ -110494,12 +110494,12 @@ static __attribute__((noinline)) bool v2_gen_exec_1c5_p19(V2VM& vm, int& max_ops
           vm.ds_write(DS_MODE_WORD, 0x5908);   // sub_1250b mode word
           vm.ch4_mul_clobber = false;
           const uint16_t _r0 = 0x0159;
-          { uint16_t _tp = *(uint16_t*)(v2_m2c_base + 0x9480 + (uint16_t)(_r0 * 2));
+          { uint16_t _tp = v2_text_ptr_of(v2_m2c_base + 0x9480, _r0);   // the language bank first
             vm.ds_write(DS_TEXT_IDX, _tp); }   // sub_12515 tail
           { uint16_t _ti = vm.ds_read(DS_TEXT_IDX);
-            uint8_t* _s1 = v2_m2c_base + 0x9480;
-            vm.ds_write(DS_SCRATCH_34, (uint16_t)_s1[_ti]);
-            vm.ds_write(DS_SCRATCH_36, (uint16_t)_s1[(uint16_t)(_ti + 1)]); }
+            const uint8_t* _s1 = v2_m2c_base + 0x9480;
+            vm.ds_write(DS_SCRATCH_34, (uint16_t)v2_text_byte(_s1, _ti));
+            vm.ds_write(DS_SCRATCH_36, (uint16_t)v2_text_byte(_s1, (uint16_t)(_ti + 1))); }
           vm.ch4_mul_clobber = false;
           uint16_t _v2v_a = (uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x187D) /* self.state_187d */;
           vm.si_track = (uint16_t)(_v2v_a - OBJ_FIELD_BASE);
@@ -110659,12 +110659,12 @@ static __attribute__((noinline)) bool v2_gen_exec_1c5_p19(V2VM& vm, int& max_ops
           vm.ds_write(DS_MODE_WORD, 0x5A08);   // sub_1250b mode word
           vm.ch4_mul_clobber = false;
           const uint16_t _r0 = 0x015A;
-          { uint16_t _tp = *(uint16_t*)(v2_m2c_base + 0x9480 + (uint16_t)(_r0 * 2));
+          { uint16_t _tp = v2_text_ptr_of(v2_m2c_base + 0x9480, _r0);   // the language bank first
             vm.ds_write(DS_TEXT_IDX, _tp); }   // sub_12515 tail
           { uint16_t _ti = vm.ds_read(DS_TEXT_IDX);
-            uint8_t* _s1 = v2_m2c_base + 0x9480;
-            vm.ds_write(DS_SCRATCH_34, (uint16_t)_s1[_ti]);
-            vm.ds_write(DS_SCRATCH_36, (uint16_t)_s1[(uint16_t)(_ti + 1)]); }
+            const uint8_t* _s1 = v2_m2c_base + 0x9480;
+            vm.ds_write(DS_SCRATCH_34, (uint16_t)v2_text_byte(_s1, _ti));
+            vm.ds_write(DS_SCRATCH_36, (uint16_t)v2_text_byte(_s1, (uint16_t)(_ti + 1))); }
           vm.ch4_mul_clobber = false;
           uint16_t _v2v_a = (uint16_t)(vm.global_r(DS_CUR_OBJ) + 0x187D) /* self.state_187d */;
           vm.si_track = (uint16_t)(_v2v_a - OBJ_FIELD_BASE);
