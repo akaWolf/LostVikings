@@ -3859,16 +3859,17 @@ void v2_coop_death(uint8_t* s) {
 // ---- the state image's "COOP" block (UX stage 8 tails) -------------------
 // The co-op / lockstep state outside the DS. Little-endian words, an explicit
 // layout (no struct dumps):
-//   u16 version = 1, u16 players, u16 sync level, u32 frame counter (lo, hi),
+//   u16 version = 2, u16 players, u16 sync level, u32 frame counter (lo, hi),
 //   u16 view width, u16 view height, u16 console variant,
-//   per player 0..2: u16 keys, edges, prev, active, cam_x, cam_y, cam_col2, cam_row2; u8 cam_valid, cam_scanned
+//   per player 0..2: u16 keys, edges, prev, active, cam_x, cam_y, cam_col2, cam_row2; u8 cam_valid, cam_scanned;
+//                    (version 2) u16 blink_prev, blink_cnt
 // The frame counter is restored only by the lockstep (every client applies
 // the image with the same counting); the debug LOAD slot keeps its own.
 static void coop_put16(std::vector<uint8_t>& o, uint16_t v) { o.push_back((uint8_t)v); o.push_back((uint8_t)(v >> 8)); }
 static uint16_t coop_get16(const uint8_t* p) { return (uint16_t)(p[0] | (p[1] << 8)); }
-static const size_t V2_COOP_BLOCK_SIZE = 2 * 8 + V2_COOP_MAX * (8 * 2 + 2);
+static const size_t V2_COOP_PLAYER_V1 = 8 * 2 + 2, V2_COOP_PLAYER_V2 = V2_COOP_PLAYER_V1 + 2 * 2;
 static void v2_coop_state_write(std::vector<uint8_t>& o) {
-    coop_put16(o, 1);
+    coop_put16(o, 2);
     coop_put16(o, (uint16_t)g_v2_coop_players);
     coop_put16(o, g_coop_sync_level);
     coop_put16(o, (uint16_t)((uint32_t)v2_dbg_pre_vm_iter & 0xFFFF));
@@ -3881,10 +3882,14 @@ static void v2_coop_state_write(std::vector<uint8_t>& o) {
         coop_put16(o, p.keys); coop_put16(o, p.edges); coop_put16(o, p.prev); coop_put16(o, p.active);
         coop_put16(o, p.cam_x); coop_put16(o, p.cam_y); coop_put16(o, p.cam_col2); coop_put16(o, p.cam_row2);
         o.push_back(p.cam_valid ? 1 : 0); o.push_back(p.cam_scanned ? 1 : 0);
+        coop_put16(o, p.blink_prev); coop_put16(o, p.blink_cnt);
     }
 }
 static bool v2_coop_state_read(const uint8_t* p, size_t n, bool restore_frame) {
-    if (n < V2_COOP_BLOCK_SIZE || coop_get16(p) != 1) return false;
+    const uint16_t ver = (n >= 2) ? coop_get16(p) : 0;
+    if (ver != 1 && ver != 2) return false;
+    const size_t per = (ver == 1) ? V2_COOP_PLAYER_V1 : V2_COOP_PLAYER_V2;
+    if (n < 2 * 8 + V2_COOP_MAX * per) return false;
     int players = coop_get16(p + 2);
     if (players < 1 || players > V2_COOP_MAX) return false;
     g_v2_coop_players = players;
@@ -3899,9 +3904,47 @@ static bool v2_coop_state_read(const uint8_t* p, size_t n, bool restore_frame) {
         pl.keys = coop_get16(q); pl.edges = coop_get16(q + 2); pl.prev = coop_get16(q + 4); pl.active = coop_get16(q + 6);
         pl.cam_x = coop_get16(q + 8); pl.cam_y = coop_get16(q + 10); pl.cam_col2 = coop_get16(q + 12); pl.cam_row2 = coop_get16(q + 14);
         pl.cam_valid = q[16] != 0; pl.cam_scanned = q[17] != 0;
-        q += 18;
+        if (ver >= 2) { pl.blink_prev = coop_get16(q + 18); pl.blink_cnt = coop_get16(q + 20); }
+        else          { pl.blink_prev = 0xFFFF; pl.blink_cnt = 0; }
+        q += per;
     }
     return true;
+}
+
+// sub_10813's switch blink for the vikings of players 2..3 (tails): the DOS
+// pair word_288A4 (previous) / word_288A6 (countdown) belongs to player 1's
+// viking; each other player gets the same rules on his own pair —
+// loc_107A2: a new viking clears the previous one's blink bit and arms 0x15;
+// loc_107d5: the countdown hides the sub-sprite (flag 0x2000) on every other
+// pair of frames. Runs right after sub_10813, behind its byte_2AA9A gate.
+void v2_coop_blink(uint8_t* s) {
+    if (g_v2_coop_players <= 1) return;
+    if (v2gs(s).active_vk_sel_b() == 0) return;
+    for (int k = 1; k < g_v2_coop_players; k++) {
+        V2CoopPlayer& p = g_coop.p[k];
+        if (p.active >= 6) { p.blink_prev = 0xFFFF; p.blink_cnt = 0; continue; }
+        if (p.active != p.blink_prev) {
+            if (p.blink_prev < 6 && ObjMem{s, p.blink_prev}.i16(OBJ_ANIM_IDX) >= 0) {
+                ObjMem ps{s, ObjMem{s, p.blink_prev}.sub_slot()};
+                ps.w16(OBJ_SPRITE_FLAGS, ps.u16(OBJ_SPRITE_FLAGS) & 0xDFFF);
+                ps.w16(OBJ_DIRTY_MODE, 2);
+            }
+            p.blink_prev = p.active;
+            p.blink_cnt = 0x15;
+        }
+        if (p.blink_cnt != 0) {
+            p.blink_cnt--;
+            ObjMem sub{s, ObjMem{s, p.active}.sub_slot()};
+            if (p.blink_cnt & 2) {
+                p.blink_cnt--;
+                sub.w16(OBJ_SPRITE_FLAGS, sub.u16(OBJ_SPRITE_FLAGS) | 0x2000);
+                sub.w16(OBJ_DIRTY_MODE, 0x200);
+            } else {
+                sub.w16(OBJ_SPRITE_FLAGS, sub.u16(OBJ_SPRITE_FLAGS) & 0xDFFF);
+                sub.w16(OBJ_DIRTY_MODE, 2);
+            }
+        }
+    }
 }
 
 static void v2_hud_health_120ff(uint8_t* s);
@@ -8895,6 +8938,8 @@ static bool v2_shadow_initialized = false;
 struct V2StateBlock { const char* tag; void* ptr; uint32_t len; bool optional; };   // optional: an older image may lack it
 extern "C" uint8_t* v2_ailnat_data();                 // v2_ail_native.cpp: the driver's resident memory (code + live data)
 extern "C" uint8_t* v2_ail_cache_data(uint32_t* size); // v2_ail.cpp: the timbre cache the driver was handed
+extern "C" uint8_t* v2_nopl_regs_data(uint32_t* size); // v2_native_opl.cpp: the OPL register file the driver wrote
+extern "C" void     v2_nopl_regs_replay(void);         // ... sent to the chip after a restore
 static bool v2_state_blocks(V2StateBlock* b, int* n, uint8_t* ds_img) {
     int k = 0;
     b[k++] = { "DS  ", ds_img,                   0x10000 };
@@ -8916,9 +8961,10 @@ static bool v2_state_blocks(V2StateBlock* b, int* n, uint8_t* ds_img) {
     // timbre cache. A state without them (older files) loads with the sound
     // running on; the lockstep needs them, or the driver's DS words (sequence
     // slots, timbre offsets, the requested patch) diverge on a joining client.
-    { uint32_t csz = 0; uint8_t* cache = v2_ail_cache_data(&csz);
+    { uint32_t csz = 0, osz = 0; uint8_t* cache = v2_ail_cache_data(&csz); uint8_t* oplr = v2_nopl_regs_data(&osz);
       b[k++] = { "AILN", v2_ailnat_data(), 0x10000, true };
-      b[k++] = { "AILC", cache,            csz,     true }; }
+      b[k++] = { "AILC", cache,            csz,     true };
+      b[k++] = { "OPLR", oplr,             osz,     true }; }   // the chip's registers: replayed into the chip after a restore
     *n = k;
     return true;
 }
@@ -8992,6 +9038,7 @@ static int v2_state_deserialize(const uint8_t* img, size_t size, bool restore_fr
     v2_current_level = v2gs(v2_vm_shadow_ds).level();
     v2_input_snapshot = 0;
     { extern uint16_t g_last_sub12352_new_keydowns; g_last_sub12352_new_keydowns = 0; }
+    v2_nopl_regs_replay();                 // the audible chip takes the image's register file
     fprintf(stderr, "V2-STATE: %s: %u blocks%s (level=%u, frame %d)\n", what, nn, coop_seen ? " incl. COOP" : "",
             (unsigned)v2_current_level, v2_dbg_pre_vm_iter);
     return 0;
@@ -9080,6 +9127,7 @@ static bool v2_rw_restore(uint8_t* s) {
     v2_gs_deserialize(&v2_rw_st, slot);
     v2_gs_serialize(&v2_rw_st, v2_vm_shadow_ds);
     v2_gs_evac_refresh(v2_vm_shadow_ds);          // members <- the restored image (stage-4 evac)
+    v2_nopl_regs_replay();                        // the chip follows the restored register file too
     v2_vm_acc_base = v2_vm_shadow_ds; v2_shadow_initialized = true;
     v2_current_level = v2gs(s).level();
     { extern uint16_t v2_input_snapshot; v2_input_snapshot = 0; }
@@ -9662,6 +9710,7 @@ static void v2_game_loop_pre_vm(uint8_t* shadow, uint16_t ds_val) {
 
     // sub_10813 -> loc_107A2: viking blink (extracted: v2_viking_blink_10813, K4).
     v2_viking_blink_10813(shadow);
+    v2_coop_blink(shadow);                   // UX stage 8 tails: the switch blink of players 2..3 (inert with one player)
 
     // NOTE: sub_1086f (command buffer dispatch) runs ONLY at orig eip 0x00E7
     // (POST_FLIP3 phase) — its mirror lives in v2_phase_post_flip3. A pre_vm

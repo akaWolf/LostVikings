@@ -64,6 +64,7 @@ static void sock_reuse(sock_t s) { int one = 1; setsockopt(s, SOL_SOCKET, SO_REU
 
 extern bool need_quit;
 extern "C" void v2_input_recorder_net(int local_player, int synced);   // v2_input_recorder.cpp
+extern "C" void v2_nopl_force_frame_ticks(void);                       // v2_native_opl.cpp: the sequencer by frames (the audio clock is not shared)
 
 namespace {
 
@@ -418,6 +419,7 @@ bool start_listening(int port, int players, int delay) {
         sock_close(ls); return false;
     }
     g_listen = ls;
+    v2_nopl_force_frame_ticks();
     g_players = players; g_local = 0; g_delay = delay; g_host = true; g_port = port;
     g_part[0] = true; g_part_from[0] = 0;
     g_last_wait_log = std::chrono::steady_clock::now();
@@ -454,6 +456,7 @@ bool connect_and_hello(const char* host_port, std::string& err) {
         err = "bad HELLO"; sock_close(s); return false;
     }
     apply_options(line.c_str() + consumed);
+    v2_nopl_force_frame_ticks();
     g_players = players; g_local = index; g_delay = delay; g_host = false; g_host_name = host + ":" + port;
     fprintf(stderr, "V2-NET: joined %s as player %d of %d (input delay %d reads), waiting for the start...\n",
             g_host_name.c_str(), index + 1, players, delay);
@@ -561,6 +564,7 @@ bool v2_net_join_async(const char* host_port) {
 
 void v2_net_solo(int delay) {
     g_players = 0;          // resolved lazily from g_v2_coop_players (a replay's `# coop N` header lands after main's arguments)
+    v2_nopl_force_frame_ticks();
     g_local = 0; g_delay = delay; g_host = false; g_active = true;
     g_part[0] = true;       // this instance captures every player's events itself: its own batches are the only ones
     g_last_wait_log = std::chrono::steady_clock::now();

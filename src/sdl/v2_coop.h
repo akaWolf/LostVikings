@@ -35,6 +35,10 @@ struct V2CoopPlayer {
     uint16_t cam_col2 = 0, cam_row2 = 0;      // sub_1673c's tracker words for this camera (scroll_col >> 1 / scroll_row >> 1)
     bool cam_valid = false;                   // the player has a viking in a gameplay level (else no camera: the presenter shows the DS one)
     bool cam_scanned = false;                 // sub_13a0e's full-window spawn scan ran for this camera
+    // Tails: sub_10813's switch blink for this player's viking (the DS pair
+    // word_288A4 / word_288A6 serves player 1 only)
+    uint16_t blink_prev = 0xFFFF;             // the viking the blink was last armed for
+    uint16_t blink_cnt = 0;                   // the 0x15-frame countdown
 };
 struct V2Coop {
     V2CoopPlayer p[V2_COOP_MAX];              // p[0] mirrors the DS words of player 1 (its `active` = ownership only)
@@ -83,6 +87,7 @@ uint16_t v2_coop_view(uint16_t off, uint16_t real, const uint8_t* ds);
 void v2_coop_read_inputs(uint8_t* s);   // after sub_12352: the words of players 2..3 for this read
 void v2_coop_cycle(uint8_t* s);         // instead of sub_12e79 in co-op: viking cycling per player, held vikings skipped
 void v2_coop_death(uint8_t* s);         // after sub_12e16: reassign the vikings of dead players
+void v2_coop_blink(uint8_t* s);         // after sub_10813: the switch blink of players 2..3
 // UX stage 8 tails — the state image (v2_vm.cpp): the V2S1 blocks plus the
 // "COOP" block (the players' words/ownership/cameras, the frame counter, the
 // view). v2_state_save/load wrap these for files; the lockstep sends them.

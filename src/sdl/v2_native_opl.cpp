@@ -69,10 +69,24 @@ static bool         g_inited  = false;
 static FILE*        g_trace   = nullptr;
 static int          g_trace_resolved = 0;
 
-static uint8_t      g_index[2] = {0, 0};    // per-bank register-index latch
-static uint8_t      g_regs[2][256] = {{0}}; // shadow register files (detect probe)
-static uint8_t      g_mixer_index = 0;
-static uint8_t      g_mixer[256] = {0};
+// The game-thread register file: the per-bank index latches, the two shadow
+// register files (the detect probe reads them) and the SBPro mixer. One packed
+// array (UX stage 8 tails): the state image carries it as the "OPLR" block, so
+// a loaded state — a lockstep joiner, the host's LOAD, the debug slots — puts
+// the chip back to the registers the copied world had (v2_nopl_regs_replay).
+// ... plus the frame-mode tick accumulator at +776 (8-aligned): the phase of
+// the sequencer's 125/60-per-frame counting is game state too — a joiner
+// with another phase ticks the driver a frame early or late and its DS words
+// drift from the host's.
+alignas(8) static uint8_t g_oplr[2 + 2 * 256 + 1 + 256 + 5 + 8];
+#define g_index        (g_oplr)                                            // [2] per-bank register-index latch
+#define g_regs         (reinterpret_cast<uint8_t (*)[256]>(g_oplr + 2))    // [2][256] shadow register files
+#define g_mixer_index  (g_oplr[2 + 2 * 256])
+#define g_mixer        (g_oplr + 2 + 2 * 256 + 1)                          // [256]
+#define g_tick_acc     (*reinterpret_cast<double*>(g_oplr + 776))          // the frame-mode tick accumulator
+extern "C" uint8_t* v2_nopl_regs_data(uint32_t* size) { if (size) *size = (uint32_t)sizeof g_oplr; return g_oplr; }
+static int          g_last_frame = -1;      // the render frame the accumulator was last advanced to (re-based after a restore)
+static int          g_force_frame = 0;      // a lockstep game: the sequencer ticks by frames on every peer (v2_nopl_force_frame_ticks)
 
 static double       g_tick_hz = 0.0;
 
@@ -147,6 +161,37 @@ extern "C" void v2_nopl_sbpro_out(uint16_t port, uint8_t val) {
     // Anything else the driver touches is a survey gap — log, don't guess.
     static int warn = 0;
     if (warn++ < 8) fprintf(stderr, "v2_native_opl: OUT %04X <- %02X (unmodeled port)\n", port, val);
+}
+
+// After a state image replaced the register file (UX stage 8 tails): send it
+// to the chip through the same port model, so the audible chip holds the
+// registers of the copied world — operators and timbres first, the key-on
+// registers B0..B8 last (a note starts on a configured operator pair), the
+// index latch restored at the end; the mixer's one live register (0x0A).
+extern "C" void v2_nopl_regs_replay(void) {
+    uint8_t saved[sizeof g_oplr];
+    memcpy(saved, g_oplr, sizeof g_oplr);
+    const uint8_t (*regs)[256] = reinterpret_cast<const uint8_t (*)[256]>(saved + 2);
+    for (int chip = 0; chip < 2; chip++) {
+        const uint16_t pi = (uint16_t)(0x220 + chip * 2), pd = (uint16_t)(pi + 1);
+        for (int reg = 1; reg < 256; reg++) {
+            if (reg >= 0xB0 && reg <= 0xB8) continue;
+            v2_nopl_sbpro_out(pi, (uint8_t)reg); v2_nopl_sbpro_out(pd, regs[chip][reg]);
+        }
+        for (int reg = 0xB0; reg <= 0xB8; reg++) { v2_nopl_sbpro_out(pi, (uint8_t)reg); v2_nopl_sbpro_out(pd, regs[chip][reg]); }
+        v2_nopl_sbpro_out(pi, saved[chip]);                 // the index latch as the image had it
+    }
+    v2_nopl_sbpro_out(0x224, 0x0A); v2_nopl_sbpro_out(0x225, saved[2 + 2 * 256 + 1 + 0x0A]);
+    v2_nopl_sbpro_out(0x224, saved[2 + 2 * 256]);
+    // the accumulator came with the image; the frame it was advanced to is
+    // this world's current one (the image was taken at a main read, before
+    // the frame's first vsync wait — nothing is pending on either side)
+    { extern int v2_render_frame; g_last_frame = v2_render_frame; }
+}
+
+extern "C" void v2_nopl_force_frame_ticks(void) {
+    if (!g_force_frame) fprintf(stderr, "v2_native_opl: lockstep — frame-accumulator tick mode on every peer\n");
+    g_force_frame = 1;
 }
 
 // ---------------------------------------------------------------------------
@@ -268,7 +313,7 @@ extern "C" void v2_nopl_out(uint16_t port, uint8_t val) {
 // fully deterministic driver DS state for replay/verify experiments, at the
 // cost of tempo tracking the frame rate.
 static const double NOPL_FRAME_HZ = 60.0;
-static double g_tick_acc = 0.0;
+// (g_tick_acc lives in g_oplr, see the register file above)
 
 static int nopl_frame_mode(void);
 extern "C" void v2_ail_sink_pump(uint64_t);   // (#83) audible sink driver (v2_ail.cpp)
@@ -309,7 +354,7 @@ extern "C" void v2_nopl_pump(void) {
         // v2_dbg_pre_vm_iter is documented-inflated by the blocking-loop
         // wall-clock spins and multiplied the ticks ~600x under NOVSYNC.
         extern int v2_render_frame;
-        static int last_frame = -1;
+        int& last_frame = g_last_frame;
         int cur = v2_render_frame;
         {   // V2_TICKDBG=1: pump/counter forensics (one line per 1000 pumps)
             static int dbg = -1; static long pumps = 0;
@@ -370,6 +415,7 @@ extern "C" void v2_nopl_pump(void) {
 // V2_ONLY: the single (audible) instance paces by the audio clock;
 // V2_AIL_FRAME_TICKS=1 keeps its deterministic frame mode for replays.
 static int nopl_frame_mode(void) {
+    if (g_force_frame) return 1;    // UX stage 8 tails: a network game ticks by frames (the audio clock is not shared)
     static int frame_mode = -1;
     if (frame_mode < 0) {
 #ifdef V2_ONLY

@@ -212,7 +212,9 @@ void net_capture_impl(const SDL_Event* e, bool from_replay) {
         return;                                 // nothing before the join: the image replaces this world
     } else if (g_net_local > 0) {
         if (player != 0 || kv == 0 || so != 0) return;
-        name = "P" + std::to_string(g_net_local + 1) + ":" + name;
+        // the pause / inventory screen (sub_11ba5, bit 0x2000 = TAB) is one
+        // shared screen: any player's TAB opens and closes it as player 1's
+        if (!(kv & 0x2000)) name = "P" + std::to_string(g_net_local + 1) + ":" + name;
     } else if (peers && player != 0) {
         return;
     }
