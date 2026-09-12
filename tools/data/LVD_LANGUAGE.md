@@ -132,6 +132,35 @@ Anything without a nicer form keeps its engine name (`res_deduct(partner)`,
 `cmdq_push(6, N)`, `pal_shade(r,g,b)`, `mark_anim_sub`, …) or the raw
 `opXX <hex>`.
 
+## Functions
+
+The VM has `call` (op 05: the return address goes to the object's single
+OBJ_ALT_PC field) and `return` (op 06). There is no stack: a second call — or
+any call-branch such as the collision families — before the return overwrites
+the address. A `func` is a subroutine that respects that:
+
+```
+func shared_40_43_48_56_1:      ; @5C1E
+    self.timer = 0x20
+    anim A_5F10
+    return
+    ...
+    call shared_40_43_48_56_1(self.state_187d = 3, acc = 1)
+```
+
+* `func NAME:` declares it. The decompiler writes `func` for every label that
+  is entered by `call` only, whose body up to the next label ends in `return`
+  and holds no other call, and that no code falls into; everything else stays
+  `state` (it can still be called — it just is not checked).
+* The compiler checks a `func`: entered by `call` only (no goto, no case, no
+  class entry), ends in `return` before the next label, no `call` or
+  `if … call` inside, and the statement before it is `goto`/`return`/`exit`/
+  `despawn` (a `yield` falls through in time). Each violation names its line.
+* Arguments: `call F(self.f = N, [g] = N, partner.f = N, acc = X)` is exactly
+  the literal stores, then the optional `acc = X`, then `call F` — in that
+  order, because a store uses the accumulator. The value a function leaves in
+  `acc` is its result by convention; nothing enforces it.
+
 ## Operand tokens
 
 * Fields: the `OBJ_*` names of `src/sdl/v2_ds_layout.h`, lower-case (`world_x`,

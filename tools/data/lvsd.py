@@ -33,7 +33,7 @@ Usage (repo root):
   lvsd.py check [CID ...]              decompile+compile == reference bytes
   lvsd.py seed                         write the initial names dictionary
 """
-import sys, os, re, json, struct, importlib.util
+import sys, os, re, json, struct, importlib.util, collections
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(os.path.dirname(HERE))
@@ -650,7 +650,9 @@ def decompile_text(cid, text, names):
     stats['switch'] = nsw
     out, nsay = fold_say(out)
     stats['say'] = nsay
-    out.append(f'; stats: {stats["stmt"]} statements, {stats["sugar"]} folded loads, {nsw} switch blocks, {nsay} say lines, {stats["states"]} states ({stats["named"]} named)')
+    out, nfn, ncall = fold_funcs(out)
+    stats['func'] = nfn; stats['callargs'] = ncall
+    out.append(f'; stats: {stats["stmt"]} statements, {stats["sugar"]} folded loads, {nsw} switch blocks, {nsay} say lines, {nfn} funcs, {ncall} calls with args, {stats["states"]} states ({stats["named"]} named)')
     return '\n'.join(out) + '\n', stats
 
 
@@ -665,6 +667,74 @@ VAL_RX = r'(self\.[A-Za-z_][A-Za-z0-9_?]*(?:#[0-9A-Fa-f]{2})?|partner\.[A-Za-z_]
 LIT_RX = r'(0x[0-9A-Fa-f]+|\d+)'
 SW_RX = re.compile(rf'^    if {VAL_RX} == {LIT_RX} goto ([A-Za-z_][A-Za-z0-9_]*|=[0-9A-Fa-f]{{4}})$')
 SEL_RX = re.compile(rf'^    if {LIT_RX} == {VAL_RX} goto ([A-Za-z_][A-Za-z0-9_]*|=[0-9A-Fa-f]{{4}})$')
+
+
+# func: a subroutine — a label that is only ever entered by `call`, whose body
+# (the statements up to the next label) ends in `return`, holds no other call
+# (the VM keeps ONE return address per object, OBJ_ALT_PC: a nested call or a
+# call-branch would lose it) and is not fallen into from the statement before.
+# Declared `func NAME:`; a hand-written one is checked for the same rules.
+# Parameters: `call F(self.f = N, [g] = N, partner.f = N, acc = X)` is the
+# literal stores (each `acc = N; store`) then the optional `acc = X`, then the
+# call — written back in that order, so acc holds X at entry.
+CALLISH_RX = re.compile(r'^(call \S+|if .* call \S+|select .*|switch .*)$')
+NONFALL = {'goto', 'return', 'exit', 'despawn'}
+STORE_ARG_RX = re.compile(r'^(self\.[A-Za-z_][A-Za-z0-9_?]*(?:#[0-9A-Fa-f]{2})?|partner\.[A-Za-z_][A-Za-z0-9_?]*(?:#[0-9A-Fa-f]{2})?|\[(?:[A-Za-z_][A-Za-z0-9_]*|[0-9A-Fa-f]{4})\]) = (0x[0-9A-Fa-f]+|-?\d+)$')
+ACC_ARG_RX = re.compile(r'^acc = (.+)$')
+
+
+def label_of(line):
+    m = re.match(r'^(state|func) (\S+):', line)
+    return m.group(2) if m else None
+
+
+def fold_funcs(lines):
+    """-> (lines, funcs, folded calls)"""
+    calls = collections.Counter(); jumps = collections.Counter()
+    for l in lines:
+        s = l.split(';', 1)[0].strip()
+        if s.startswith('class '):
+            m = re.search(r'entry=(\S+)', s); jumps[m.group(1)] += 1
+        if not l.startswith('    '): continue
+        m = re.match(r'^(?:if .* )?call (\S+)$', s)
+        if m: calls[m.group(1)] += 1
+        for m in re.finditer(r'\bgoto (\S+)', s): jumps[m.group(1)] += 1
+        m = re.match(r'^(0x[0-9A-Fa-f]+|\d+) -> (\S+)$', s)
+        if m: jumps[m.group(2)] += 1
+        m = re.match(r'^search_\S+ goto (\S+)$', s)
+        if m: jumps[m.group(1)] += 1
+    funcs = set(); out = list(lines); nfn = 0
+    i = 0
+    while i < len(lines):
+        name = label_of(lines[i])
+        if name and name in calls and name not in jumps:
+            body = []; j = i + 1
+            while j < len(lines) and (lines[j].startswith('    ') or not lines[j].split(';', 1)[0].strip()):
+                if lines[j].split(';', 1)[0].strip(): body.append(lines[j].split(';', 1)[0].strip())
+                j += 1
+            q = i - 1
+            while q >= 0 and not lines[q].split(';', 1)[0].strip(): q -= 1
+            prev = lines[q].split(';', 1)[0].strip() if q >= 0 else ''
+            prev_falls = lines[q].startswith('    ') and prev.split()[0] not in NONFALL if q >= 0 else False
+            if body and body[-1] == 'return' and not any(CALLISH_RX.match(s) for s in body[:-1]) and not prev_falls:
+                funcs.add(name); out[i] = lines[i].replace('state ', 'func ', 1); nfn += 1
+        i += 1
+    # call sugar: literal stores (+ one acc load) right before `call F` of a func
+    res = []; ncall = 0; k = 0
+    while k < len(out):
+        l = out[k]
+        m = re.match(r'^    call (\S+)$', l.split(';', 1)[0].rstrip()) if l.startswith('    ') else None
+        if m and m.group(1) in funcs:
+            args = []; b = len(res) - 1
+            if b >= 0 and res[b].startswith('    ') and ACC_ARG_RX.match(res[b].strip()):
+                args.insert(0, res[b].strip()); b -= 1
+            while b >= 0 and res[b].startswith('    ') and STORE_ARG_RX.match(res[b].strip()):
+                args.insert(0, res[b].strip()); b -= 1
+            if args:
+                del res[b + 1:]
+                res.append(f'    call {m.group(1)}({", ".join(args)})'); ncall += 1; k += 1; continue
+        res.append(l); k += 1
+    return res, nfn, ncall
 
 
 # say: the speech-bubble idiom — seven statements in a row (no label between):
@@ -812,7 +882,42 @@ class Lowerer:
             return lines
         raise ValueError(f'cannot parse statement: {s!r}')
 
+    def check_funcs(self, text):
+        """The rules a `func` must satisfy (the VM keeps one return address
+        per object): entered by `call` only; the body up to the next label ends
+        in `return` and holds no other call or call-branch; not fallen into."""
+        lines = text.splitlines()
+        code = [(n, l.split(';', 1)[0].rstrip()) for n, l in enumerate(lines, 1)]
+        funcs = [(n, label_of(l)) for n, l in code if l.startswith('func ')]
+        if not funcs: return
+        jumps = collections.Counter()
+        for n, l in code:
+            s = l.strip()
+            if s.startswith('class '):
+                m = re.search(r'entry=(\S+)', s); jumps[m.group(1)] += 1
+            if not l.startswith('    '): continue
+            for m in re.finditer(r'\bgoto (\S+)', s): jumps[m.group(1)] += 1
+            m = re.match(r'^(0x[0-9A-Fa-f]+|\d+) -> (\S+)$', s)
+            if m: jumps[m.group(2)] += 1
+        for n, name in funcs:
+            if name in jumps:
+                raise ValueError(f'line {n}: func {name} is entered by goto/branch/entry — a func is entered by call only')
+            body = []; j = n
+            while j < len(code) and (code[j][1].startswith('    ') or not code[j][1].strip()):
+                if code[j][1].strip(): body.append((code[j][0], code[j][1].strip()))
+                j += 1
+            if not body or body[-1][1] != 'return':
+                raise ValueError(f'line {n}: func {name} must end in `return` before the next label')
+            for bn, s in body[:-1]:
+                if CALLISH_RX.match(s):
+                    raise ValueError(f'line {bn}: func {name}: a call inside a func loses the return address (the VM keeps one per object)')
+            q = n - 2
+            while q >= 0 and not code[q][1].strip(): q -= 1
+            if q >= 0 and code[q][1].startswith('    ') and code[q][1].strip().split()[0] not in NONFALL:
+                raise ValueError(f'line {n}: func {name} is fallen into from line {code[q][0]} — end the previous code with goto/return/exit/despawn')
+
     def lower(self, text):
+        self.check_funcs(text)
         out = []
         block = None            # ('switch'|'select', value) while inside a case block
         for lineno, line in enumerate(text.splitlines(), 1):
@@ -837,13 +942,27 @@ class Lowerer:
                         if ex is None: raise ValueError(f'bad say line {raw!r}')
                         for s in ex: out.extend(self.statement(s))
                         continue
+                    mc = re.match(r'^call (\S+?)\((.*)\)$', raw)
+                    if mc:                                              # call F(args): the stores, the acc load, the call
+                        args = [a.strip() for a in mc.group(2).split(',') if a.strip()]
+                        seen_acc = False
+                        for a in args:
+                            if ACC_ARG_RX.match(a):
+                                if seen_acc: raise ValueError('call arguments: only one `acc = X`, and last')
+                                seen_acc = True
+                            elif STORE_ARG_RX.match(a):
+                                if seen_acc: raise ValueError('call arguments: `acc = X` must come last (the stores use acc)')
+                            else:
+                                raise ValueError(f'call argument {a!r}: expected `self.f = N`, `[g] = N`, `partner.f = N` or `acc = X`')
+                            out.extend(self.statement(a))
+                        out.extend(self.statement(f'call {mc.group(1)}')); continue
                     out.extend(self.statement(raw)); continue
                 if p[0] == 'chunk': out.append(raw)
                 elif p[0] == 'class':
                     kv = dict(x.split('=', 1) for x in p[2:])
                     entry = kv['entry']
                     out.append(f'record {kv["record"]} sprite={kv["sprite"]} flags={kv["flags"]} code={self.label(entry)} rest={kv["rest"]}')
-                elif p[0] == 'state' and raw.endswith(':'):
+                elif p[0] in ('state', 'func') and raw.endswith(':'):
                     out.append(self.label(p[1][:-1]) + ':')
                 elif raw.endswith(':') and len(p) == 1: out.append(raw)
                 elif p[0] == 'alias' and len(p) == 4 and p[2] == '=':
