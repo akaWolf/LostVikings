@@ -357,11 +357,17 @@ The `src/adlmidi/` submodule keeps its upstream license
 (see [libADLMIDI](https://github.com/Wohlstand/libADLMIDI)).
 
 `src/sdl/third_party/snes_spc/` (the SNES sound option) is LGPL-2.1+,
+`src/sdl/third_party/mt32emu/` (the MT-32 sound option, libmt32emu from
+[Munt](https://github.com/munt/munt)) is LGPL-2.1-or-later, and
 `src/sdl/third_party/nuked_sc55/` (the SC-55 sound option, from
 [Nuked-SC55](https://github.com/nukeykt/Nuked-SC55)) is GPL-2.0-or-later:
-a binary built from this tree is distributed under the GPL. The SC-55
-option also needs the module's ROM images, which are Roland's and are not
-included — put your own set in `roms/sc55/` (Nuked-SC55's file names:
+a binary built from this tree is distributed under the GPL. The SC-55 and
+MT-32 options also need the modules' ROM images, which are Roland's and are
+not included — put your own sets in `roms/sc55/` (Nuked-SC55's file names:
 `rom1.bin rom2.bin waverom1.bin waverom2.bin rom_sm.bin` for the SC-55mk2)
-or point `sc55_roms=<dir>` in `v2_options.cfg` at it; without them the
-`SOUND` option falls back to the original OPL3 render.
+and `roms/mt32/` (`MT32_CONTROL.ROM` + `MT32_PCM.ROM`, or the CM-32L pair),
+or point `sc55_roms=<dir>` / `mt32_roms=<dir>` in `v2_options.cfg` at them;
+without them the `SOUND` option falls back to the original OPL3 render. The
+MT-32 option is the game's own MT-32 configuration (its MT-32 driver, timbre
+bank and MT-32 arrangements of the music run on the emulated module) — the
+music was written for that machine.

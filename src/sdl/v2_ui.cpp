@@ -25,6 +25,7 @@ extern bool g_debug_mode;
 static const char* OPT_PATH = "v2_options.cfg";
 char v2_options_lang_code[8] = "en";
 char v2_options_sc55_roms[256] = "";
+char v2_options_mt32_roms[256] = "";
 void v2_options_ensure_loaded() {
     static std::atomic<bool> done{false};
     if (done.exchange(true)) return;
@@ -35,6 +36,7 @@ void v2_options_ensure_loaded() {
         char key[64]; int val = 0; char sval[16];
         if (sscanf(line, " language = %15[A-Za-z-]", sval) == 1) { strncpy(v2_options_lang_code, sval, 7); v2_options_lang_code[7] = 0; continue; }
         { char pv[256]; if (sscanf(line, " sc55_roms = %255s", pv) == 1) { snprintf(v2_options_sc55_roms, sizeof v2_options_sc55_roms, "%s", pv); continue; } }
+        { char pv[256]; if (sscanf(line, " mt32_roms = %255s", pv) == 1) { snprintf(v2_options_mt32_roms, sizeof v2_options_mt32_roms, "%s", pv); continue; } }
         if (sscanf(line, " %63[a-z_] = %d", key, &val) == 2) {
             if (!strcmp(key, "parallax")) v2_options.parallax = val != 0;
             else if (!strcmp(key, "scenes")) v2_options.scenes = val != 0;
@@ -47,7 +49,7 @@ void v2_options_ensure_loaded() {
             // canvas is always the 320x240 raster; an old cfg's key is ignored here)
             else if (!strcmp(key, "border")) v2_options.border = (val >= 0 && val <= 1) ? val : 0;
             else if (!strcmp(key, "snes_sound")) { if (val != 0) v2_options.sound_mode = 1; }   // the pre-UX11 key
-            else if (!strcmp(key, "sound")) v2_options.sound_mode = (val >= 0 && val <= 2) ? val : 0;
+            else if (!strcmp(key, "sound")) v2_options.sound_mode = (val >= 0 && val <= 3) ? val : 0;
             else if (!strcmp(key, "wide")) v2_options.wide = (val >= 0 && val <= 2) ? val : 0;
         }
     }
@@ -69,6 +71,7 @@ void v2_options_save() {
     fprintf(f, "parallax=%d\nscenes=%d\nsnes_balance=%d\nlanguage=%s\nsmooth=%d\nconsole_finale=%d\n", (int)v2_options.parallax.load(), (int)v2_options.scenes.load(), (int)v2_options.snes_balance.load(), v2_locale_code_at(v2_options.language.load()), (int)v2_options.smooth.load(), (int)v2_options.console_finale.load());
     fprintf(f, "filter=%d\ninteger_scale=%d\nborder=%d\nsound=%d\nwide=%d\n", v2_options.filter.load(), (int)v2_options.integer_scale.load(), v2_options.border.load(), v2_options.sound_mode.load(), v2_options.wide.load());
     if (v2_options_sc55_roms[0]) fprintf(f, "sc55_roms=%s\n", v2_options_sc55_roms);
+    if (v2_options_mt32_roms[0]) fprintf(f, "mt32_roms=%s\n", v2_options_mt32_roms);
     fclose(f);
 }
 
@@ -184,7 +187,7 @@ static void activate() {
     case IT_INTEGER:  v2_options.integer_scale = !v2_options.integer_scale.load(); v2_options_save(); break;
     case IT_BORDER:   v2_options.border = (v2_options.border.load() + 1) % 2; v2_options_save(); break;
     case IT_WIDE:     if (net_locked()) break; v2_options.wide = (v2_options.wide.load() + 1) % 3; v2_options_save(); v2_ui_toast("WIDE: NEXT LEVEL"); break;
-    case IT_SOUND:    v2_options.sound_mode = (v2_options.sound_mode.load() + 1) % 3; v2_options_save(); { const int m = v2_options.sound_mode.load(); v2_ui_toast(m == 1 ? "SOUND: SNES (NEXT LEVEL)" : m == 2 ? "SOUND: SC-55" : "SOUND: PC"); } break;
+    case IT_SOUND:    v2_options.sound_mode = (v2_options.sound_mode.load() + 1) % 4; v2_options_save(); { const int m = v2_options.sound_mode.load(); v2_ui_toast(m == 1 ? "SOUND: SNES (NEXT LEVEL)" : m == 2 ? "SOUND: SC-55" : m == 3 ? "SOUND: MT-32" : "SOUND: PC"); } break;
     case IT_NET_PLAYERS: v2_ui_net_players = (v2_ui_net_players.load() == 3) ? 2 : 3; break;
     case IT_NET_DELAY:   v2_ui_net_delay = v2_ui_net_delay.load() % 8 + 1; break;
     case IT_NET_HOST:    if (v2_net_active()) { v2_ui_toast("ALREADY IN A NETWORK GAME"); break; }
@@ -199,7 +202,7 @@ static void activate() {
 static void adjust(int d) {
     switch (cursor) {
     case IT_PARALLAX: case IT_SCENES: case IT_BALANCE: case IT_SMOOTH: case IT_FINALE: case IT_INTEGER: activate(); break;
-    case IT_SOUND:    v2_options.sound_mode = (v2_options.sound_mode.load() + d + 3) % 3; v2_options_save(); break;
+    case IT_SOUND:    v2_options.sound_mode = (v2_options.sound_mode.load() + d + 4) % 4; v2_options_save(); break;
     case IT_FILTER:   v2_options.filter = (v2_options.filter.load() + d + 3) % 3; v2_options_save(); break;
     case IT_BORDER:   v2_options.border = (v2_options.border.load() + d + 2) % 2; v2_options_save(); break;
     case IT_WIDE:     if (net_locked()) break; v2_options.wide = (v2_options.wide.load() + d + 3) % 3; v2_options_save(); v2_ui_toast("WIDE: NEXT LEVEL"); break;
@@ -284,8 +287,8 @@ void v2_ui_draw(uint32_t* rgba, int w, int h, SDL_PixelFormat* fmt) {
         snprintf(lines[n++], 40, "BORDER    < %s >", BORDER_NAMES[v2_options.border.load() % 2]);
         { static const char* const WIDE_NAMES[3] = { "OFF  ", "16:10", "16:9 " };
           snprintf(lines[n++], 40, "WIDE      < %s >", WIDE_NAMES[v2_options.wide.load() % 3]); }
-        { static const char* const SOUND_NAMES[3] = { "PC  ", "SNES", "SC55" };
-          snprintf(lines[n++], 40, "SOUND     < %s >", SOUND_NAMES[v2_options.sound_mode.load() % 3]); }
+        { static const char* const SOUND_NAMES[4] = { "PC  ", "SNES", "SC55", "MT32" };
+          snprintf(lines[n++], 40, "SOUND     < %s >", SOUND_NAMES[v2_options.sound_mode.load() % 4]); }
         // UX stage 8 tails: the co-op lobby
         snprintf(lines[n++], 40, "CO-OP     < %d PLAYERS >", v2_ui_net_players.load());
         snprintf(lines[n++], 40, "DELAY     < %d READS >", v2_ui_net_delay.load());

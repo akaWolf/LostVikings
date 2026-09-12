@@ -166,6 +166,10 @@ CFLAGS   := $(SDL) $(DBG) $(INCLUDES) $(V2_DEFINES) $(PLATFORM_DEFINES)
 $(OBJDIR)/src/sdl/v2_hash_hot.o: CXXFLAGS += -O2
 # UX stage 11: the Nuked-SC55 core is built for embedding (no window / audio device / MIDI input of its own), optimised like the SPC core
 $(OBJDIR)/src/sdl/third_party/nuked_sc55/%.o: CXXFLAGS += -DNUKED_SC55_EMBEDDED -O2
+# UX stage 11: libmt32emu (Munt) — static, C++ API, the internal resampler; its headers include each other by bare name
+MT32EMU_INC := -I ./src/sdl/third_party/mt32emu -I ./src/sdl/third_party/mt32emu/srchelper/srctools/include
+$(OBJDIR)/src/sdl/third_party/mt32emu/%.o: CXXFLAGS += $(MT32EMU_INC) -DMT32EMU_WITH_INTERNAL_RESAMPLER=1 -O2
+$(OBJDIR)/src/sdl/v2_mt32.o: CXXFLAGS += $(MT32EMU_INC) -DMT32EMU_WITH_INTERNAL_RESAMPLER=1
 # The generated world-script executors (src/sdl/gen/exec_01cN.cpp, one unit per
 # chunk: piece functions + router, see v2_vm_gen.h) and v2_vm.cpp itself cap
 # the debug detail at -g1: with full -ggdb3 var-tracking the old single unit
@@ -247,6 +251,35 @@ CXX_SRCS := \
   src/sdl/third_party/snes_spc/Spc_Filter.cpp \
   src/sdl/v2_midi.cpp \
   src/sdl/v2_sc55.cpp \
+  src/sdl/v2_mt32.cpp \
+  src/sdl/third_party/mt32emu/Analog.cpp \
+  src/sdl/third_party/mt32emu/BReverbModel.cpp \
+  src/sdl/third_party/mt32emu/Display.cpp \
+  src/sdl/third_party/mt32emu/File.cpp \
+  src/sdl/third_party/mt32emu/FileStream.cpp \
+  src/sdl/third_party/mt32emu/LA32FloatWaveGenerator.cpp \
+  src/sdl/third_party/mt32emu/LA32Ramp.cpp \
+  src/sdl/third_party/mt32emu/LA32WaveGenerator.cpp \
+  src/sdl/third_party/mt32emu/MidiStreamParser.cpp \
+  src/sdl/third_party/mt32emu/Part.cpp \
+  src/sdl/third_party/mt32emu/Partial.cpp \
+  src/sdl/third_party/mt32emu/PartialManager.cpp \
+  src/sdl/third_party/mt32emu/Poly.cpp \
+  src/sdl/third_party/mt32emu/ROMInfo.cpp \
+  src/sdl/third_party/mt32emu/SampleRateConverter.cpp \
+  src/sdl/third_party/mt32emu/Synth.cpp \
+  src/sdl/third_party/mt32emu/Tables.cpp \
+  src/sdl/third_party/mt32emu/TVA.cpp \
+  src/sdl/third_party/mt32emu/TVF.cpp \
+  src/sdl/third_party/mt32emu/TVP.cpp \
+  src/sdl/third_party/mt32emu/VersionTagging.cpp \
+  src/sdl/third_party/mt32emu/sha1/sha1.cpp \
+  src/sdl/third_party/mt32emu/srchelper/InternalResampler.cpp \
+  src/sdl/third_party/mt32emu/srchelper/srctools/src/FIRResampler.cpp \
+  src/sdl/third_party/mt32emu/srchelper/srctools/src/IIR2xResampler.cpp \
+  src/sdl/third_party/mt32emu/srchelper/srctools/src/LinearResampler.cpp \
+  src/sdl/third_party/mt32emu/srchelper/srctools/src/ResamplerModel.cpp \
+  src/sdl/third_party/mt32emu/srchelper/srctools/src/SincResampler.cpp \
   src/sdl/third_party/nuked_sc55/mcu.cpp \
   src/sdl/third_party/nuked_sc55/mcu_opcodes.cpp \
   src/sdl/third_party/nuked_sc55/mcu_interrupt.cpp \
@@ -301,6 +334,35 @@ CXX_SRCS := \
   src/sdl/third_party/snes_spc/Spc_Filter.cpp \
   src/sdl/v2_midi.cpp \
   src/sdl/v2_sc55.cpp \
+  src/sdl/v2_mt32.cpp \
+  src/sdl/third_party/mt32emu/Analog.cpp \
+  src/sdl/third_party/mt32emu/BReverbModel.cpp \
+  src/sdl/third_party/mt32emu/Display.cpp \
+  src/sdl/third_party/mt32emu/File.cpp \
+  src/sdl/third_party/mt32emu/FileStream.cpp \
+  src/sdl/third_party/mt32emu/LA32FloatWaveGenerator.cpp \
+  src/sdl/third_party/mt32emu/LA32Ramp.cpp \
+  src/sdl/third_party/mt32emu/LA32WaveGenerator.cpp \
+  src/sdl/third_party/mt32emu/MidiStreamParser.cpp \
+  src/sdl/third_party/mt32emu/Part.cpp \
+  src/sdl/third_party/mt32emu/Partial.cpp \
+  src/sdl/third_party/mt32emu/PartialManager.cpp \
+  src/sdl/third_party/mt32emu/Poly.cpp \
+  src/sdl/third_party/mt32emu/ROMInfo.cpp \
+  src/sdl/third_party/mt32emu/SampleRateConverter.cpp \
+  src/sdl/third_party/mt32emu/Synth.cpp \
+  src/sdl/third_party/mt32emu/Tables.cpp \
+  src/sdl/third_party/mt32emu/TVA.cpp \
+  src/sdl/third_party/mt32emu/TVF.cpp \
+  src/sdl/third_party/mt32emu/TVP.cpp \
+  src/sdl/third_party/mt32emu/VersionTagging.cpp \
+  src/sdl/third_party/mt32emu/sha1/sha1.cpp \
+  src/sdl/third_party/mt32emu/srchelper/InternalResampler.cpp \
+  src/sdl/third_party/mt32emu/srchelper/srctools/src/FIRResampler.cpp \
+  src/sdl/third_party/mt32emu/srchelper/srctools/src/IIR2xResampler.cpp \
+  src/sdl/third_party/mt32emu/srchelper/srctools/src/LinearResampler.cpp \
+  src/sdl/third_party/mt32emu/srchelper/srctools/src/ResamplerModel.cpp \
+  src/sdl/third_party/mt32emu/srchelper/srctools/src/SincResampler.cpp \
   src/sdl/third_party/nuked_sc55/mcu.cpp \
   src/sdl/third_party/nuked_sc55/mcu_opcodes.cpp \
   src/sdl/third_party/nuked_sc55/mcu_interrupt.cpp \

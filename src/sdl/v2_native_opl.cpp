@@ -41,6 +41,7 @@
 // on the glue side; this file's entry points are inert until ticked/written).
 
 #include "v2_midi.h"   // UX stage 11: V2_MIDI_DUMP is written before the _exit paths
+#include "v2_mt32.h"   // UX stage 11: the MT-32 world pump
 #include <SDL.h>
 #include <atomic>
 #include <cstdint>
@@ -443,7 +444,7 @@ extern "C" void v2_nopl_mix(int16_t* stereo, uint32_t frames) {
     // down or neither ever starts. No-op until the bridge publishes
     // (and always in V2_ONLY, which has no bridge).
     v2_ail_sink_pump(g_samples_played.load(std::memory_order_relaxed));
-    if (!g_inited) return;
+    if (!g_inited) { v2_mt32_pump(g_samples_played.load(std::memory_order_relaxed), 0, g_rate); return; }   // UX stage 11: the MT-32 world runs even before the chip is up
     uint64_t pos = g_samples_played.load(std::memory_order_relaxed);
     uint32_t donef = 0;
     int16_t buf[256 * 2];
@@ -451,6 +452,7 @@ extern "C" void v2_nopl_mix(int16_t* stereo, uint32_t frames) {
         // (#83) per-chunk sink service: sample-clock fn67 ticks + call drain
         // right before generating this chunk — DOS INT8 semantics.
         v2_ail_sink_pump(pos);
+        v2_mt32_pump(pos, donef, g_rate);   // UX stage 11: the MT-32 world (its driver ticks on the same sample clock)
         size_t rd = g_rd.load(std::memory_order_relaxed);
         uint32_t chunk = frames - donef;
         if (chunk > 256) chunk = 256;

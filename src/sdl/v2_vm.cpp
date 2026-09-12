@@ -37,6 +37,7 @@ extern uint8_t v2_vga[65536 * 4];
 #include "v2_ui.h"
 #include "v2_snes_sound.h"   // UX stage 10: the SNES DE sound option (hooks below)
 #include "v2_sc55.h"         // UX stage 11: the SC-55 option (v2_ui_service)
+#include "v2_mt32.h"         // UX stage 11: the MT-32 world (track hook, v2_ui_service)
 #include "v2_midi.h"         // UX stage 11: the MIDI lane's dump at exit
 #include "v2_callcount.h"   // M1 call-parity (#65)
 #include "v2_ds_layout.h"
@@ -2343,6 +2344,30 @@ static bool v2_parallax_read_private(uint16_t cid, uint8_t* dest, uint32_t max_s
     if (clen < 2 || (uint32_t)dsize + 1 > max_size) return false;
     *out_len = v2_lzss_decompress(rec + 2, dest, dsize, nullptr);
     return *out_len == (uint32_t)dsize + 1;
+}
+// UX stage 11: the MT-32 world (v2_mt32.cpp) reads its chunks — the MT-32 driver, bank, SFX set,
+// the tracks' MT-32 variants — through the same private path: no DS / FS effects on the game.
+extern "C" uint32_t v2_chunk_read_private(uint16_t cid, uint8_t* dest, uint32_t max_size) {
+    uint32_t len = 0;
+    if (v2_assets_on()) return v2_parallax_read_private(cid, dest, max_size, &len) ? len : 0;
+    // the archive, privately: table entry -> [u16 size-1][LZSS stream], decompressed here (no header
+    // mirror, no FS ring — the loader's DS effects belong to the game's own chunk loads only)
+    static FILE* f = nullptr;
+    if (!f) { f = fopen("DATA.DAT", "rb"); if (!f) return 0; }
+    uint8_t header[8];
+    if (fseek(f, (long)cid * 4, SEEK_SET) || fread(header, 8, 1, f) != 1) return 0;
+    const uint32_t off = (uint32_t)(header[0] | (header[1] << 8) | (header[2] << 16) | ((uint32_t)header[3] << 24));
+    const uint32_t nxt = (uint32_t)(header[4] | (header[5] << 8) | (header[6] << 16) | ((uint32_t)header[7] << 24));
+    if (nxt <= off + 2 || nxt - off > 0x10000) return 0;
+    static uint8_t comp[0x10000 + 16];
+    uint8_t sz[2];
+    if (fseek(f, (long)off, SEEK_SET) || fread(sz, 2, 1, f) != 1) return 0;
+    const uint16_t dsize = (uint16_t)(sz[0] | (sz[1] << 8));
+    if ((uint32_t)dsize + 1 > max_size) return 0;
+    const uint32_t clen = nxt - off - 2;
+    if (fread(comp, 1, clen, f) != clen) return 0;
+    len = v2_lzss_decompress(comp, dest, dsize, nullptr);
+    return len == (uint32_t)dsize + 1 ? len : 0;
 }
 
 static void v2_parallax_load(uint8_t* s) {
@@ -7898,6 +7923,9 @@ static void v2_music_load_1775d_helper(uint8_t* s) {
         uint32_t sz = v2_read_chunk(chunk_id, v2_vm_shadow_sound + off,
                                     V2_SOUND_SHADOW_SIZE - off, s);
         v2_chunk_sizes_by_seg[es_seg] = sz;
+#ifndef HEADLESS
+        v2_mt32_note_track(chunk_rel);   // UX stage 11: the MT-32 world loads the track's MT-32 variant (table[track]+3)
+#endif
     }
 }
 
@@ -9185,6 +9213,7 @@ static void v2_ui_service(uint8_t* s) {
             last_snd = v2_options.sound_mode.load();
         }
         v2_sc55_service();   // the boot gate: channel state replayed once the module's firmware is up
+        v2_mt32_service();   // the MT-32 world on/off
     }
     // options: parallax on/off at runtime (display lane), interludes on/off
     static int last_par = -1;

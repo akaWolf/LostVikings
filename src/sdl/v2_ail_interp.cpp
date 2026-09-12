@@ -955,6 +955,61 @@ extern "C" uint16_t v2_ail_sinki_fn_lookup(uint16_t fn_code) {
     return 0;
 }
 
+// ---------------------------------------------------------------------------
+// UX stage 11 (SOUND < MT32 >, v2_mt32.cpp): a THIRD instance running the
+// game's own Roland MT-32 driver (chunk 0x1CF, MT32MPU.ADV) on the audio
+// thread — the same call stream the audible driver gets, the MT-32 data
+// (bank 0x20F, SFX set 0x20A, the tracks' MT-32 variants) mapped in front,
+// its MPU-401 port model feeding Munt. Same shape as the sink above.
+// ---------------------------------------------------------------------------
+static AilInterp g_mt32_i;
+
+extern "C" void v2_ail_mt32i_load(const uint8_t* blob, uint32_t bs, const uint8_t* bank, uint32_t ks) {
+    g_mt32_i.load(blob, bs, bank, ks);
+    g_mt32_i.extra_n = 0;
+    g_mt32_i.fault = 0;
+}
+extern "C" void v2_ail_mt32i_map(uint16_t para, uint8_t* ptr, uint32_t size) { g_mt32_i.map_segment(para, ptr, size); }
+extern "C" void v2_ail_mt32i_map_front(uint16_t para, uint8_t* ptr, uint32_t size) {
+    for (int i = 0; i < g_mt32_i.extra_n; i++)
+        if (g_mt32_i.extra[i].para == para) { g_mt32_i.extra[i] = {para, ptr, size}; return; }
+    if (g_mt32_i.extra_n < 8) {
+        for (int i = g_mt32_i.extra_n; i > 0; i--) g_mt32_i.extra[i] = g_mt32_i.extra[i - 1];
+        g_mt32_i.extra[0] = {para, ptr, size};
+        g_mt32_i.extra_n++;
+    }
+}
+extern "C" void v2_ail_mt32i_set_io(void (*out_fn)(uint16_t, uint8_t), uint8_t (*in_fn)(uint16_t)) {
+    g_mt32_i.out_hook = out_fn;
+    g_mt32_i.in_hook = in_fn;
+}
+extern "C" void v2_ail_mt32i_set_callback(uint16_t (*cb)()) { g_mt32_i.ail_callback_hook = cb; }
+extern "C" uint16_t v2_ail_mt32i_call(uint16_t fn_off, const uint16_t* args, int argc) {
+    uint16_t ret = g_mt32_i.call_fn(fn_off, args, argc);
+    if (g_mt32_i.fault) {
+        fprintf(stderr, "AIL-MT32: fn @%04X faulted: %s\n", fn_off, g_mt32_i.fault_msg);
+        g_mt32_i.fault = 0;
+    }
+    return ret;
+}
+extern "C" uint16_t v2_ail_mt32i_last_dx(void) { return g_mt32_i.r.dx; }
+extern "C" uint16_t v2_ail_mt32i_peek(uint16_t off) {   // a word of the blob arena (descriptor fields)
+    if (!g_mt32_i.drv || (uint32_t)off + 1 >= g_mt32_i.drv_size) return 0xFFFF;
+    return (uint16_t)(g_mt32_i.drv[off] | (g_mt32_i.drv[off + 1] << 8));
+}
+extern "C" uint16_t v2_ail_mt32i_fn_lookup(uint16_t fn_code) {
+    if (!g_mt32_i.drv) return 0;
+    uint16_t tab = (uint16_t)(g_mt32_i.drv[0] | (g_mt32_i.drv[1] << 8));
+    for (uint32_t p = tab; p + 4 <= g_mt32_i.drv_size; p += 4) {
+        uint16_t fn  = (uint16_t)(g_mt32_i.drv[p]     | (g_mt32_i.drv[p + 1] << 8));
+        uint16_t off = (uint16_t)(g_mt32_i.drv[p + 2] | (g_mt32_i.drv[p + 3] << 8));
+        if (fn == 0xFFFF) break;
+        if (fn == fn_code) return off;
+    }
+    return 0;
+}
+extern "C" uint16_t v2_ail_mt32i_drv_para(void) { return AilInterp::DRV_PARA; }
+
 extern "C" void v2_ail_interp_map_segment(uint16_t para, uint8_t* ptr, uint32_t size) {
     g_ail.map_segment(para, ptr, size);
 }

@@ -1,6 +1,7 @@
 // v2_midi.cpp — see v2_midi.h.
 #include "v2_midi.h"
 #include "v2_sc55.h"
+#include "v2_mt32.h"
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
@@ -44,6 +45,7 @@ void v2_midi_event(uint16_t status, uint16_t d1, uint16_t d2) {
 }
 
 void v2_midi_shutdown(void) {
+    v2_mt32_shutdown();                     // the MT-32 world's dump rides the same exit paths
     std::lock_guard<std::mutex> lk(g_mtx);
     if (g_dump_state != 1 || !g_dump_path) return;
     g_dump_state = 2;

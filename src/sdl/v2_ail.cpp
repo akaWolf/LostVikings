@@ -46,6 +46,7 @@
 #include <cstdlib>
 #include "v2_ds_layout.h"
 #include "v2_gamestate.h"
+#include "v2_mt32.h"        // UX stage 11: the MT-32 world (a second driver instance fed with the same calls)
 
 // ---------------------------------------------------------------------------
 // v2_ail_interp.cpp C API
@@ -310,6 +311,9 @@ static uint16_t sh_call(uint16_t fn_code, const uint16_t* args, int argc) {
         ? v2_ailnat_dispatch(fn_code, args, argc)   // increment 7: native surface
         : v2_ail_call_fn_code(fn_code, args, argc);
     v2_ail_interp_unlock();
+#if defined(V2_ONLY) && !defined(HEADLESS)
+    v2_mt32_note_call(fn_code, args, argc, ax);     // UX stage 11: the MT-32 world hears the same calls (audio thread consumes)
+#endif
     return ax;
 }
 
@@ -401,6 +405,10 @@ extern "C" int v2_ail_boot(uint8_t* s, uint8_t* snd, uint32_t snd_size,
     v2_ail_interp_map_segment(snd_base, snd, snd_size);       // whole sound arena
     v2_ail_interp_map_segment(ds_val, s, 0x10000);            // the game DS (state blocks!)
     v2_ail_interp_map_segment(CACHE_PARA, g_cache, sizeof(g_cache));
+#ifndef HEADLESS
+    // UX stage 11: the MT-32 world — the paragraphs the game's pointers use (bank [2E6F], SFX set [2E6D], track [2E6B])
+    v2_mt32_publish(s, ds_val, snd, snd_base, snd_size, bank_seg, rdw(s, 0x2E6D), rdw(s, 0x2E6B));
+#endif
     if (v2_ailnat_mode()) {
         // Native surface boots on the same world: same blob image, the same
         // audible io hooks, the identical segment map, and the interp's fake
@@ -735,6 +743,9 @@ static int v2_ail_orig_lazy_init() {
     // (#83) publish the sink build parameters — the audio thread constructs
     // the sink lazily from these on its first pump.
     v2_ail_sink_publish(base, blob_seg, bank_seg, ds_val);
+#ifndef HEADLESS
+    v2_mt32_publish(rds, ds_val, base, 0, 0xA0000, bank_seg, rdw(rds, 0x2E6D), rdw(rds, 0x2E6B));   // UX stage 11: the MT-32 world
+#endif
     return 1;
 }
 
@@ -882,11 +893,18 @@ extern "C" uint16_t v2_ail_orig_bridge(uint16_t handler_off,
     // would only fill up and spam drop warnings).
 #ifndef HEADLESS
     { extern int v2_fntest_running;
-      if (!v2_fntest_running) v2_ail_sink_note_call(handler_off, args, argc); }
+      if (!v2_fntest_running) {
+          v2_ail_sink_note_call(handler_off, args, argc);
+          // UX stage 11: the MT-32 world takes the fn CODE — the handler offset is the FM blob's (its table, once)
+          static uint16_t code_of[0x10000]; static bool code_of_init = false;
+          if (!code_of_init) { for (int c = 0x60; c < 0xD0; c++) { uint16_t o = v2_ail_fn_lookup((uint16_t)c); if (o) code_of[o] = (uint16_t)c; } code_of_init = true; }
+          if (code_of[handler_off]) v2_mt32_note_call(code_of[handler_off], args, argc, ax);
+      } }
 #endif
     return ax;
 }
 extern "C" uint16_t v2_ail_orig_last_dx() { return g_orig_dx; }
+extern "C" uint16_t v2_ail_pit_cb_value(void) { return v2_ail_pit_callback(); }   // UX stage 11: the MT-32 instance's timer callback
 
 // ---------------------------------------------------------------------------
 // timer tick — the seg002 INT8 slot calls the blob's fn67 handler. Ticks BOTH
