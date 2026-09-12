@@ -1,4 +1,8 @@
 #include "v2_midi.h"   // UX stage 11: V2_MIDI_DUMP is written before the _exit paths
+#include "third_party/xbrz/xbrz.h"   // UX stage 11 tail: FILTER < XBRZ >
+extern "C" { void hqxInit(void); void hq2x_32(const uint32_t*, uint32_t*, int, int); void hq3x_32(const uint32_t*, uint32_t*, int, int); void hq4x_32(const uint32_t*, uint32_t*, int, int); }   // third_party/hqx: FILTER < HQX >
+#include <thread>
+#include <vector>
 #include <SDL2/SDL.h>
 #include "v2_timing.h"
 extern "C" void sdl_int9_note_keydown(int sdl_scancode);  // render.cpp (#62)
@@ -61,6 +65,51 @@ static SDL_Texture* v2_make_texture(int access, int w, int h, int linear) {
     return tx;
 }
 extern int v2_present_w;   // render_v2_test.cpp: the width of the frame in stableBuffer
+
+// UX stage 11 tail: FILTER < XBRZ | HQX > — the frame after the palette scaled by an integer k on the
+// CPU (xBRZ 1.8: 2-6x, row slices on several threads; hqx: 2-4x, LUT), uploaded as ARGB8888 and
+// stretched linearly for the remainder; FILTER < NONE > — the raster 1:1 in the middle of the window.
+static SDL_Texture* g_hq_tex = nullptr; static int g_hq_w = 0, g_hq_h = 0;
+static std::vector<uint32_t> g_hq_src, g_hq_dst;
+static bool v2_present_hq(int filter, int PW, int H, double s, int* k_out) {
+    const int kmax = (filter == 3) ? 6 : 4;
+    int k = (int)s; if (k < 2) k = 2; if (k > kmax) k = kmax;
+    const size_t n = (size_t)PW * H;
+    g_hq_src.resize(n); g_hq_dst.resize(n * (size_t)k * k);
+    // the frame is the left PW columns of the RENDER_WIDTH_V2-wide buffer;
+    // SDL_PIXELFORMAT_RGBA8888 is 0xRRGGBBAA as a uint32, the scalers take 0xAARRGGBB
+    for (int y = 0; y < H; y++) {
+        const uint32_t* row = tempDrawBuffer_v2 + (size_t)y * RENDER_WIDTH_V2; uint32_t* out = g_hq_src.data() + (size_t)y * PW;
+        for (int x = 0; x < PW; x++) out[x] = 0xFF000000u | (row[x] >> 8);
+    }
+    if (filter == 3) {
+        static const xbrz::ScalerCfg cfg;
+        unsigned nt = std::thread::hardware_concurrency(); if (nt < 1) nt = 1; if (nt > 8) nt = 8; if ((int)nt > H / 16) nt = (unsigned)(H / 16);
+        std::vector<std::thread> th; int y0 = 0;
+        const uint32_t* src = g_hq_src.data(); uint32_t* dst = g_hq_dst.data();
+        for (unsigned t = 0; t < nt; t++) {
+            const int y1 = (t + 1 == nt) ? H : (int)((long long)H * (t + 1) / nt);
+            th.emplace_back([=] { xbrz::scale((size_t)k, src, dst, PW, H, xbrz::ColorFormat::ARGB, cfg, y0, y1); });
+            y0 = y1;
+        }
+        for (std::thread& t : th) t.join();
+    } else {
+        static bool inited = false; if (!inited) { hqxInit(); inited = true; }
+        (k == 2 ? hq2x_32 : k == 3 ? hq3x_32 : hq4x_32)(g_hq_src.data(), g_hq_dst.data(), PW, H);
+    }
+    if (!g_hq_tex || g_hq_w != PW * k || g_hq_h != H * k) {
+        if (g_hq_tex) SDL_DestroyTexture(g_hq_tex);
+        SDL_SetHint(SDL_HINT_RENDER_SCALE_QUALITY, "1");
+        g_hq_tex = SDL_CreateTexture(myRenderer_v2, SDL_PIXELFORMAT_ARGB8888, SDL_TEXTUREACCESS_STREAMING, PW * k, H * k);
+        SDL_SetHint(SDL_HINT_RENDER_SCALE_QUALITY, "0");
+        g_hq_w = PW * k; g_hq_h = H * k;
+    }
+    if (!g_hq_tex) return false;
+    SDL_UpdateTexture(g_hq_tex, NULL, g_hq_dst.data(), PW * k * (int)sizeof(uint32_t));
+    *k_out = k;
+    return true;
+}
+
 static void v2_present_frame(int H) {
     const int PW = v2_present_w;
     const int filter = v2_options.filter.load();
@@ -81,6 +130,7 @@ static void v2_present_frame(int H) {
     if (integer) { s = (double)(int)s; if (s < 1.0) s = 1.0; }
     const int dw = (int)(cw * s + 0.5), dh = (int)(ch * s + 0.5);
     SDL_Rect dst = { (W - dw) / 2, (Hout - dh) / 2, dw, dh };
+    if (filter == 5) dst = SDL_Rect{ (W - cw) / 2, (Hout - ch) / 2, cw, ch };   // NONE: the raster itself, 1:1
     SDL_Rect src = { 0, 0, PW, H };
     SDL_SetRenderDrawColor(myRenderer_v2, 0, 0, 0, 255);
     SDL_RenderClear(myRenderer_v2);
@@ -111,6 +161,10 @@ static void v2_present_frame(int H) {
             SDL_RenderCopy(myRenderer_v2, g_sharp_tex, NULL, &dst);   // linear to the window
             drawn = true;
         }
+    }
+    if (filter == 3 || filter == 4) {
+        int k = 0;
+        if (v2_present_hq(filter, PW, H, s, &k)) { SDL_RenderCopy(myRenderer_v2, g_hq_tex, NULL, &dst); drawn = true; }
     }
     if (!drawn) SDL_RenderCopy(myRenderer_v2, myTexture_v2, &src, &dst);
     {

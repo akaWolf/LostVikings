@@ -1,0 +1,8 @@
+hqx (Maxim Stepin 2003, Cameron Zemek 2010; LGPL-2.1, COPYING) from https://github.com/grom358/hqx,
+src/{common.h,hq2x.c,hq3x.c,hq4x.c,hqx.h,init.c} — the CLI (hqx.c, DevIL) is not vendored.
+
+Lost Vikings modification (UX stage 11 tail, the FILTER < HQX > option): the RGB->YUV lookup table
+RGBtoYUV[16777216] (64 MB, initialised in ~0.3 s) is indexed by RGB555 instead — 32768 entries, the
+channel centre values (5 bits + 4). The table only feeds yuv_diff, whose thresholds (Y 0x30, U 7, V 6)
+are far coarser than the 8-levels-per-channel quantization; the interpolation itself still runs on the
+full 8-bit colours. The rest of the code is unchanged.

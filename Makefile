@@ -170,6 +170,9 @@ $(OBJDIR)/src/sdl/third_party/nuked_sc55/%.o: CXXFLAGS += -DNUKED_SC55_EMBEDDED 
 MT32EMU_INC := -I ./src/sdl/third_party/mt32emu -I ./src/sdl/third_party/mt32emu/srchelper/srctools/include
 $(OBJDIR)/src/sdl/third_party/mt32emu/%.o: CXXFLAGS += $(MT32EMU_INC) -DMT32EMU_WITH_INTERNAL_RESAMPLER=1 -O2
 $(OBJDIR)/src/sdl/v2_mt32.o: CXXFLAGS += $(MT32EMU_INC) -DMT32EMU_WITH_INTERNAL_RESAMPLER=1
+# UX stage 11 tail: the HQ scalers of the presenter (FILTER < XBRZ | HQX >) — optimised whatever the build
+$(OBJDIR)/src/sdl/third_party/xbrz/%.o: CXXFLAGS += -O2
+$(OBJDIR)/src/sdl/third_party/hqx/%.o: CFLAGS += -O2
 # The generated world-script executors (src/sdl/gen/exec_01cN.cpp, one unit per
 # chunk: piece functions + router, see v2_vm_gen.h) and v2_vm.cpp itself cap
 # the debug detail at -g1: with full -ggdb3 var-tracking the old single unit
@@ -251,6 +254,7 @@ CXX_SRCS := \
   src/sdl/third_party/snes_spc/Spc_Filter.cpp \
   src/sdl/v2_midi.cpp \
   src/sdl/v2_sc55.cpp \
+  src/sdl/third_party/xbrz/xbrz.cpp \
   src/sdl/v2_mt32.cpp \
   src/sdl/third_party/mt32emu/Analog.cpp \
   src/sdl/third_party/mt32emu/BReverbModel.cpp \
@@ -334,6 +338,7 @@ CXX_SRCS := \
   src/sdl/third_party/snes_spc/Spc_Filter.cpp \
   src/sdl/v2_midi.cpp \
   src/sdl/v2_sc55.cpp \
+  src/sdl/third_party/xbrz/xbrz.cpp \
   src/sdl/v2_mt32.cpp \
   src/sdl/third_party/mt32emu/Analog.cpp \
   src/sdl/third_party/mt32emu/BReverbModel.cpp \
@@ -379,6 +384,10 @@ endif
 ifdef HEADLESS
 C_SRCS := \
   src/rendering/seg003_implementation.c \
+  src/sdl/third_party/hqx/init.c \
+  src/sdl/third_party/hqx/hq2x.c \
+  src/sdl/third_party/hqx/hq3x.c \
+  src/sdl/third_party/hqx/hq4x.c \
   src/rendering/seg003_sdl_adapter.c
 # HEADLESS extras: dump helpers + AudioPool stubs + headless main
 CXX_SRCS += \
@@ -390,6 +399,10 @@ else
 # (the render chip of the native interpreted AIL driver, v2_native_opl.cpp).
 C_SRCS := \
   src/rendering/seg003_implementation.c \
+  src/sdl/third_party/hqx/init.c \
+  src/sdl/third_party/hqx/hq2x.c \
+  src/sdl/third_party/hqx/hq3x.c \
+  src/sdl/third_party/hqx/hq4x.c \
   src/rendering/seg003_sdl_adapter.c \
   src/adlmidi/src/chips/nuked/nukedopl3.c
 endif

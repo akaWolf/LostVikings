@@ -358,12 +358,15 @@ asset file is also Blizzard's property and is not redistributed.
 The `src/adlmidi/` submodule keeps its upstream license
 (see [libADLMIDI](https://github.com/Wohlstand/libADLMIDI)).
 
+`src/sdl/third_party/xbrz/` (the `FILTER < XBRZ >` presenter option, xBRZ 1.8
+by Zenju) is GPL-3.0 with the MAME exception, `src/sdl/third_party/hqx/`
+(`FILTER < HQX >`) is LGPL-2.1,
 `src/sdl/third_party/snes_spc/` (the SNES sound option) is LGPL-2.1+,
 `src/sdl/third_party/mt32emu/` (the MT-32 sound option, libmt32emu from
 [Munt](https://github.com/munt/munt)) is LGPL-2.1-or-later, and
 `src/sdl/third_party/nuked_sc55/` (the SC-55 sound option, from
 [Nuked-SC55](https://github.com/nukeykt/Nuked-SC55)) is GPL-2.0-or-later:
-a binary built from this tree is distributed under the GPL. The SC-55 and
+a binary built from this tree is distributed under the GPL (version 3, because of xBRZ). The SC-55 and
 MT-32 options also need the modules' ROM images, which are Roland's and are
 not included — put your own sets in `roms/sc55/` (Nuked-SC55's file names:
 `rom1.bin rom2.bin waverom1.bin waverom2.bin rom_sm.bin` for the SC-55mk2)

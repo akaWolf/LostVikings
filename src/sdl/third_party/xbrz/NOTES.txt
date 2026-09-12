@@ -1,0 +1,5 @@
+xBRZ 1.8 by Zenju (GNU GPL v3 with the MAME exception, see the file headers and COPYING), the files
+xbrz.cpp / xbrz.h / config.h as vendored by PPSSPP (ext/xbrz). Used unmodified by the FILTER < XBRZ >
+option of the presenter (render_v2.cpp): the frame after the palette, ARGB, scaled 2-6x in row slices
+on several threads. Consequence for the tree: a binary built with it is distributed under GPL-3
+(compatible with the GPL-2.0-or-later and LGPL parts).
