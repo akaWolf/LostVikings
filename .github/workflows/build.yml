@@ -280,6 +280,97 @@ jobs:
           path: vikings-linux-${{ matrix.arch }}-v2only.tar.gz
           retention-days: 30
 
+  linux-v2only-portable:
+    # The portable Linux build — an experiment beside linux-v2only, to compare
+    # the time. Ubuntu's libSDL2.a links its backends directly, so the "static"
+    # bundles above still need libpulse, libwayland, libdecor, libsamplerate,
+    # libdbus ... on the target machine (ldd of the arm64 bundle, 2026-09-10).
+    # Here SDL2 is built from its source with the default dlopen'ed backends
+    # (X11 / Wayland / PulseAudio / PipeWire / ALSA / libdecor are loaded at run
+    # time, whatever the machine has) and linked statically, on the 22.04
+    # runners for a glibc 2.35 floor: the binary depends on glibc alone.
+    name: Linux ${{ matrix.arch }} V2_ONLY portable (SDL2 from source, glibc only)
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { arch: x86_64, runner: ubuntu-22.04 }
+          - { arch: arm64,  runner: ubuntu-22.04-arm }
+    env:
+      SDL2_VERSION: 2.30.10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: true
+
+      - name: Install build deps (the backends' headers only — SDL2 dlopens the libraries at run time)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential clang cmake pkg-config wget \
+            libx11-dev libxext-dev libxcursor-dev libxi-dev libxfixes-dev libxrandr-dev libxss-dev libxkbcommon-dev \
+            libwayland-dev wayland-protocols libdecor-0-dev libegl1-mesa-dev libgles2-mesa-dev libgl1-mesa-dev \
+            libdrm-dev libgbm-dev libasound2-dev libpulse-dev libpipewire-0.3-dev libdbus-1-dev libudev-dev libibus-1.0-dev
+
+      - name: Cache the SDL2 build
+        id: sdl_cache
+        uses: actions/cache@v4
+        with:
+          path: ~/sdl2
+          key: sdl2-src-${{ env.SDL2_VERSION }}-${{ matrix.arch }}-ubuntu2204-v1
+
+      - name: Build SDL2 from source (static library, dlopen'ed backends)
+        if: steps.sdl_cache.outputs.cache-hit != 'true'
+        run: |
+          cd /tmp
+          wget -q "https://github.com/libsdl-org/SDL/releases/download/release-${SDL2_VERSION}/SDL2-${SDL2_VERSION}.tar.gz"
+          tar -xzf "SDL2-${SDL2_VERSION}.tar.gz"
+          cmake -S "SDL2-${SDL2_VERSION}" -B sdl2-build -DCMAKE_BUILD_TYPE=Release \
+            -DSDL_SHARED=OFF -DSDL_STATIC=ON -DSDL_TEST=OFF -DCMAKE_INSTALL_PREFIX="$HOME/sdl2"
+          cmake --build sdl2-build -j"$(nproc)"
+          cmake --install sdl2-build
+          # the link line of the static library: glibc pieces only, no backend may be a link dependency
+          grep -E "^Libs" "$HOME/sdl2/lib/pkgconfig/sdl2.pc"
+
+      - name: Build (V2_ONLY=1 RELEASE=1 STATIC=1 SDL_STATIC=1 against the source-built SDL2)
+        run: |
+          # the job log is not readable through the API without admin rights — on a
+          # failure the first error lines are surfaced as annotations (check-run API)
+          ulimit -s unlimited
+          set -o pipefail
+          export PKG_CONFIG_PATH="$HOME/sdl2/lib/pkgconfig"
+          pkg-config --cflags --libs --static sdl2
+          free -g | sed -n 2p | sed 's/^/::notice::runner memory before the build: /'
+          V2_ONLY=1 make CXX=clang++ RELEASE=1 STATIC=1 SDL_STATIC=1 -j$(nproc) 2>&1 | tee build.log || { grep -n -m20 -E "(^| )error:|Error [0-9]+|Killed|internal compiler|virtual memory exhausted|cannot allocate|out of memory|too many|file too big|Segmentation fault" build.log | sed "s/^/::error::/"; exit 1; }
+
+      - name: Build keymap editor
+        run: PKG_CONFIG_PATH="$HOME/sdl2/lib/pkgconfig" make keymap_editor CXX=clang++ STATIC=1 SDL_STATIC=1
+
+      - name: Verify glibc is the only dynamic dependency
+        run: |
+          ldd vikings
+          if ldd vikings | awk '{print $1}' | grep -v -E '^(linux-vdso|libc\.so|libm\.so|libdl\.so|libpthread\.so|librt\.so|/lib)'; then
+            echo "ERROR: a dynamic dependency beyond glibc (listed above)"; exit 1
+          fi
+          echo "OK: glibc only"
+
+      - name: Package
+        run: |
+          mkdir -p dist/vikings-linux-${{ matrix.arch }}-v2only-portable
+          cp vikings vikings_keymap_editor vikings_keymap.cfg dist/vikings-linux-${{ matrix.arch }}-v2only-portable/
+          cp ds_static.bin exe_static.bin dist/vikings-linux-${{ matrix.arch }}-v2only-portable/
+          [ -f README.md ] && cp README.md dist/vikings-linux-${{ matrix.arch }}-v2only-portable/
+          bash tools/assets/content_tools_bundle.sh dist/vikings-linux-${{ matrix.arch }}-v2only-portable/content-tools
+          tar -czf vikings-linux-${{ matrix.arch }}-v2only-portable.tar.gz -C dist vikings-linux-${{ matrix.arch }}-v2only-portable
+          ls -lh vikings-linux-${{ matrix.arch }}-v2only-portable.tar.gz
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: vikings-linux-${{ matrix.arch }}-v2only-portable
+          path: vikings-linux-${{ matrix.arch }}-v2only-portable.tar.gz
+          retention-days: 30
+
   windows-v2only:
     name: Windows x86_64 V2_ONLY (mingw-w64 cross-compile)
     runs-on: ubuntu-latest
