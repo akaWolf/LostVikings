@@ -39,6 +39,9 @@ int v2_input_poll_event(SDL_Event* e);
 // and every read applies the batches of all players for that read.
 void v2_input_recorder_net(int local_player, int synced);   // synced = 0: a joiner — free-running until the host's image lands at a main read
 void v2_input_net_capture(const SDL_Event* e);
+void v2_input_net_capture_bits(uint16_t bits, int down);   // this client's game controller: its bits as actions
+// RECORD mode: a game controller's bits (player 0 = the first pad; `ACTION@k` for the pads of players 2..3)
+void v2_input_record_bits(int player, uint16_t bits, int down);
 
 // RECORD mode only: flush pending key edges (captured by the render thread) to
 // the file, tagged with the CURRENT game frame. Call from the game thread at the

@@ -2,7 +2,7 @@
 # Co-op smoke test (UX stage 8): a 3-player replay on the V2_ONLY+HEADLESS
 # build must be deterministic (two runs, identical golden dumps) and must move
 # each viking of players 2 and 3, which the same replay without its `# coop 3`
-# header (a one-player game: the P2:/P3: keys feed nobody there) leaves put.
+# header (a one-player game: the `@2` / `@3` actions feed nobody there) leaves put.
 # V2_COOP_TRACE=1 in the environment lands in the run logs ($OUT/*.log).
 # Not part of tests/scenarios.sh: the default-mode headless binary mirrors the
 # DOS engine, which has one player.

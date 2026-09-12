@@ -1,6 +1,6 @@
 # Lost Vikings v2 input recording — co-op smoke scenario (UX stage 8)
 # coop 3
-# player 1: the DOS keys; player 2: the numeric keypad set (P2:*); player 3: the letter set (P3:*)
+# player 1: the keyboard's actions; players 2 and 3: the same action names with @2 / @3 (their bits)
 17 KD SPACE
 19 KU SPACE
 23 KD SPACE
@@ -38,14 +38,14 @@
 670 KD SPACE
 672 KU SPACE
 700 KD RIGHT
-700 KD P2:RIGHT
-700 KD P3:RIGHT
+700 KD RIGHT@2
+700 KD RIGHT@3
 708 KU RIGHT
-760 KU P2:RIGHT
-760 KU P3:RIGHT
-780 KD P2:ACTION
-782 KU P2:ACTION
-800 KD P3:LEFT
-820 KU P3:LEFT
-860 KD P2:NEXT
-862 KU P2:NEXT
+760 KU RIGHT@2
+760 KU RIGHT@3
+780 KD ACTION@2
+782 KU ACTION@2
+800 KD LEFT@3
+820 KU LEFT@3
+860 KD NEXT@2
+862 KU NEXT@2

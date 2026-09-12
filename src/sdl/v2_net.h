@@ -47,7 +47,7 @@
 struct V2NetEvent {
     int frame;              // the recorder's frame column (logs only; the read number rules delivery)
     uint8_t kind;           // 0 = KD, 1 = KU, 2 = KR (typematic repeat: the INT9 note only)
-    std::string action;     // the recorder's action name ("RIGHT", "P2:ACTION", "p", "F10" ...)
+    std::string action;     // the recorder's action name ("RIGHT", "SPACE@2" = player 2's action, "p", "F10" ...)
 };
 
 // lobby

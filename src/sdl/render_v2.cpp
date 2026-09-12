@@ -366,18 +366,7 @@ void render_thread_proc_v2(void* _state)
               if (v2_net_active()) { v2_input_net_capture(&event); break; }
               uint16_t key_val = 0;
               uint16_t spec_off = 0;
-              int key_player = 0;
-              v2_keymap_lookup_sdl_player(event.key.keysym.sym, &key_val, &spec_off, &key_player);
-              if (key_player > 0) {
-                  // UX stage 8: a co-op key set (P2: / P3:) feeds that player's
-                  // accumulators — no DOS words, no spec latch. The INT9 letter
-                  // channel still notes the keydown (#62: [28C] = LUT[scancode]
-                  // for EVERY key, as the DOS handler does — player 3's letters
-                  // are the password screen's letters too).
-                  if (event.type == SDL_KEYDOWN) sdl_int9_note_keydown(event.key.keysym.scancode);
-                  if (g_v2_coop_players > 1) v2_coop_key(key_player, key_val, event.type == SDL_KEYDOWN, event.key.repeat != 0);
-                  break;
-              }
+              v2_keymap_lookup_sdl(event.key.keysym.sym, &key_val, &spec_off);
               if (event.type == SDL_KEYDOWN) {
                   // #62: the INT9 letter channel ([28C] = LUT[scancode]) was
                   // fed ONLY by the default-window handler — in V2_ONLY the
@@ -416,7 +405,9 @@ void render_thread_proc_v2(void* _state)
           // one doubles the keyboard of player 1); buttons/sticks map to the
           // DOS action bits (v2_coop_pad_events). Player 1's bits take the
           // keyboard path above (tap accumulator + held words), the others go
-          // to their player's accumulators.
+          // to their player's accumulators. A recording keeps them as actions
+          // (`ACTION@k` for the pads of players 2..3); in a lockstep game the
+          // first pad is this client's player and goes through the batches.
           case SDL_CONTROLLERDEVICEADDED:   v2_coop_pad_added(event.cdevice.which); break;
           case SDL_CONTROLLERDEVICEREMOVED: v2_coop_pad_removed(event.cdevice.which); break;
           case SDL_CONTROLLERBUTTONDOWN:
@@ -424,6 +415,11 @@ void render_thread_proc_v2(void* _state)
           case SDL_CONTROLLERAXISMOTION: {
               V2CoopPadEv ev[4]; int n = v2_coop_pad_events(&event, ev, 4);
               for (int i = 0; i < n; i++) {
+                  v2_input_record_bits(ev[i].player, ev[i].bits, ev[i].down ? 1 : 0);
+                  if (v2_net_active()) {
+                      if (ev[i].player == 0) v2_input_net_capture_bits(ev[i].bits, ev[i].down ? 1 : 0);
+                      continue;
+                  }
                   if (ev[i].player > 0) { v2_coop_key(ev[i].player, ev[i].bits, ev[i].down, false); continue; }
                   if (ev[i].down) {
                       extern std::atomic<uint16_t> sdl_input_press_edges;
