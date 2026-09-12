@@ -11243,5 +11243,9 @@
   "1C6:3E06": "pal_snake",
   "1C6:3C26": "pal_snail",
   "1C6:3E36": "pal_note_alien"
+ },
+ "fields": {
+  "state_18a5": "event",
+  "state_18cd": "event_arg"
  }
 }

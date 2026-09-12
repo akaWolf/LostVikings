@@ -242,6 +242,12 @@ a, b, l = channel targets: `self.f`, `[g]`, `partner.f`, `drop`.
 * `self.f = X`, `[g] += X`, `if X == Y goto L` … — `acc = X` folded into the next statement (LVD_LANGUAGE.md, Statements).
 * `switch X:` / `select X:` with `N -> L` cases — runs of field-loaded / literal-loaded compare-and-branch statements.
 * `say partner=P dy=±N cmd=X id=ID edge=E` — the seven-statement speech-bubble idiom.
+* `if X & M goto L` / `if !(X & M) goto L` — `acc = bit(1 & 0x1#00)` + the bit-test branch `if acc == / != bit(X & M)`; `if bit(X & M) == 0 goto L` / `!= 0` — the same with `acc = bit(0 & 0x1#00)` (four spellings, four opcode pairs); `call` forms alike.
+* `if same_facing(partner) goto L` / `if !same_facing(partner) goto L` — `acc = bit(self.flags & 0x40)` + `if acc == / != bit(partner.flags & 0x40)`.
+* `if A & B == A goto L` / `!= A` — `[0206] = A`, `[0206] &= B`, `if A == / != [0206] goto L`: every bit of A is (not) set in B (the switch words against the pool).
+* `hurt partner event=K amount=A facing` — `partner.event = K`, `partner.event_arg = A`, `partner.event_arg = setbit(partner.event_arg, 0x8000, bit(self.flags & 0x40))`.
+* `anim_by_viking erik=A, baleog=B, olaf=C goto L [fallthrough]` — `select self.anim_idx: 0 -> b, 2 -> c`, `anim A`, `goto L`, then the states `b: anim B; goto L` and `c: anim C; goto L` (or `anim C` falling through); the two side states are written by the compiler.
+* `loop X:` — a state whose last statement is `goto X`; the header implies it.
 * `func NAME:` with inner labels `  NAME:`; `call F(self.f = N, [g] = N, acc = X)` — Functions.
 
 ## Anim code

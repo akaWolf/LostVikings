@@ -80,14 +80,18 @@ class Names:
                 except Exception: self.mask_of[idx] = None
             self.lay = dz.load_layout_names()
         finally: os.chdir(cwd)
+        self.d = {'states': {}, 'classes': {}, 'anims': {}, 'sfx': {}, 'mem': {}, 'pals': {}, 'fields': {}}
+        if os.path.exists(dict_path):
+            self.d.update(json.load(open(dict_path, encoding='utf-8')))
+        alias = self.d.get('fields', {})               # dictionary names of object fields over the OBJ_* names ("state_18a5": "event")
+        self.fld_orig = dict(self.fld_of)
+        for idx, n in list(self.fld_of.items()):
+            if n in alias: self.fld_of[idx] = alias[n]
         self.idx_of_fld = {}
         for idx, n in self.fld_of.items(): self.idx_of_fld.setdefault(n, []).append(idx)
         self.idx_of_mask = {}
         for idx, m in self.mask_of.items():
             if m is not None: self.idx_of_mask.setdefault(m, []).append(idx)
-        self.d = {'states': {}, 'classes': {}, 'anims': {}, 'sfx': {}, 'mem': {}, 'pals': {}}
-        if os.path.exists(dict_path):
-            self.d.update(json.load(open(dict_path, encoding='utf-8')))
         for k, n in self.d.get('mem', {}).items():     # dictionary names of DS words ("HHHH": name) over the layout names
             self.lay[int(k, 16)] = n
         self.addr_of_mem = {}
@@ -97,6 +101,11 @@ class Names:
     def fld(self, idx):
         n = self.fld_of[idx]
         return n if len(self.idx_of_fld.get(n, [])) == 1 else f'{n}#{idx:02X}'
+    def fld_token(self, orig):
+        """the token the text shows for the field whose OBJ_* name is `orig`
+        (its dictionary alias, `#idx` when the name is not unique)."""
+        idx = next(i for i, n in self.fld_orig.items() if n == orig)
+        return self.fld(idx)
     def fld_parse(self, tok):
         if '#' in tok:
             n, i = tok.split('#', 1); idx = int(i, 16)
@@ -853,11 +862,18 @@ def decompile_text(cid, text, names):
     flush()
     out, nsw = fold_switches(out)
     stats['switch'] = nsw
-    out, nsay = fold_say(out)
+    out, nsay = fold_say(out, names)
     stats['say'] = nsay
+    out, stats['bits'] = fold_bits(out, names)
+    out, stats['facing'] = fold_facing(out, names)
+    out, stats['gates'] = fold_gates(out, names)
+    out, stats['hurt'] = fold_hurt(out, names)
+    out, stats['abv'] = fold_abv(out, names)
     out, nfn, ncall = fold_funcs(out)
     stats['func'] = nfn; stats['callargs'] = ncall
-    out.append(f'; stats: {stats["stmt"]} statements, {stats["sugar"]} folded loads, {nsw} switch blocks, {nsay} say lines, {nfn} funcs, {ncall} calls with args, {stats["states"]} states ({stats["named"]} named), {stats["anim"]} anim statements, {stats["anims"]} anim labels ({stats["anamed"]} named), {stats["pal"]} palettes')
+    out, stats['loops'] = fold_loops(out)
+    out.append(f'; stats: {stats["stmt"]} statements, {stats["sugar"]} folded loads, {nsw} switch blocks, {nsay} say lines, {nfn} funcs, {ncall} calls with args, {stats["states"]} states ({stats["named"]} named), {stats["anim"]} anim statements, {stats["anims"]} anim labels ({stats["anamed"]} named), {stats["pal"]} palettes, '
+               f'idioms: {stats["bits"]} bit tests, {stats["facing"]} same_facing, {stats["gates"]} mask gates, {stats["hurt"]} hurt, {stats["abv"]} anim_by_viking, {stats["loops"]} loops')
     return '\n'.join(out) + '\n', stats
 
 
@@ -889,8 +905,8 @@ ACC_ARG_RX = re.compile(r'^acc = (.+)$')
 
 
 def label_of(line):
-    """the name a header/label line defines: `state X:`, `func X:`, or an inner label `  X:`"""
-    m = re.match(r'^(?:(?:state|func) (\S+)|  (\S+)):', line.split(';', 1)[0].rstrip())
+    """the name a header/label line defines: `state X:`, `loop X:`, `func X:`, or an inner label `  X:`"""
+    m = re.match(r'^(?:(?:state|func|loop) (\S+)|  (\S+)):', line.split(';', 1)[0].rstrip())
     return (m.group(1) or m.group(2)) if m else None
 
 
@@ -909,6 +925,7 @@ class Cfg:
         self.blocks = []          # [name, line index of the header, [(line index, stmt)], adjacent to the next block]
         self.kind = {}            # name -> 'state' | 'func' | 'inner'
         self.entries = {}         # class entry name -> line index
+        self.loops = set()        # `loop X:` headers: the block ends with an implicit `goto X`
         cur = None; in_anim = False
         for i, l in enumerate(lines):
             code = l.split(';', 1)[0].rstrip()
@@ -917,10 +934,12 @@ class Cfg:
                 in_anim = True; cur = None; continue
             if code.startswith(('    ', '\t')) and in_anim: continue
             if not code.startswith(' '): in_anim = False
-            m = re.match(r'^(state|func) (\S+):$', code)
+            m = re.match(r'^(state|func|loop) (\S+):$', code)
             if m:
                 if cur is not None: cur[3] = True
-                cur = [m.group(2), i, [], False]; self.blocks.append(cur); self.kind[m.group(2)] = m.group(1); continue
+                cur = [m.group(2), i, [], False]; self.blocks.append(cur); self.kind[m.group(2)] = 'state' if m.group(1) == 'loop' else m.group(1)
+                if m.group(1) == 'loop': self.loops.add(m.group(2))
+                continue
             m = re.match(r'^  (\S+):$', code)
             if m:
                 if cur is not None: cur[3] = True
@@ -947,6 +966,9 @@ class Cfg:
                 if m: succ.append((m.group(1), li))
             last = stmts[-1][1].split()[0] if stmts else ''
             falls = last not in NONFALL
+            if last == 'anim_by_viking': falls = stmts[-1][1].endswith(' fallthrough')   # the olaf branch falls through only in that variant
+            if name in self.loops:
+                succ.append((name, stmts[-1][0] if stmts else hi)); falls = False      # the implicit `goto X` of a loop
             if falls and adj and k + 1 < len(self.blocks):
                 succ.append((self.blocks[k + 1][0], stmts[-1][0] if stmts else hi))
             self.succ[name] = succ; self.calls[name] = calls; self.falls[name] = falls
@@ -1030,20 +1052,32 @@ def fold_funcs(lines):
 #   cmdq_push(4)                         op 43
 #   cmdq_push(2)                         op 42
 # -> say partner=P dy=-N cmd=X id=ID edge=E     (dy=+N for the += form)
-SAY_RX = [
-    re.compile(r'^    set_partner (0x[0-9A-Fa-f]+|\d+)$'),
-    re.compile(r'^    \[0206\], \[0208\] = delta\(partner\)$'),
-    re.compile(r'^    \[0208\] (-=|\+=) (0x[0-9A-Fa-f]+|\d+)$'),
-    re.compile(r'^    cmdq_push\(6, (0x[0-9A-Fa-f]+|\d+)\)$'),
-    re.compile(r'^    text\(id=(0x[0-9A-Fa-f]+|\d+), edge=(0x[0-9A-Fa-f]+|\d+|self\.[A-Za-z_][A-Za-z0-9_?]*(?:#[0-9A-Fa-f]{2})?), x=\[0206\], y=\[0208\]\)$'),
-    re.compile(r'^    cmdq_push\(4\)$'),
-    re.compile(r'^    cmdq_push\(2\)$'),
-]
+def live(names):
+    """The tokens the idiom folds match: the text column/row scratch words
+    0206/0208 and the fields/masks by their CURRENT display names (the
+    dictionary may rename them), so a renamed word never silences a fold."""
+    return {'ta': '[' + names.mem(0x206) + ']', 'tb': '[' + names.mem(0x208) + ']',
+            'flags': 'self.' + names.fld(0x08), 'pflags': 'partner.' + names.fld(0x08),
+            'facing': names.mask(0x0C), 'bit1': names.mask(0x00), 'hi': names.mask(0x1E),
+            'event': names.fld_token('state_18a5'), 'arg': names.fld_token('state_18cd'), 'vik': names.fld_token('anim_idx')}
+
+
+def say_rx(names):
+    L = live(names); ta, tb = re.escape(L['ta']), re.escape(L['tb'])
+    return [
+        re.compile(r'^    set_partner (0x[0-9A-Fa-f]+|\d+)$'),
+        re.compile(rf'^    {ta}, {tb} = delta\(partner\)$'),
+        re.compile(rf'^    {tb} (-=|\+=) (0x[0-9A-Fa-f]+|\d+)$'),
+        re.compile(r'^    cmdq_push\(6, (0x[0-9A-Fa-f]+|\d+)\)$'),
+        re.compile(rf'^    text\(id=(0x[0-9A-Fa-f]+|\d+), edge=(0x[0-9A-Fa-f]+|\d+|self\.[A-Za-z_][A-Za-z0-9_?]*(?:#[0-9A-Fa-f]{{2}})?), x={ta}, y={tb}\)$'),
+        re.compile(r'^    cmdq_push\(4\)$'),
+        re.compile(r'^    cmdq_push\(2\)$'),
+    ]
 SAY_LINE_RX = re.compile(r'^say partner=(0x[0-9A-Fa-f]+|\d+) dy=([-+])(0x[0-9A-Fa-f]+|\d+) cmd=(0x[0-9A-Fa-f]+|\d+) id=(0x[0-9A-Fa-f]+|\d+) edge=(0x[0-9A-Fa-f]+|\d+|self\.[A-Za-z_][A-Za-z0-9_?]*(?:#[0-9A-Fa-f]{2})?)$')
 
 
-def fold_say(lines):
-    out = []; i = 0; n = 0
+def fold_say(lines, names):
+    out = []; i = 0; n = 0; SAY_RX = say_rx(names)
     while i < len(lines):
         if i + 7 <= len(lines):
             ms = [rx.match(lines[i + k]) for k, rx in enumerate(SAY_RX)]
@@ -1084,6 +1118,164 @@ def fold_switches(lines):
         out.append(f'    {kw} {val}:')
         for lit, tgt in cases: out.append(f'        {lit} -> {tgt}')
         n += 1; i = j
+    return out, n
+
+
+# ------------------------------------------------ idioms (level C DSL) --
+# Every idiom below is an exact two-way rewrite of a fixed statement run: the
+# decompiler folds the run into one line, the compiler writes the run back,
+# byte for byte. Operands stay the tokens of the low form.
+OPD_RX = r'(self\.[A-Za-z_][A-Za-z0-9_?]*(?:#[0-9A-Fa-f]{2})?|partner\.[A-Za-z_][A-Za-z0-9_?]*(?:#[0-9A-Fa-f]{2})?|\[(?:[A-Za-z_][A-Za-z0-9_]*|[0-9A-Fa-f]{4})\])'
+MASK_RX = r'(0x[0-9A-Fa-f]+(?:#[0-9A-Fa-f]{2})?)'
+KIND_RX = r'(goto|call)'
+LIT2_RX = r'(0x[0-9A-Fa-f]+|-?\d+)'
+
+# bit test: `acc = bit(K & 1)` (op 97, K 0/1, mask index 00) + a bit-test branch on acc (A9-AB / AE-B0 / B3-B5 / B8-BA)
+#   K=1 ==  ->  if X & M goto L          K=1 !=  ->  if !(X & M) goto L
+#   K=0 ==  ->  if bit(X & M) == 0 goto L   K=0 !=  ->  if bit(X & M) != 0 goto L
+# (the four spellings keep the four opcode pairs apart; `call` for the call forms)
+BIT_HI_RX = {}
+def fold_bits(lines, names):
+    b1 = re.escape(live(names)['bit1'])
+    A = re.compile(rf'^    acc = bit\(([01]) & {b1}\)$')
+    B = re.compile(rf'^    if acc (==|!=) bit\({OPD_RX} & {MASK_RX}\) {KIND_RX} {TARGET_RX}$')
+    out = []; i = 0; n = 0
+    while i < len(lines):
+        ma = A.match(lines[i]); mb = B.match(lines[i + 1]) if ma and i + 1 < len(lines) else None
+        if ma and mb:
+            k, (cmp, x, m, kind, tgt) = ma.group(1), mb.groups()
+            if k == '1': cond = f'{x} & {m}' if cmp == '==' else f'!({x} & {m})'
+            else: cond = f'bit({x} & {m}) {cmp} 0'
+            out.append(f'    if {cond} {kind} {tgt}'); i += 2; n += 1; continue
+        out.append(lines[i]); i += 1
+    return out, n
+
+BIT_LINE_RX = [
+    (re.compile(rf'^if !\({OPD_RX} & {MASK_RX}\) {KIND_RX} {TARGET_RX}$'), '1', '!='),
+    (re.compile(rf'^if {OPD_RX} & {MASK_RX} {KIND_RX} {TARGET_RX}$'), '1', '=='),
+    (re.compile(rf'^if bit\({OPD_RX} & {MASK_RX}\) (==|!=) 0 {KIND_RX} {TARGET_RX}$'), '0', None),
+]
+def expand_bits(raw, names):
+    for rx, k, cmp in BIT_LINE_RX:
+        m = rx.match(raw)
+        if not m: continue
+        g = m.groups()
+        if cmp is None: x, mk, cmp, kind, tgt = g
+        else: x, mk, kind, tgt = g
+        return [f'acc = bit({k} & {live(names)["bit1"]})', f'if acc {cmp} bit({x} & {mk}) {kind} {tgt}']
+    return None
+
+# same facing: `acc = bit(self.flags & 0x40)` + `if acc ==/!= bit(partner.flags & 0x40) goto L`
+def fold_facing(lines, names):
+    L = live(names); A = re.compile(rf'^    acc = bit\({re.escape(L["flags"])} & {re.escape(L["facing"])}\)$')
+    B = re.compile(rf'^    if acc (==|!=) bit\({re.escape(L["pflags"])} & {re.escape(L["facing"])}\) {KIND_RX} {TARGET_RX}$')
+    out = []; i = 0; n = 0
+    while i < len(lines):
+        ma = A.match(lines[i]); mb = B.match(lines[i + 1]) if ma and i + 1 < len(lines) else None
+        if ma and mb:
+            cmp, kind, tgt = mb.groups()
+            out.append(f'    if {"" if cmp == "==" else "!"}same_facing(partner) {kind} {tgt}'); i += 2; n += 1; continue
+        out.append(lines[i]); i += 1
+    return out, n
+
+FACING_LINE_RX = re.compile(rf'^if (!?)same_facing\(partner\) {KIND_RX} {TARGET_RX}$')
+def expand_facing(raw, names):
+    m = FACING_LINE_RX.match(raw)
+    if not m: return None
+    L = live(names); neg, kind, tgt = m.groups()
+    return [f'acc = bit({L["flags"]} & {L["facing"]})', f'if acc {"!=" if neg else "=="} bit({L["pflags"]} & {L["facing"]}) {kind} {tgt}']
+
+# mask gate: `[0206] = A` / `[0206] &= B` / `if A ==/!= [0206] goto L`  ->  if A & B == A goto L
+# (== : every bit of A is set in B — the switch words [switches] / [switches_b] / [hints_done] against the object's pool)
+def fold_gates(lines, names):
+    ta = re.escape(live(names)['ta'])
+    A = re.compile(rf'^    {ta} = {OPD_RX}$'); B = re.compile(rf'^    {ta} &= {OPD_RX}$')
+    C = re.compile(rf'^    if {OPD_RX} (==|!=) {ta} {KIND_RX} {TARGET_RX}$')
+    out = []; i = 0; n = 0
+    while i < len(lines):
+        ma = A.match(lines[i]); mb = B.match(lines[i + 1]) if ma and i + 1 < len(lines) else None
+        mc = C.match(lines[i + 2]) if mb and i + 2 < len(lines) else None
+        if ma and mb and mc and mc.group(1) == ma.group(1):
+            out.append(f'    if {ma.group(1)} & {mb.group(1)} {mc.group(2)} {ma.group(1)} {mc.group(3)} {mc.group(4)}'); i += 3; n += 1; continue
+        out.append(lines[i]); i += 1
+    return out, n
+
+GATE_LINE_RX = re.compile(rf'^if {OPD_RX} & {OPD_RX} (==|!=) {OPD_RX} {KIND_RX} {TARGET_RX}$')
+def expand_gate(raw):
+    m = GATE_LINE_RX.match(raw)
+    if not m or m.group(1) != m.group(4): return None
+    a, b, cmp, _, kind, tgt = m.groups()
+    return [f'[0206] = {a}', f'[0206] &= {b}', f'if {a} {cmp} [0206] {kind} {tgt}']
+
+# hurt: `partner.event = K` / `partner.event_arg = A` / `partner.event_arg = setbit(partner.event_arg, 0x8000, bit(self.flags & 0x40))`
+#   -> hurt partner event=K amount=A facing     (the direction bit of the amount = the hurter's facing)
+def fold_hurt(lines, names):
+    L = live(names); ev, ar = re.escape(L['event']), re.escape(L['arg'])
+    A = re.compile(rf'^    partner\.{ev} = {LIT2_RX}$'); B = re.compile(rf'^    partner\.{ar} = {LIT2_RX}$')
+    C = re.compile(rf'^    partner\.{ar} = setbit\(partner\.{ar}, {re.escape(L["hi"])}, bit\({re.escape(L["flags"])} & {re.escape(L["facing"])}\)\)$')
+    out = []; i = 0; n = 0
+    while i < len(lines):
+        ma = A.match(lines[i]); mb = B.match(lines[i + 1]) if ma and i + 1 < len(lines) else None
+        mc = C.match(lines[i + 2]) if mb and i + 2 < len(lines) else None
+        if ma and mb and mc:
+            out.append(f'    hurt partner event={ma.group(1)} amount={mb.group(1)} facing'); i += 3; n += 1; continue
+        out.append(lines[i]); i += 1
+    return out, n
+
+HURT_LINE_RX = re.compile(rf'^hurt partner event={LIT2_RX} amount={LIT2_RX} facing$')
+def expand_hurt(raw, names):
+    m = HURT_LINE_RX.match(raw)
+    if not m: return None
+    L = live(names); k, a = m.groups()
+    return [f'partner.{L["event"]} = {k}', f'partner.{L["arg"]} = {a}', f'partner.{L["arg"]} = setbit(partner.{L["arg"]}, {L["hi"]}, bit({L["flags"]} & {L["facing"]}))']
+
+# anim by viking: a state that ends with
+#   select self.anim_idx:  0 -> B   2 -> C  /  anim A  /  goto L
+# followed directly by the states B: `anim ...; goto L` and C: `anim ...; goto L` (or `anim ...` falling
+# through), both entered from that select only  ->  anim_by_viking erik=A, baleog=B, olaf=C goto L [fallthrough]
+def fold_abv(lines, names):
+    vik = re.escape(live(names)['vik'])
+    hdr = re.compile(r'^state (\S+):(\s*;.*)?$')
+    def stmt(i): return lines[i].split(';', 1)[0].rstrip() if i < len(lines) else None
+    def refs(name):
+        return sum(len(re.findall(rf'(?:goto|call|->|entry=) {re.escape(name)}\b|entry={re.escape(name)}\b', l.split(';', 1)[0])) for l in lines)
+    out = []; i = 0; n = 0; skip = set()
+    while i < len(lines):
+        if i in skip: i += 1; continue
+        s = stmt(i)
+        if s == f'    select self.{live(names)["vik"]}:' and i + 4 < len(lines):
+            m0 = re.match(r'^        0 -> (\S+)$', stmt(i + 1) or ''); m2 = re.match(r'^        2 -> (\S+)$', stmt(i + 2) or '')
+            ma = re.match(r'^    anim (\S+)$', stmt(i + 3) or ''); mg = re.match(r'^    goto (\S+)$', stmt(i + 4) or '')
+            hb = hdr.match(stmt(i + 5) or '');
+            if m0 and m2 and ma and mg and hb and hb.group(1) == m0.group(1):
+                ab = re.match(r'^    anim (\S+)$', stmt(i + 6) or ''); gb = stmt(i + 7) == f'    goto {mg.group(1)}'
+                hc = hdr.match(stmt(i + 8) or '')
+                if ab and gb and hc and hc.group(1) == m2.group(1):
+                    ac = re.match(r'^    anim (\S+)$', stmt(i + 9) or '')
+                    gc = stmt(i + 10) == f'    goto {mg.group(1)}'
+                    nxt = stmt(i + 10 if gc else i + 10)
+                    end_ok = gc or (nxt is None or not nxt.startswith(' ') or nxt == '')
+                    if ac and end_ok and refs(m0.group(1)) == 1 and refs(m2.group(1)) == 1:
+                        out.append(f'    anim_by_viking erik={ma.group(1)}, baleog={ab.group(1)}, olaf={ac.group(1)} goto {mg.group(1)}' + ('' if gc else ' fallthrough'))
+                        i += 11 if gc else 10; n += 1; continue
+        out.append(lines[i]); i += 1
+    return out, n
+
+ABV_LINE_RX = re.compile(rf'^anim_by_viking erik=(\S+), baleog=(\S+), olaf=(\S+) goto {TARGET_RX}( fallthrough)?$')
+
+# loop: a state whose last statement is `goto <itself>`  ->  `loop X:` header, the goto implied
+def fold_loops(lines):
+    out = list(lines); n = 0; i = 0
+    while i < len(out):
+        m = re.match(r'^state (\S+):', out[i].split(';', 1)[0].rstrip())
+        if not m: i += 1; continue
+        j = i + 1; last = None
+        while j < len(out) and (out[j].startswith(('    ', '\t')) or not out[j].split(';', 1)[0].strip()):
+            if out[j].split(';', 1)[0].strip(): last = j
+            j += 1
+        if last is not None and out[last].split(';', 1)[0].rstrip() == f'    goto {m.group(1)}':
+            out[i] = out[i].replace('state ', 'loop ', 1); del out[last]; n += 1
+        i = j
     return out, n
 
 
@@ -1221,14 +1413,32 @@ class Lowerer:
             if cfg.falls[P[-1]]:
                 raise ValueError(f'line {(last[2][-1][0] if last[2] else last[1]) + 1}: func {E} falls through past its last block — end it with return/goto/exit/despawn')
 
+    def expand_idiom(self, raw):
+        """a level-C idiom line -> the low statements it stands for (label
+        lines as 'NAME:'), or None when the line is not an idiom."""
+        for f in (expand_gate, lambda r: expand_bits(r, self.N), lambda r: expand_facing(r, self.N), lambda r: expand_hurt(r, self.N)):
+            ex = f(raw)
+            if ex is not None: return ex
+        m = ABV_LINE_RX.match(raw)
+        if m:
+            a, b, c, tgt, fall = m.groups(); vik = self.N.fld_token('anim_idx')
+            self._abv += 1; lb, lc = f'_abv{self._abv}_baleog', f'_abv{self._abv}_olaf'
+            return [f'if 0 == self.{vik} goto {lb}', f'if 2 == self.{vik} goto {lc}', f'anim {a}', f'goto {tgt}',
+                    f'{lb}:', f'anim {b}', f'goto {tgt}', f'{lc}:', f'anim {c}'] + ([] if fall else [f'goto {tgt}'])
+        return None
+
     def lower(self, text):
         self.check_funcs(text)
-        out = []
+        out = []; self._abv = 0
         block = None            # ('switch'|'select', value) while inside a case block
         mode = None             # 'code' under a state/func/inner label, 'anim' under an anim label, 'pal' under a palette label
         pal = []                # the rgb bytes of the palette block being read
+        loop = None             # the name of the open `loop X:` block: its implicit `goto X` is written when the block ends
         def flush_pal():
             if pal: out.append('blob ' + bytes(pal).hex()); pal.clear()
+        def flush_loop():
+            nonlocal loop
+            if loop: out.extend(self.statement(f'goto {loop}')); loop = None
         for lineno, line in enumerate(text.splitlines(), 1):
             code = line.partition(';')[0].rstrip()
             raw = code.strip()
@@ -1242,6 +1452,7 @@ class Lowerer:
                     stmt = f'if {val} == {mc.group(1)} goto {mc.group(2)}' if kw == 'switch' else f'if {mc.group(1)} == {val} goto {mc.group(2)}'
                     out.extend(self.statement(stmt)); continue
                 block = None
+                if not (code.startswith('    ') or code.startswith('\t')): flush_loop()   # a label / header / data line ends the loop block
                 mi = re.match(r'^  ([A-Za-z_][A-Za-z0-9_]*):$', code)     # an inner label of a func
                 if mi:
                     out.append(self.label(mi.group(1)) + ':'); mode = 'code'; continue
@@ -1277,14 +1488,21 @@ class Lowerer:
                                 raise ValueError(f'call argument {a!r}: expected `self.f = N`, `[g] = N`, `partner.f = N` or `acc = X`')
                             out.extend(self.statement(a))
                         out.extend(self.statement(f'call {mc.group(1)}')); continue
+                    ex = self.expand_idiom(raw)
+                    if ex is not None:
+                        for s in ex:
+                            if s.endswith(':'): out.append(self.label(s[:-1]) + ':')
+                            else: out.extend(self.statement(s))
+                        continue
                     out.extend(self.statement(raw)); continue
                 if p[0] == 'chunk': out.append(raw); mode = None
                 elif p[0] == 'class':
                     kv = dict(x.split('=', 1) for x in p[2:])
                     entry = kv['entry']
                     out.append(f'record {kv["record"]} sprite={kv["sprite"]} flags={kv["flags"]} code={self.label(entry)} rest={kv["rest"]}'); mode = None
-                elif p[0] in ('state', 'func') and raw.endswith(':'):
+                elif p[0] in ('state', 'func', 'loop') and raw.endswith(':'):
                     out.append(self.label(p[1][:-1]) + ':'); mode = 'code'
+                    if p[0] == 'loop': loop = p[1][:-1]
                 elif p[0] == 'anim' and len(p) == 2 and raw.endswith(':'):
                     out.append(self.alabel(p[1][:-1]) + ':'); mode = 'anim'
                 elif p[0] == 'palette' and len(p) == 2 and raw.endswith(':'):
@@ -1302,7 +1520,7 @@ class Lowerer:
                     raise ValueError(f'unexpected line {raw!r}')
             except Exception as e:
                 raise ValueError(f'line {lineno}: {e}') from e
-        flush_pal()
+        flush_loop(); flush_pal()
         return '\n'.join(out) + '\n'
 
 
@@ -1346,7 +1564,7 @@ def check(cids):
         print(f'{cid:X}: {stats["stmt"]} statements, {stats["sugar"]} folded, {stats["states"]} states — '
               f'{"IDENTICAL" if same else f"DIFF at 0x{diff:04X} (len {len(img)} vs {len(ref)})"}')
         ok &= same
-        labels = re.findall(r'^(?:state|func|anim|palette|  )\s*([A-Za-z_]\w*):', text, re.M)
+        labels = re.findall(r'^(?:state|func|loop|anim|palette|  )\s*([A-Za-z_]\w*):', text, re.M)
         dup = sorted({x for x in labels if labels.count(x) > 1})
         if dup:
             print(f'{cid:X}: DUPLICATE label names (a state, anim or palette share a name — confusing in the text and for the editor anchors): {dup[:8]}'); ok = False
@@ -1433,6 +1651,13 @@ def reference_md():
           '* `self.f = X`, `[g] += X`, `if X == Y goto L` … — `acc = X` folded into the next statement (LVD_LANGUAGE.md, Statements).',
           '* `switch X:` / `select X:` with `N -> L` cases — runs of field-loaded / literal-loaded compare-and-branch statements.',
           '* `say partner=P dy=±N cmd=X id=ID edge=E` — the seven-statement speech-bubble idiom.',
+          '* `if X & M goto L` / `if !(X & M) goto L` — `acc = bit(1 & 0x1#00)` + the bit-test branch `if acc == / != bit(X & M)`; '
+          '`if bit(X & M) == 0 goto L` / `!= 0` — the same with `acc = bit(0 & 0x1#00)` (four spellings, four opcode pairs); `call` forms alike.',
+          '* `if same_facing(partner) goto L` / `if !same_facing(partner) goto L` — `acc = bit(self.flags & 0x40)` + `if acc == / != bit(partner.flags & 0x40)`.',
+          '* `if A & B == A goto L` / `!= A` — `[0206] = A`, `[0206] &= B`, `if A == / != [0206] goto L`: every bit of A is (not) set in B (the switch words against the pool).',
+          '* `hurt partner event=K amount=A facing` — `partner.event = K`, `partner.event_arg = A`, `partner.event_arg = setbit(partner.event_arg, 0x8000, bit(self.flags & 0x40))`.',
+          '* `anim_by_viking erik=A, baleog=B, olaf=C goto L [fallthrough]` — `select self.anim_idx: 0 -> b, 2 -> c`, `anim A`, `goto L`, then the states `b: anim B; goto L` and `c: anim C; goto L` (or `anim C` falling through); the two side states are written by the compiler.',
+          '* `loop X:` — a state whose last statement is `goto X`; the header implies it.',
           '* `func NAME:` with inner labels `  NAME:`; `call F(self.f = N, [g] = N, acc = X)` — Functions.', '',
           '## Anim code', '', 'Under an `anim NAME:` header. Lists carry one value per sub-sprite (masked: per matching one).', '',
           '| cmd | statement | operands | meaning |', '|---|---|---|---|']
@@ -1537,7 +1762,7 @@ def state_sigs(cid, names):
     labels normalised, so equal code compares equal across scripts."""
     text, _ = decompile_text(cid, canonical_text(cid), names); out = []; cur = None
     for l in text.splitlines():
-        m = re.match(r'^(state|func|  )\s*(\S+):\s*;\s*@([0-9A-F]{4})', l)
+        m = re.match(r'^(state|func|loop|  )\s*(\S+):\s*;\s*@([0-9A-F]{4})', l)
         if m: cur = [m.group(2), int(m.group(3), 16), []]; out.append(cur); continue
         if l.startswith(('anim ', 'class ', 'blob', 'palette')): cur = None; continue
         if cur and l.startswith('    '):

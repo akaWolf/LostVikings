@@ -638,7 +638,7 @@ def logic_page_lvd(cid_hex):
         raw = code.strip()
         esc = _h.escape(code.rstrip())
         c = f" <span class=c>;{_h.escape(comment)}</span>" if comment else ""
-        if raw.startswith(("state ", "func ", "anim ", "palette ")) and raw.endswith(":"):
+        if raw.startswith(("state ", "func ", "loop ", "anim ", "palette ")) and raw.endswith(":"):
             out.append(f"<div class=l id='{_h.escape(raw.split()[1][:-1])}'>{esc}{c}</div>")
         elif raw.endswith(":") and " " not in raw:                                                  # a bare label (A_xxxx: / P_xxxx:)
             out.append(f"<div class=l id='{_h.escape(raw[:-1])}'>{esc}{c}</div>")

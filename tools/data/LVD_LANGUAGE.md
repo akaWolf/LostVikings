@@ -127,6 +127,31 @@ position), `[0208] -= 0x1C` (`dy=+N` for `+=`), `cmdq_push(6, 0x110D)`,
 `cmdq_push(4)`, `cmdq_push(2)` — in that order, with nothing between. Any
 deviation stays written out.
 
+Idioms (level C): fixed statement runs the decompiler folds into one line and
+the compiler writes back byte for byte — the low form is always accepted too.
+
+```
+    if self.flags#08 & 0x40#0C goto L        ;  acc = bit(1 & 0x1#00); if acc == bit(self.flags#08 & 0x40#0C) goto L
+    if !(self.flags#08 & 0x40#0C) goto L     ;  acc = bit(1 & 0x1#00); if acc != bit(...) goto L
+    if bit(self.flags#08 & 0x40#0C) == 0 goto L   ;  acc = bit(0 & 0x1#00); if acc == bit(...) goto L   (!= 0: the != branch)
+    if same_facing(partner) goto L           ;  acc = bit(self.flags#08 & 0x40#0C); if acc == bit(partner.flags#08 & 0x40#0C) goto L
+    if self.spawn_pool & [switches] == self.spawn_pool goto L   ;  [tmp_a] = self.spawn_pool; [tmp_a] &= [switches]; if self.spawn_pool == [tmp_a] goto L
+    hurt partner event=7 amount=2 facing     ;  partner.event = 7; partner.event_arg = 2; partner.event_arg = setbit(partner.event_arg, 0x8000#1E, bit(self.flags#08 & 0x40#0C))
+    anim_by_viking erik=A, baleog=B, olaf=C goto L   ;  select self.anim_idx: 0 -> b, 2 -> c; anim A; goto L;  b: anim B; goto L;  c: anim C; goto L
+```
+
+The four bit-test spellings keep the four opcode pairs apart (the constant bit
+0 or 1, `==` or `!=`); `call` replaces `goto` for the call families. The mask
+gate reads "every bit of A is set in B" (`!=`: not every bit) — the switch
+words `[switches]` / `[switches_b]` / `[hints_done]` against an object's pool.
+`hurt`: the event kind, the amount, and the direction bit of the amount taken
+from the hurter's facing. `anim_by_viking` also stands for the two side states
+(`b`, `c`) the compiler writes right after the block; `fallthrough` at the end
+means the olaf state has no `goto` and falls into the next block. A state whose
+last statement is a jump to itself is written `loop NAME:` with the jump
+implied. Field names come from the dictionary too (`fields`: `event` /
+`event_arg` for the engine's `state_18a5` / `state_18cd`).
+
 Channel forms (opcodes whose operands are typed channels): `spawn(t=10, x=…,
 y=…, pool=…, fl=…)`, `tile[x,y] = v`, `a, b = delta(nearest_vik)`,
 `a, b = quad(x, y)`, `l = tile_type(x, y)`, `text(id=…, edge=…, x=…, y=…)`,
