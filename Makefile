@@ -332,7 +332,6 @@ KEYMAP_EDITOR_OBJDIR := .obj-keymap-editor
 KEYMAP_EDITOR_SRCS := \
   src/sdl/v2_keymap.cpp \
   src/sdl/v2_coop.cpp \
-  src/sdl/v2_net.cpp \
   src/sdl/keymap_editor/editor.cpp
 KEYMAP_EDITOR_OBJS := $(patsubst %.cpp, $(KEYMAP_EDITOR_OBJDIR)/%.o, $(KEYMAP_EDITOR_SRCS))
 
