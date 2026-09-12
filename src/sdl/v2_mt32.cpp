@@ -1,6 +1,7 @@
 // v2_mt32.cpp — see v2_mt32.h.
 #include "v2_mt32.h"
 #include "v2_ui.h"
+#include "v2_sc55.h"
 #include <atomic>
 #include <cstdio>
 #include <cstdlib>
@@ -32,6 +33,8 @@ uint16_t v2_ail_mt32i_fn_lookup(uint16_t fn_code);
 uint16_t v2_ail_pit_cb_value(void);                 // v2_ail.cpp: what the AIL timer callback returns (the PIT divisor snapshot)
 uint32_t v2_chunk_read_private(uint16_t cid, uint8_t* dest, uint32_t max_size);   // v2_vm.cpp: a DATA.DAT chunk without the loader's DS effects
 }
+
+static bool munt_mode() { return v2_options.sound_mode.load() == 3; }   // 3 = Munt renders; 2 = the stream goes to the SC-55
 
 namespace {
 
@@ -105,6 +108,7 @@ uint8_t  g_mpu_in[16]; int g_mpu_in_n = 0;
 // the driver keeps its two ports in its own cells (fn65, 0x443-0x459): cs:43F = data, cs:441 = status/command
 uint16_t mpu_data_port()   { return v2_ail_mt32i_peek(0x43F); }
 uint16_t mpu_status_port() { return v2_ail_mt32i_peek(0x441); }
+bool     g_munt_mode = true;     // build-time: 3 = Munt renders, 2 = the bytes go to the SC-55 (v2_sc55_mix renders)
 uint8_t  g_bda[256];             // BIOS data area at 0040:0000 — the driver reads the CRT base at 0040:0063 and paces on its status port bit 3 (0x79E)
 uint8_t  g_odd_toggle = 0;
 struct UnknownPort { uint16_t port; int reads, writes; };
@@ -177,7 +181,8 @@ void mpu_out(uint16_t port, uint8_t val) {
     }
     if (da && port == da) {                                          // data: a MIDI byte
         g_bytes_out++;
-        g_parser.parseStream(&val, 1);
+        g_parser.parseStream(&val, 1);                                 // Munt (mode 3), the dump, the trace
+        if (!g_munt_mode) v2_sc55_uart_bytes(&val, 1);                  // mode 2: the SC-55's UART, byte for byte
         return;
     }
     if (port == 0x20 || port == 0x21 || port == 0xA0 || port == 0xA1) return;   // the PICs (IRQ mask / EOI): nothing to model
@@ -415,7 +420,9 @@ void build(uint32_t rate) {
     g_ticks = 0; g_tick_base = 0; g_preloaded = false; g_slot0 = -1; g_fm_slot0 = 0x10000; g_calls = 0; g_skipped = 0; g_desc_off = 0; g_cache_size = 0; g_tick_hz = 0.0;
     g_bytes_out = 0; g_sysex_out = 0; g_short_out = 0;
     if (!g_dump.on) { const char* p = getenv("V2_MT32_DUMP"); if (p && *p) { g_dump.on = true; g_dump.path = p; } }
-    g_toast.store(munt_open(rate) ? 1 : 2, std::memory_order_release);   // without ROMs the driver still runs (the dump); the mix falls through to the OPL
+    g_munt_mode = munt_mode();
+    if (g_munt_mode) g_toast.store(munt_open(rate) ? 1 : 2, std::memory_order_release);   // without ROMs the driver still runs (the dump); the mix falls through to the OPL
+    else { snprintf(g_status, sizeof g_status, "MT-32 world -> SC-55"); g_toast.store(0, std::memory_order_release); }
     // the boot chain: in the ring when the option was on at the game's start, otherwise the transcript
     size_t rd = g_rd.load(std::memory_order_relaxed);
     const bool ring_has_init = (rd != g_wr.load(std::memory_order_acquire)) && g_ring[rd].kind == K_CALL && g_ring[rd].code == 0x64;
@@ -453,7 +460,8 @@ bool load_data() {
 
 } // namespace
 
-bool v2_mt32_enabled() { return v2_options.sound_mode.load() == 3; }
+// the world runs for MT32 (Munt) and for SC55 (the same MPU stream into the SC-55 — the 1992 SC-55 owner's setup)
+bool v2_mt32_enabled() { const int m = v2_options.sound_mode.load(); return m == 3 || m == 2; }
 const char* v2_mt32_status() { return g_status; }
 
 // ---------------------------------------------------------------------------
@@ -512,7 +520,7 @@ void v2_mt32_service() {
     if (on) {
         v2_options_ensure_loaded();
         if (!load_data()) { v2_ui_toast(g_status); v2_options.sound_mode = 0; last = 0; return; }
-        snprintf(g_status, sizeof g_status, "MT-32: starting");
+        snprintf(g_status, sizeof g_status, munt_mode() ? "MT-32: starting" : "MT-32 world -> SC-55: starting");
         g_armed.store(true, std::memory_order_release);
     } else {
         g_armed.store(false, std::memory_order_release);       // the audio thread tears the instance down
@@ -525,6 +533,7 @@ void v2_mt32_service() {
 void v2_mt32_pump(uint64_t pos, uint32_t offset_frames, uint32_t rate) {
     const bool armed = g_armed.load(std::memory_order_acquire);
     if (!armed) { if (g_built) teardown(); return; }
+    if (g_built && g_munt_mode != munt_mode()) { teardown(); g_armed.store(true, std::memory_order_release); }   // SC55 <-> MT32: a fresh world for the other module
     if (!g_built) {
         if (!g_published.load(std::memory_order_acquire) || !g_data_ok) return;
         build(rate);

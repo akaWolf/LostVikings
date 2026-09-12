@@ -370,4 +370,5 @@ or point `sc55_roms=<dir>` / `mt32_roms=<dir>` in `v2_options.cfg` at them;
 without them the `SOUND` option falls back to the original OPL3 render. The
 MT-32 option is the game's own MT-32 configuration (its MT-32 driver, timbre
 bank and MT-32 arrangements of the music run on the emulated module) — the
-music was written for that machine.
+music was written for that machine; the SC-55 option feeds that same MT-32
+stream to the emulated SC-55, as an SC-55 owner heard the game in 1992.

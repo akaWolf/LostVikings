@@ -6,6 +6,7 @@
 #include <cstdio>
 #include <cstring>
 #include <mutex>
+#include <cstddef>
 
 extern "C" {
 int  nsc55_load(const char* dir);
@@ -22,6 +23,7 @@ const char* nsc55_last_error(void);
 }
 
 static std::atomic<bool> g_on{false};     // the module runs (ROMs loaded, work thread up)
+static uint8_t g_fifo[0x10000]; static uint32_t g_fifo_wr = 0, g_fifo_rd = 0; static bool g_fifo_overflow = false;   // the MT-32 world's bytes while the firmware boots
 static std::atomic<bool> g_ready{false};  // its firmware has booted (lcd_stub's signal) and the channel state is replayed
 static int g_trace = -1;                 // V2_SC55_TRACE=1: boot / UART / ring diagnostics on stderr
 static uint32_t g_t0 = 0;                // SDL ticks at start
@@ -91,9 +93,11 @@ static int replay_channel_state() {
 void v2_sc55_service() {
     if (!g_on.load(std::memory_order_acquire) || g_ready.load(std::memory_order_acquire)) return;
     if (!nsc55_lcd_enabled()) return;
-    const int n = replay_channel_state();
+    // no channel-state replay: the MT-32 world's stream (queued in v2_sc55_uart_bytes since its own
+    // start) opens with the MT-32 reset and carries every program and controller itself
+    (void)replay_channel_state;
     g_ready.store(true, std::memory_order_release);
-    fprintf(stderr, "V2-SC55: %s booted after %u ms — channel state replayed (%d messages)\n", nsc55_model_name(), SDL_GetTicks() - g_t0, n);
+    fprintf(stderr, "V2-SC55: %s booted after %u ms — the MT-32 world's stream flows (%u bytes queued)\n", nsc55_model_name(), SDL_GetTicks() - g_t0, (g_fifo_wr - g_fifo_rd) & 0xFFFF);
 }
 
 bool v2_sc55_start() {
@@ -123,6 +127,7 @@ bool v2_sc55_start() {
     // 5.0 s, without it at 0 ms). The channel state follows at v2_sc55_service.
     snprintf(g_status, sizeof g_status, "SC-55: %s running", nsc55_model_name());
     g_t0 = SDL_GetTicks();
+    g_fifo_wr = g_fifo_rd = 0; g_fifo_overflow = false;
     g_ready.store(false, std::memory_order_release);
     g_on.store(true, std::memory_order_release);
     fprintf(stderr, "V2-SC55: started (%s)\n", nsc55_model_name());
@@ -138,23 +143,32 @@ void v2_sc55_stop() {
     fprintf(stderr, "V2-SC55: stopped\n");
 }
 
-void v2_sc55_midi(uint16_t status, uint16_t d1, uint16_t d2) {
+// The MT-32 world's bytes (audio thread). Single producer of the module's UART: nothing else posts.
+static void fifo_flush() {
+    while (g_fifo_rd != g_fifo_wr) { nsc55_post(g_fifo[g_fifo_rd]); g_fifo_rd = (g_fifo_rd + 1) & 0xFFFF; }
+}
+void v2_sc55_uart_bytes(const uint8_t* b, size_t n) {
     if (!g_on.load(std::memory_order_acquire)) return;
-    if (!g_ready.load(std::memory_order_acquire)) v2_sc55_service();   // the gate is checked on the event path too: the game thread dispatches the first music from inside its init chain, before any v2_ui_service tick
-    if (!g_ready.load(std::memory_order_acquire)) return;               // booting: tracked only (v2_sc55_observe)
-    const uint8_t fam = (uint8_t)(status & 0xF0);
-    if (trace_on()) {
-        uint64_t n = g_events.fetch_add(1) + 1;
-        if (n <= 48 || (n % 500) == 0) {
-            uint32_t pend = 0; int re = 0; uint64_t so = 0; nsc55_stats(&pend, &re, &so);
-            (void)re;
-            fprintf(stderr, "V2-SC55-TRACE ev#%llu t=%ums %02X %02X %02X uart_pending=%u frames_out=%llu\n",
-                    (unsigned long long)n, SDL_GetTicks() - g_t0, status & 0xFF, d1 & 0x7F, d2 & 0x7F, pend, (unsigned long long)so);
+    if (!g_ready.load(std::memory_order_acquire)) {                    // booting: keep everything in order for the flush
+        for (size_t i = 0; i < n; i++) {
+            const uint32_t nx = (g_fifo_wr + 1) & 0xFFFF;
+            if (nx == g_fifo_rd) { if (!g_fifo_overflow) { g_fifo_overflow = true; fprintf(stderr, "V2-SC55: UART FIFO overflow while booting — bytes lost\n"); } return; }
+            g_fifo[g_fifo_wr] = b[i]; g_fifo_wr = nx;
         }
+        return;
     }
-    nsc55_post((uint8_t)status);
-    nsc55_post((uint8_t)(d1 & 0x7F));
-    if (fam != 0xC0 && fam != 0xD0) nsc55_post((uint8_t)(d2 & 0x7F));
+    if (g_fifo_rd != g_fifo_wr) fifo_flush();                          // the module came up: the backlog first
+    for (size_t i = 0; i < n; i++) nsc55_post(b[i]);
+}
+
+void v2_sc55_midi(uint16_t status, uint16_t d1, uint16_t d2) {
+    // UX stage 11 tail: retired. The SC-55 is no longer a GM reading of the FM driver's channel messages
+    // (the music is written for the MT-32: wrong patch map, drum kits switching) — it is fed the MT-32
+    // world's MPU stream through v2_sc55_uart_bytes. The lane keeps calling in (the observe/dump path).
+    (void)status; (void)d1; (void)d2;
+    if (!g_on.load(std::memory_order_acquire)) return;
+    if (!g_ready.load(std::memory_order_acquire)) v2_sc55_service();   // the gate is checked on the event path too (the first music comes from the init chain before any tick)
+    return;
 }
 
 // audio thread: pull the module's frames at its own rate, linear-resample to `rate`
