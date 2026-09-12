@@ -648,7 +648,9 @@ def decompile_text(cid, text, names):
     flush()
     out, nsw = fold_switches(out)
     stats['switch'] = nsw
-    out.append(f'; stats: {stats["stmt"]} statements, {stats["sugar"]} folded loads, {nsw} switch blocks, {stats["states"]} states ({stats["named"]} named)')
+    out, nsay = fold_say(out)
+    stats['say'] = nsay
+    out.append(f'; stats: {stats["stmt"]} statements, {stats["sugar"]} folded loads, {nsw} switch blocks, {nsay} say lines, {stats["states"]} states ({stats["named"]} named)')
     return '\n'.join(out) + '\n', stats
 
 
@@ -663,6 +665,48 @@ VAL_RX = r'(self\.[A-Za-z_][A-Za-z0-9_?]*(?:#[0-9A-Fa-f]{2})?|partner\.[A-Za-z_]
 LIT_RX = r'(0x[0-9A-Fa-f]+|\d+)'
 SW_RX = re.compile(rf'^    if {VAL_RX} == {LIT_RX} goto ([A-Za-z_][A-Za-z0-9_]*|=[0-9A-Fa-f]{{4}})$')
 SEL_RX = re.compile(rf'^    if {LIT_RX} == {VAL_RX} goto ([A-Za-z_][A-Za-z0-9_]*|=[0-9A-Fa-f]{{4}})$')
+
+
+# say: the speech-bubble idiom — seven statements in a row (no label between):
+#   set_partner P                        acc = P; op 96
+#   [0206], [0208] = delta(partner)      op 16 into the text column/row globals
+#   [0208] -= N   (or += N)              acc = N; op 5D (or 5A) on [0208]
+#   cmdq_push(6, X)                      op 46
+#   text(id=ID, edge=E, x=[0206], y=[0208])   op 41 (id a literal, E a literal or a field)
+#   cmdq_push(4)                         op 43
+#   cmdq_push(2)                         op 42
+# -> say partner=P dy=-N cmd=X id=ID edge=E     (dy=+N for the += form)
+SAY_RX = [
+    re.compile(r'^    set_partner (0x[0-9A-Fa-f]+|\d+)$'),
+    re.compile(r'^    \[0206\], \[0208\] = delta\(partner\)$'),
+    re.compile(r'^    \[0208\] (-=|\+=) (0x[0-9A-Fa-f]+|\d+)$'),
+    re.compile(r'^    cmdq_push\(6, (0x[0-9A-Fa-f]+|\d+)\)$'),
+    re.compile(r'^    text\(id=(0x[0-9A-Fa-f]+|\d+), edge=(0x[0-9A-Fa-f]+|\d+|self\.[A-Za-z_][A-Za-z0-9_?]*(?:#[0-9A-Fa-f]{2})?), x=\[0206\], y=\[0208\]\)$'),
+    re.compile(r'^    cmdq_push\(4\)$'),
+    re.compile(r'^    cmdq_push\(2\)$'),
+]
+SAY_LINE_RX = re.compile(r'^say partner=(0x[0-9A-Fa-f]+|\d+) dy=([-+])(0x[0-9A-Fa-f]+|\d+) cmd=(0x[0-9A-Fa-f]+|\d+) id=(0x[0-9A-Fa-f]+|\d+) edge=(0x[0-9A-Fa-f]+|\d+|self\.[A-Za-z_][A-Za-z0-9_?]*(?:#[0-9A-Fa-f]{2})?)$')
+
+
+def fold_say(lines):
+    out = []; i = 0; n = 0
+    while i < len(lines):
+        if i + 7 <= len(lines):
+            ms = [rx.match(lines[i + k]) for k, rx in enumerate(SAY_RX)]
+            if all(ms):
+                sign = '-' if ms[2].group(1) == '-=' else '+'
+                out.append(f'    say partner={ms[0].group(1)} dy={sign}{ms[2].group(2)} cmd={ms[3].group(1)} id={ms[4].group(1)} edge={ms[4].group(2)}')
+                i += 7; n += 1; continue
+        out.append(lines[i]); i += 1
+    return out, n
+
+
+def expand_say(raw):
+    m = SAY_LINE_RX.match(raw)
+    if not m: return None
+    P, sign, N, X, ID, E = m.groups()
+    return [f'set_partner {P}', '[0206], [0208] = delta(partner)', f'[0208] {"-=" if sign == "-" else "+="} {N}',
+            f'cmdq_push(6, {X})', f'text(id={ID}, edge={E}, x=[0206], y=[0208])', 'cmdq_push(4)', 'cmdq_push(2)']
 
 
 def fold_switches(lines):
@@ -788,6 +832,11 @@ class Lowerer:
                     mb = re.match(r'^(switch|select) (\S+):$', raw)     # `x = y` statements look like aliases)
                     if mb:
                         block = (mb.group(1), mb.group(2)); continue
+                    if raw.startswith('say '):
+                        ex = expand_say(raw)
+                        if ex is None: raise ValueError(f'bad say line {raw!r}')
+                        for s in ex: out.extend(self.statement(s))
+                        continue
                     out.extend(self.statement(raw)); continue
                 if p[0] == 'chunk': out.append(raw)
                 elif p[0] == 'class':

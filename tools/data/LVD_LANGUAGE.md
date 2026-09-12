@@ -107,6 +107,19 @@ opcodes), `select` loads each literal and compares it with the value (the
 literal-loaded opcodes). Both test the same thing; the two keywords keep the
 two opcode sequences apart, so the fold is exact. A case line is `N -> label`.
 
+Speech: the seven-statement bubble idiom folds into one line —
+
+```
+    say partner=4 dy=-0x1C cmd=0x110D id=0x5D edge=2
+```
+
+stands for `set_partner 4` (the viking spoken to: object slot 0/2/4),
+`[0206], [0208] = delta(partner)` (the bubble's column/row from the partner's
+position), `[0208] -= 0x1C` (`dy=+N` for `+=`), `cmdq_push(6, 0x110D)`,
+`text(id=0x5D, edge=2, x=[0206], y=[0208])` (`edge` a literal or `self.f`),
+`cmdq_push(4)`, `cmdq_push(2)` — in that order, with nothing between. Any
+deviation stays written out.
+
 Channel forms (opcodes whose operands are typed channels): `spawn(t=10, x=…,
 y=…, pool=…, fl=…)`, `tile[x,y] = v`, `a, b = delta(nearest_vik)`,
 `a, b = quad(x, y)`, `l = tile_type(x, y)`, `text(id=…, edge=…, x=…, y=…)`,
