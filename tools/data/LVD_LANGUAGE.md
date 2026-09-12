@@ -19,8 +19,10 @@ six scripts and compiles them back: every chunk must be byte-identical.
 ```
 chunk 01C1 size 48972              ; a lower bound: the size follows the content
 alias S_1500 = S_14FF+1            ; two decode frames sharing bytes (rare)
-P_3BF6:                            ; a palette pointer target (op13 d9) — a label
-blob <hex>                         ; on the 48-byte block that follows
+palette P_3BF6:                    ; @3BF6 — a palette block (see Palettes)
+    rgb 0, 0, 0   ; 0
+    rgb 62, 62, 62   ; 1
+    ...
 class baleog record=00 sprite=FFFE flags=01 entry=baleog_anim rest=0300…
 state baleog_anim:                 ; @3850
     goto S_5C87
@@ -63,9 +65,9 @@ blob <hex>                         ; data with no reference from the code (dead)
 ## Statements
 
 Control: `yield` `nop` `return` `exit` `despawn` `goto L` `call L`
-`anim NAME` (or `anim =HHHH` for a raw pointer) `op13 d9 P_xxxx` (palette
-pointer), `quit_to_dos pad a,b`, `hud_to_viewport pad a,b` (the op 13
-sub-commands; the two pad bytes are never read).
+`anim NAME` (or `anim =HHHH` for a raw pointer) `palette NAME` (op 13 d9: the
+dialogue palette of the finale), `quit_to_dos pad a,b`, `hud_to_viewport pad a,b`
+(the other op 13 sub-commands; the two pad bytes are never read).
 
 Branches: `if <cond> goto L` and `if <cond> call L` (the call families push the
 return address). `search_*(f=N) goto L` are the object searches. The condition
@@ -217,6 +219,15 @@ of the stream (tools/data/anim_static.py) — so a list is copied as it is and
 a new one gets one value per sub-sprite the class has (one per matching
 sub-sprite under a `mask`). `goto`, `call` and `return` inside a stream are
 the anim VM's, not the object code's: the line is under an `anim` header.
+
+## Palettes
+
+`palette NAME:` heads a palette block — the 48 bytes an op 13 d9 statement
+(`palette NAME`) copies into the dialogue rows of the DAC (v2_vm_op_13):
+sixteen `rgb r, g, b` lines, 6-bit VGA values (0..63), the colour index in
+the comment. The name is the machine `P_xxxx` unless the author names it
+(`palette gold_text:`). A block of another length is written the same way,
+three bytes per line, a remainder as `blob`.
 
 ## Operand tokens
 

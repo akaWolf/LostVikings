@@ -613,7 +613,7 @@ def emit_free(cid):
 def compile_free(text, line_map=None):
     """Two-pass sequential assembler for emit_free output.
     line_map (optional list) receives (source_line_no, addr) pairs for
-    every code line — the lvsc `locate` helper."""
+    every code line and every blob — the lvsc `locate` helper."""
     # pass 1: layout — walk lines in order, assign addresses
     lines = []
     for lineno, line in enumerate(text.splitlines(), 1):
@@ -649,7 +649,7 @@ def compile_free(text, line_map=None):
             else:                                             # flowing: takes its place in file order
                 addr = None
                 b = bytes.fromhex(p[1]) if len(p) > 1 else b''
-            parsed.append(('blob', (addr, b), len(b)))
+            parsed.append(('blob', (lineno, addr, b), len(b)))
         elif p[0] in ('o', 'a'):
             parsed.append((p[0], (lineno, p[1:]), 0))
         else:
@@ -681,12 +681,14 @@ def compile_free(text, line_map=None):
             pend_labels.append(data)
             continue
         if kind == 'blob':
-            addr, b = data
+            lineno_b, addr, b = data
             if addr is None:
                 addr = cursor
             for L in pend_labels:                 # a label in front of a blob names its first byte (P_xxxx:)
                 labels[L] = addr
             pend_labels = []
+            if line_map is not None:              # blobs are located too (lvsc locate, the annotator's addresses, the .lvd palette headers)
+                line_map.append((lineno_b, addr))
             cursor = max(cursor, addr + len(b))
             enc_items.append(('bytes', addr, b))
             continue

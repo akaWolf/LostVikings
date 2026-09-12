@@ -32,6 +32,7 @@ Usage (repo root):
   lvsd.py lower in.lvd [out.lvsf]      .lvd -> .lvsf text only
   lvsd.py check [CID ...]              decompile+compile == reference bytes
   lvsd.py seed                         write the initial names dictionary
+  lvsd.py ref [out.md]                 write the statement reference (LVD_REFERENCE.md)
 """
 import sys, os, re, json, struct, importlib.util, collections
 
@@ -176,6 +177,11 @@ class Names:
         n = self.d['anims'].get(f'{cid:X}:{lbl[2:]}')
         if n: return n
         return self.auto_anim_names(cid).get(int(lbl[2:], 16), lbl)
+
+    def pal(self, lbl):
+        """P_xxxx stays P_xxxx (no owner to name it after); a label the author
+        named (P_gold from `palette gold:`) shows as `gold`."""
+        return lbl if re.fullmatch(r'P_[0-9A-Fa-f]{4}', lbl) else (lbl[2:] if lbl.startswith('P_') else lbl)
 
     _aauto = {}
     def auto_anim_names(self, cid):
@@ -733,7 +739,7 @@ def decompile_text(cid, text, names):
     for ln in range(len(lines), 0, -1):
         if ln in addr_after: nxt = addr_after[ln]
         addr_after[ln] = nxt
-    stats = {'stmt': 0, 'sugar': 0, 'states': 0, 'named': 0, 'anim': 0, 'anims': 0, 'anamed': 0}
+    stats = {'stmt': 0, 'sugar': 0, 'states': 0, 'named': 0, 'anim': 0, 'anims': 0, 'anamed': 0, 'pal': 0}
     def tgt_name(tok):
         if tok.startswith('='): return tok
         return names.state(cid, tok)
@@ -771,6 +777,9 @@ def decompile_text(cid, text, names):
                 nm = names.anim(cid, lbl); stats['anims'] += 1; stats['anamed'] += (nm != lbl)
                 a = addr_after.get(lineno)
                 out.append(f'anim {nm}:' + (f'   ; @{a:04X}' if a is not None else '')); dmode = 'anim'
+            elif lbl.startswith('P_'):
+                a = addr_after.get(lineno)
+                out.append(f'palette {names.pal(lbl)}:' + (f'   ; @{a:04X}' if a is not None else '')); dmode = 'pal'; stats['pal'] += 1
             else:
                 out.append(raw); dmode = None
             continue
@@ -783,6 +792,12 @@ def decompile_text(cid, text, names):
             flush()
             if dmode != 'anim': raise ValueError(f'{cid:X}.lvsf:{lineno}: anim code under a code label ({raw!r})')
             out.append('    ' + anim_render(int(p[1], 16), p[2:], anim_name)); stats['anim'] += 1; continue
+        if p[0] == 'blob' and dmode == 'pal':                 # the palette block behind a P_ label: 16 colours of 3 DAC bytes
+            flush(); b = bytes.fromhex(p[1]) if len(p) > 1 else b''
+            for k in range(len(b) // 3):
+                out.append(f'    rgb {b[3*k]}, {b[3*k+1]}, {b[3*k+2]}   ; {k % 16}')
+            if len(b) % 3: out.append('blob ' + b[len(b) - len(b) % 3:].hex())
+            dmode = None; continue
         if p[0] == 'blob' or (len(p) == 3 and p[1] == '='):
             flush(); out.append(raw)
             if p[0] == 'blob': dmode = None
@@ -804,7 +819,7 @@ def decompile_text(cid, text, names):
             flush(); out.append(f'    anim {anim_name(sym[0])}'); continue
         if op == 0x13:
             flush()
-            if sym and sym[0] == 'd9': out.append(f'    op13 d9 {sym[1]}')
+            if sym and sym[0] == 'd9': out.append(f'    palette {names.pal(sym[1])}')
             elif len(body) == 3 and body[0] in OP13: out.append(f'    {OP13[body[0]]} pad {imm(body[1])},{imm(body[2])}')
             else: out.append(f'    op13 {body.hex()}')
             continue
@@ -833,7 +848,7 @@ def decompile_text(cid, text, names):
     stats['say'] = nsay
     out, nfn, ncall = fold_funcs(out)
     stats['func'] = nfn; stats['callargs'] = ncall
-    out.append(f'; stats: {stats["stmt"]} statements, {stats["sugar"]} folded loads, {nsw} switch blocks, {nsay} say lines, {nfn} funcs, {ncall} calls with args, {stats["states"]} states ({stats["named"]} named), {stats["anim"]} anim statements, {stats["anims"]} anim labels ({stats["anamed"]} named)')
+    out.append(f'; stats: {stats["stmt"]} statements, {stats["sugar"]} folded loads, {nsw} switch blocks, {nsay} say lines, {nfn} funcs, {ncall} calls with args, {stats["states"]} states ({stats["named"]} named), {stats["anim"]} anim statements, {stats["anims"]} anim labels ({stats["anamed"]} named), {stats["pal"]} palettes')
     return '\n'.join(out) + '\n', stats
 
 
@@ -889,7 +904,7 @@ class Cfg:
         for i, l in enumerate(lines):
             code = l.split(';', 1)[0].rstrip()
             if not code.strip(): continue
-            if re.match(r'^anim \S+:$', code) or re.match(r'^A_[0-9A-Fa-f]{4}:$', code):    # an anim label: its indented lines are anim statements
+            if re.match(r'^(anim|palette) \S+:$', code) or re.match(r'^[AP]_[0-9A-Fa-f]{4}:$', code):    # an anim / palette label: its indented lines are not code
                 in_anim = True; cur = None; continue
             if code.startswith(('    ', '\t')) and in_anim: continue
             if not code.startswith(' '): in_anim = False
@@ -1085,6 +1100,12 @@ class Lowerer:
         if tok.startswith(('S_', 'A_', 'P_')): return tok
         return 'S_' + tok
 
+    def plabel(self, tok):
+        """palette name -> compile_free label token (the P_ namespace)."""
+        if tok.startswith('='): return tok
+        if tok.startswith(('P_', 'A_', 'S_')): return tok
+        return 'P_' + tok
+
     def alabel(self, tok):
         """anim name -> compile_free label token (the anim namespace)."""
         if tok.startswith('='): return tok
@@ -1114,6 +1135,7 @@ class Lowerer:
         if w[0] in ('goto', 'call') and len(w) == 2:
             return [f'o {0x03 if w[0] == "goto" else 0x05:02X} {self.label(w[1])}']
         if w[0] == 'anim' and len(w) == 2: return [f'o 19 {self.alabel(w[1])}']
+        if w[0] == 'palette' and len(w) == 2: return ['o 13 d9 ' + self.plabel(w[1])]
         m13 = OP13_RX.match(s)
         if m13:
             sub = next(k for k, v in OP13.items() if v == m13.group(1))
@@ -1194,7 +1216,10 @@ class Lowerer:
         self.check_funcs(text)
         out = []
         block = None            # ('switch'|'select', value) while inside a case block
-        mode = None             # 'code' under a state/func/inner label, 'anim' under an anim label
+        mode = None             # 'code' under a state/func/inner label, 'anim' under an anim label, 'pal' under a palette label
+        pal = []                # the rgb bytes of the palette block being read
+        def flush_pal():
+            if pal: out.append('blob ' + bytes(pal).hex()); pal.clear()
         for lineno, line in enumerate(text.splitlines(), 1):
             code = line.partition(';')[0].rstrip()
             raw = code.strip()
@@ -1213,6 +1238,11 @@ class Lowerer:
                     out.append(self.label(mi.group(1)) + ':'); mode = 'code'; continue
                 if (code.startswith('    ') or code.startswith('\t')) and mode == 'anim':   # an anim statement
                     out.append(anim_parse(raw, self.alabel)); continue
+                if (code.startswith('    ') or code.startswith('\t')) and mode == 'pal':    # a palette colour
+                    mp = re.match(r'^rgb (\d+), (\d+), (\d+)$', raw)
+                    if not mp: raise ValueError(f'expected `rgb r, g, b` under a palette label: {raw!r}')
+                    pal.extend(_ab(int(x)) for x in mp.groups()); continue
+                flush_pal()
                 if (code.startswith('    ') or code.startswith('\t')) and mode is None:
                     raise ValueError(f'statement outside a state/func/anim: {raw!r}')
                 if code.startswith('    ') or code.startswith('\t'):   # indented = a statement (checked first:
@@ -1248,8 +1278,10 @@ class Lowerer:
                     out.append(self.label(p[1][:-1]) + ':'); mode = 'code'
                 elif p[0] == 'anim' and len(p) == 2 and raw.endswith(':'):
                     out.append(self.alabel(p[1][:-1]) + ':'); mode = 'anim'
+                elif p[0] == 'palette' and len(p) == 2 and raw.endswith(':'):
+                    out.append(self.plabel(p[1][:-1]) + ':'); mode = 'pal'
                 elif raw.endswith(':') and len(p) == 1:
-                    out.append(raw); mode = 'anim' if raw.startswith('A_') else ('code' if raw.startswith('S_') else None)
+                    out.append(raw); mode = 'anim' if raw.startswith('A_') else ('code' if raw.startswith('S_') else ('pal' if raw.startswith('P_') else None))
                 elif p[0] == 'alias' and len(p) == 4 and p[2] == '=':
                     base, off = p[3].split('+')
                     out.append(f'{self.label(p[1])} = {self.label(base)}+{off}')
@@ -1261,6 +1293,7 @@ class Lowerer:
                     raise ValueError(f'unexpected line {raw!r}')
             except Exception as e:
                 raise ValueError(f'line {lineno}: {e}') from e
+        flush_pal()
         return '\n'.join(out) + '\n'
 
 
@@ -1304,7 +1337,100 @@ def check(cids):
         print(f'{cid:X}: {stats["stmt"]} statements, {stats["sugar"]} folded, {stats["states"]} states — '
               f'{"IDENTICAL" if same else f"DIFF at 0x{diff:04X} (len {len(img)} vs {len(ref)})"}')
         ok &= same
+    if os.path.exists(REF_PATH):
+        fresh = open(REF_PATH, encoding='utf-8').read() == reference_md()
+        print('LVD_REFERENCE.md ' + ('up to date' if fresh else 'STALE — run lvsd.py ref')); ok &= fresh
     return ok
+
+
+CHANNEL_FORMS = [    # (op, form, meaning) — the channel ops (typed operands; Channels.render); meanings from the v2_vm_op_XX headers
+    (0x14, 'spawn(t=TT, x=V, y=V, pool=V, fl=V)', 'create an object of class TT at x,y (sub_14f59 -> sub_13809)'),
+    (0x15, 'a, b = delta(active_vik)', 'a,b = the position relative to the active viking (sub_150fc)'),
+    (0x16, 'a, b = delta(partner)', 'a,b = the position delta to the partner, x then y (sub_15106)'),
+    (0x34, 'a, b = delta(nearest_vik)', 'the nearest of the three vikings by Manhattan distance, then as 0x16 (sub_150b5)'),
+    (0x26, 'a, b = quad(x, y)', 'a,b = x >> 4, y >> 4: the tile column/row of world x,y (sub_14edd)'),
+    (0x28, 'a, b = cell8(x, y)', 'a,b = (x & ~15) | 8, (y & ~15) | 8: the centre of the 16-px tile (sub_14f27)'),
+    (0x27, 'l = tile_type(x, y)', 'l = the collision type of the tile at x,y (sub_141a7)'),
+    (0x29, 'tile[x,y] = v', 'write the map cell and mark it dirty (sub_141e0 + sub_13fc2)'),
+    (0x2A, 'tile[x,y] = hi10 | v', 'keep the upper 6 bits of the cell, replace the lower 10 (the tile index); dirty'),
+    (0x2B, 'tile[x,y] = lo | swap(v)', 'keep the lower 10 bits, replace the upper 6 flags with v byte-swapped (<< 2 & 0xFC00); no dirty mark'),
+    (0x41, 'text(id=V, edge=V, x=V, y=V)', 'show text id in a box at x,y (sub_1242e)'),
+    (0x44, 'text_menu(id=V, edge=V, x=V, y=V)', 'the menu variant of 0x41'),
+    (0x45, 'cmdq_push(0xA, id=V, x=V, y=V)', 'text display variant: command-buffer entry type 0xA (sub_12634)'),
+    (0x48, 'vel_to(x=V, y=V)', 'x/y velocity = the delta to x,y; the anim-table word = 0x100 (sub_14fec)'),
+    (0x49, 'if probe_at(TT, x=V, y=V) goto L', 'search for an object at x,y with filter TT (sub_1589b), branch on the result'),
+    (0x4A, 'if probe_at2(TT, x=V, y=V) goto L', 'the same through the second dispatch slot (sub_14fc8)'),
+    (0x50, 'cmdq_push(8, x=V, y=V, p=V)', 'text position: command-buffer entry type 8 (sub_126a9)'),
+    (0xD4, 'aim(x=V, y=V, thr=N)', 'x/y velocity = the direction to x,y, threshold N (sub_1531c)'),
+]
+ANIM_DESC = {
+    0x00: 'advance every (masked: matching) sub-sprite by N frames (data offset += N*72)',
+    0x01: 'sub-sprite frame(s): data offset = base + N*72, one N per sub-sprite (masked: per matching one)',
+    0x02: 'play sequence N; V is the console\'s volume byte (the PC reads N only)',
+    0x03: 'jump', 0x04: 'one dead byte', 0x05: 'run another stream; its `return` comes back here',
+    0x06: 'back to the continuation of the last `call`',
+    0x07: 'masked: sub-sprite x += N; unmasked: the object\'s x velocity += N pixels',
+    0x08: 'sub-sprite x = object x + N, one per sub-sprite (signed)',
+    0x09: 'masked: sub-sprite y += N; unmasked: the object\'s y velocity += N pixels',
+    0x0A: 'sub-sprite y = object y + N, one per sub-sprite (signed)',
+    0x0B: 'INT 3 (nothing)', 0x0C: 'colour bank bits of the sprite flags: (N << 3) & 0x70, one N per sub-sprite (masked: gated)',
+    0x0D: 'sub-sprite class mask for the rest of this frame (0 = all)',
+    0x0E: 'end of frame; the next tick continues here', 0x0F: 'end of frame for N ticks',
+    0x10: 'XOR 0x200 (x flip) on the sub-sprite flags', 0x11: 'XOR 0x400 (y flip)', 0x12: 'XOR 0x600 (both)',
+    0x13: 'set the sub-sprite classes, one per sub-sprite (masked: per matching one)',
+    0x14: 'decompress image N of the bank into the sub-sprite buffer (skipped when N is current)',
+    0x15: 'sprite type (renderer bits) and strip count from the type table',
+    0x16: 'one dead byte (command 16, the same as 04)', 0x17: 'sprite bank = chunk id N',
+    0x18: 'OR 0x4000 on the sub-sprite flags: not drawn (every draw pass skips flags & 0x6000)',
+    0x19: 'AND 0x9FFF: drawn again', 0x1A: 'the anim ends (anim pc = FFFF)',
+}
+KIND_DOC = {'w': 'N (16-bit literal)', 'ws': 'N (signed 16-bit literal)', 'b': 'N (byte)', 'r': 'N (raw byte)',
+            'v': 'N (signed byte)', 'f': 'self.field (OBJ_* name, `#idx` when ambiguous)', 'p': 'partner.field',
+            'g': '[global] (layout name or 4-hex address)', 'm': '0xMASK (`#idx` when ambiguous)'}
+
+
+def reference_md():
+    """The statement reference, generated from the tables (LVD_REFERENCE.md)."""
+    L = ['# .lvd statement reference', '',
+         'Generated by `python3 tools/data/lvsd.py ref` from the tables in lvsd.py — do not edit; the language',
+         'itself is described in LVD_LANGUAGE.md. Every statement lowers to exactly one opcode with the',
+         'operand bytes shown; the opcode semantics are the engine\'s (src/sdl/v2_vm.cpp).', '',
+         '## Object code', '', '### Control', '',
+         '| op | statement | notes |', '|---|---|---|']
+    for op, kw in sorted(CONTROL.items()): L.append(f'| {op:02X} | `{kw}` | |')
+    L += ['| 03 | `goto L` | L a state name (or `=HHHH`) |', '| 05 | `call L` | the return address goes to OBJ_ALT_PC (one per object) |',
+          '| 19 | `anim L` | start anim stream L |', '| 13 d9 | `palette L` | copy the 48-byte palette block L into the dialogue DAC rows |']
+    for sub, kw in sorted(OP13.items()): L.append(f'| 13 {sub:02X} | `{kw} pad a,b` | the two bytes behind the sub-command are never read |')
+    L += ['', '### Fixed-operand statements', '',
+          'Operand kinds: ' + '; '.join(f'`{k}` = {v}' for k, v in KIND_DOC.items()) + '.',
+          'A branch statement (`if …`, `search_*`) ends in `goto L`; a call-branch in `call L`. `acc` is the accumulator.', '',
+          '| op | statement | operand bytes | kind |', '|---|---|---|---|']
+    for op in sorted(OPS):
+        ent = OPS[op]; slots, tpl = ent[0], ent[1]; fl = ent[2] if len(ent) > 2 else ''
+        kinds = slot_kinds(slots)
+        tail = ' goto L' if 'T' in fl else (' call L' if 'C' in fl else '')
+        L.append(f'| {op:02X} | `{tpl}{tail}` | {" ".join(kinds) or "—"} | {"branch" if "T" in fl else ("call-branch" if "C" in fl else "")} |')
+    L += ['', '### Channel statements', '', 'V = a channel value: literal, `self.f`, `[g]`, `partner.f`, `random()`, `ch5`, `ub6(XX)`, `ub7(XXXX)`;',
+          'a, b, l = channel targets: `self.f`, `[g]`, `partner.f`, `drop`.', '', '| op | statement | meaning |', '|---|---|---|']
+    for op, form, mean in sorted(CHANNEL_FORMS): L.append(f'| {op:02X} | `{form}` | {mean} |')
+    L += ['', '### Folded forms', '',
+          '* `self.f = X`, `[g] += X`, `if X == Y goto L` … — `acc = X` folded into the next statement (LVD_LANGUAGE.md, Statements).',
+          '* `switch X:` / `select X:` with `N -> L` cases — runs of field-loaded / literal-loaded compare-and-branch statements.',
+          '* `say partner=P dy=±N cmd=X id=ID edge=E` — the seven-statement speech-bubble idiom.',
+          '* `func NAME:` with inner labels `  NAME:`; `call F(self.f = N, [g] = N, acc = X)` — Functions.', '',
+          '## Anim code', '', 'Under an `anim NAME:` header. Lists carry one value per sub-sprite (masked: per matching one).', '',
+          '| cmd | statement | operands | meaning |', '|---|---|---|---|']
+    forms = {'': '', 'b': ' N', 'sb': ' ±N', 'b*': ' N, N, …', 'sw*': ' ±N, ±N, …', 'w': ' 0xNNNN', 'L': ' L', 'sfx': ' N vol V', 'b16': ' N #16'}
+    opd = {'': '—', 'b': '1 byte', 'sb': '1 signed byte', 'b*': 'a byte per sub-sprite', 'sw*': 'a signed word per sub-sprite', 'w': 'word',
+           'L': 'label (word)', 'sfx': '2 bytes', 'b16': '1 byte'}
+    for cmd in sorted(ANIM):
+        kw, kd = ANIM[cmd]
+        L.append(f'| {cmd:02X} | `{kw}{forms[kd]}` | {opd[kd]} | {ANIM_DESC[cmd]} |')
+    L += ['', '## Palettes', '', 'Under a `palette NAME:` header: `rgb r, g, b` per colour (6-bit DAC values), the block an op 13 d9 statement copies.', '']
+    return '\n'.join(L)
+
+
+REF_PATH = os.path.join(HERE, 'LVD_REFERENCE.md')
 
 
 def seed_names():
@@ -1343,6 +1469,9 @@ def main():
     if not a: print(__doc__); return 1
     cmd = a[0]
     if cmd == 'seed': seed_names(); return 0
+    if cmd == 'ref':
+        out = a[1] if len(a) > 1 else REF_PATH
+        open(out, 'w', encoding='utf-8').write(reference_md()); print('wrote', out); return 0
     if cmd == 'check':
         cids = [int(x, 16) for x in a[1:]] or list(range(0x1C1, 0x1C7))
         return 0 if check(cids) else 1
