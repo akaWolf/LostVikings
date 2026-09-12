@@ -11,6 +11,7 @@
 //   --max-frames=<N>        Exit cleanly after N idle frames past replay exhaustion
 //   --seed=<N>              PRNG seed (default 0)
 
+#include "../v2_midi.h"   // UX stage 11: V2_MIDI_DUMP is written before the _exit paths
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
@@ -118,6 +119,7 @@ int headless_check_exit(void) {
         v2_fntest_report();   // fn-test infra is not part of the V2_ONLY build
 #endif
         v2_net_shutdown();    // UX stage 8 step 3: the peers see the close, the summary line lands (no-op without a game)
+        v2_midi_shutdown();   // UX stage 11: V2_MIDI_DUMP
         fflush(stdout); fflush(stderr);
         // COV_SEG000 builds: flush gcov counters before the atexit-skipping
         // _exit — replays feed the merged coverage profile (#47 step 1).

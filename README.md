@@ -355,3 +355,13 @@ asset file is also Blizzard's property and is not redistributed.
 
 The `src/adlmidi/` submodule keeps its upstream license
 (see [libADLMIDI](https://github.com/Wohlstand/libADLMIDI)).
+
+`src/sdl/third_party/snes_spc/` (the SNES sound option) is LGPL-2.1+,
+`src/sdl/third_party/nuked_sc55/` (the SC-55 sound option, from
+[Nuked-SC55](https://github.com/nukeykt/Nuked-SC55)) is GPL-2.0-or-later:
+a binary built from this tree is distributed under the GPL. The SC-55
+option also needs the module's ROM images, which are Roland's and are not
+included — put your own set in `roms/sc55/` (Nuked-SC55's file names:
+`rom1.bin rom2.bin waverom1.bin waverom2.bin rom_sm.bin` for the SC-55mk2)
+or point `sc55_roms=<dir>` in `v2_options.cfg` at it; without them the
+`SOUND` option falls back to the original OPL3 render.

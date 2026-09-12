@@ -40,6 +40,7 @@
 // Activation: V2_NATIVE_AIL=1 in the environment (checked by v2_ail_native_on
 // on the glue side; this file's entry points are inert until ticked/written).
 
+#include "v2_midi.h"   // UX stage 11: V2_MIDI_DUMP is written before the _exit paths
 #include <SDL.h>
 #include <atomic>
 #include <cstdint>
@@ -248,6 +249,7 @@ extern "C" uint8_t v2_nopl_sink_in(uint16_t port) {
 }
 
 extern "C" double   v2_nopl_get_tick_hz(void) { return g_tick_hz; }
+extern "C" uint64_t v2_nopl_ticks_done(void)  { return g_ticks_done; }   // the MIDI lane's clock (v2_midi.cpp)
 extern "C" uint32_t v2_nopl_get_rate(void)    { return g_rate; }
 
 extern "C" uint8_t v2_nopl_sbpro_in(uint16_t port) {
@@ -334,6 +336,7 @@ extern "C" void v2_nopl_pump(void) {
                     "thread (frame %d), exiting cleanly\n", v2_dbg_pre_vm_iter);
             extern void headless_golden_dump(void);
             headless_golden_dump();
+            v2_midi_shutdown();   // UX stage 11: V2_MIDI_DUMP (_exit skips atexit)
             fflush(stdout); fflush(stderr);
             _exit(0);
         }

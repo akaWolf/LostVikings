@@ -631,6 +631,7 @@ int init(struct _STATE* _state, struct _STATE* _render_state)
 // need_quit check. SDL render thread sets need_quit on SDL_QUIT but game
 // thread ignores it, so process never exits on Ctrl-C. Force exit.
 extern "C" int v2_fntest_selftest_env(void);  // v2_fn_test.cpp (FNSELFTEST env)
+extern "C" void v2_midi_shutdown(void);       // v2_midi.cpp: UX stage 11, V2_MIDI_DUMP is written before the _exit below
 
 static void asm_sigint_handler(int sig) {
     fprintf(stderr, "\nSignal %d received — exiting\n", sig);
@@ -641,6 +642,7 @@ static void asm_sigint_handler(int sig) {
     v2_audit_dump_final();
     v2_dump_opcode_coverage();
     v2_dump_psnap_summary();
+    v2_midi_shutdown();
     _exit(128 + sig);
 }
 

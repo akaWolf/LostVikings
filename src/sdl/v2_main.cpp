@@ -5,6 +5,7 @@
 // bootstrap; the default-mode entry (asm.cpp) never includes SDL.h before
 // main so it dodges this — V2_ONLY must opt out explicitly.
 #define SDL_MAIN_HANDLED
+#include "v2_midi.h"   // UX stage 11: V2_MIDI_DUMP is written before the _exit paths
 #include <SDL2/SDL.h>
 #include "v2_timing.h"
 #include <cstdio>
@@ -320,6 +321,7 @@ int main(int argc, char* argv[]) {
     printf("V2_ONLY: quitting\n");
     v2_game_thread_stop();
     v2_net_shutdown();          // UX stage 8 step 3: tell the peers, close the sockets
+    v2_midi_shutdown();   // UX stage 11: V2_MIDI_DUMP
     // Golden end-state channel at the max-frames/window-close exit — same
     // idempotent dump the quit sites call (V2_GOLDEN_DUMP / V2_SAVE_STATE).
     headless_golden_dump();

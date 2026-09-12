@@ -14,6 +14,7 @@
 // Self-test: V2_AILNAT_SELFTEST=1 (after the AIL boot) runs randomized
 // unit sweeps of each ported function against the interpreter on an
 // identical data image; any mismatch is fatal-loud.
+#include "v2_midi.h"        // UX stage 11: the MIDI lane (tap at midi_2629)
 #include <cstdio>
 #include <cstdint>
 #include <cstdlib>
@@ -1306,7 +1307,12 @@ static void nat_mark_channel_272D(uint16_t ch, uint8_t bits) {
 // ---------------------------------------------------------------------------
 // 2629: MIDI event dispatcher (status, data1, data2).
 // ---------------------------------------------------------------------------
+// UX stage 11 (the SC-55 option, v2_midi.h): every dispatched channel message
+// is mirrored to the MIDI lane before the OPL driver takes it — the lane is
+// presentation only (no DS, no driver state), off unless the option or the
+// V2_MIDI_DUMP check asks for it.
 extern "C" void v2_ailnat_midi_2629(uint16_t status, uint16_t d1, uint16_t d2) {
+    v2_midi_event(status, d1, d2);
     uint16_t si = (uint16_t)(d1 & 0xFF);          // 262F
     uint16_t di = (uint16_t)(status & 0xF);       // channel
     uint16_t ax = (uint16_t)(status & 0xF0);      // family

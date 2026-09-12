@@ -1,3 +1,4 @@
+#include "v2_midi.h"   // UX stage 11: V2_MIDI_DUMP is written before the _exit paths
 #include <SDL2/SDL.h>
 #include "v2_timing.h"
 extern "C" void sdl_int9_note_keydown(int sdl_scancode);  // render.cpp (#62)
@@ -347,6 +348,7 @@ void render_thread_proc_v2(void* _state)
               need_quit = true;
               v2_net_shutdown();          // UX stage 8 step 3: tell the peers before the hard exit
               fflush(stdout);
+              v2_midi_shutdown();   // UX stage 11: V2_MIDI_DUMP (_exit skips atexit)
               _exit(0);
               break;
           case SDL_KEYDOWN:

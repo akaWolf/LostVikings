@@ -32,6 +32,7 @@ static SDL_AudioFormat myFormat;
 static uint8_t myBuffer[16384];   // device mix buffer (cherry-pick 3f2114a size)
 
 #include "v2_snes_sound.h"
+#include "v2_sc55.h"       // UX stage 11: the SC-55 option
 static uint32_t g_snes_mix_rate = 0;   // UX stage 10: the device rate for the SNES resampler
 void my_audio_callback(void* argument, Uint8* stream, int len)
 {
@@ -81,6 +82,8 @@ void my_audio_callback(void* argument, Uint8* stream, int len)
         // UX stage 10: with the SNES sound option on, the console's mix
         // replaces the OPL render (the AIL machine keeps running unheard)
         v2_snes_sound_mix((int16_t*)myBuffer, (uint32_t)(len / (2 * sizeof(int16_t))), g_snes_mix_rate);
+        // UX stage 11: the SC-55 option — the module's output replaces the OPL render
+        v2_sc55_mix((int16_t*)myBuffer, (uint32_t)(len / (2 * sizeof(int16_t))), MYFREQ);
     }
 
     // Diagnostic tap: V2_AUDIO_DUMP=<path> writes the exact device-bound mix

@@ -14,7 +14,7 @@
 #pragma once
 #include <cstdint>
 
-bool v2_snes_sound_enabled();                        // the F1 option (v2_options.snes_sound)
+bool v2_snes_sound_enabled();                        // the F1 option (v2_options.sound_mode == 1)
 void v2_snes_sound_start();                          // game thread: load the assets, start the thread (idempotent)
 void v2_snes_sound_shutdown();
 

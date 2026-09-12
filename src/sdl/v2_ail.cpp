@@ -36,6 +36,7 @@
 // symmetric design (a second interpreter instance fed from real memory) is a
 // later #61 stage.
 
+#include "v2_midi.h"        // UX stage 11: the MIDI lane on the audible instance
 #include <atomic>
 #include <chrono>
 #include <cstdint>
@@ -63,6 +64,8 @@ extern "C" void     v2_ail_sinki_map(uint16_t, uint8_t*, uint32_t);
 extern "C" void     v2_ail_sinki_map_front(uint16_t, uint8_t*, uint32_t);
 extern "C" void     v2_ail_sinki_set_io(void (*)(uint16_t, uint8_t), uint8_t (*)(uint16_t));
 extern "C" void     v2_ail_sinki_set_callback(uint16_t (*)());
+extern "C" void     v2_ail_sinki_set_midi_tap(void (*)(uint16_t, uint16_t, uint16_t));   // UX stage 11
+extern "C" void     v2_ail_interp_set_midi_tap(void (*)(uint16_t, uint16_t, uint16_t));
 extern "C" uint16_t v2_ail_sinki_call(uint16_t, const uint16_t*, int);
 extern "C" uint16_t v2_ail_sinki_fn_lookup(uint16_t);
 extern "C" void     v2_ail_sink_publish(uint8_t*, uint16_t, uint16_t, uint16_t);
@@ -389,6 +392,12 @@ extern "C" int v2_ail_boot(uint8_t* s, uint8_t* snd, uint32_t snd_size,
     v2_ail_interp_set_io(silent_out, silent_in);
 #endif
     v2_ail_interp_set_callback(v2_ail_pit_callback);
+#ifdef V2_ONLY
+    // UX stage 11: the interpreted fallback (V2_AIL_NATIVE=0) is the audible
+    // driver of this build — the MIDI lane observes its 2629 (the native
+    // engine's own 2629 carries the tap otherwise; never both).
+    if (!v2_ailnat_mode()) v2_ail_interp_set_midi_tap(v2_midi_event);
+#endif
     v2_ail_interp_map_segment(snd_base, snd, snd_size);       // whole sound arena
     v2_ail_interp_map_segment(ds_val, s, 0x10000);            // the game DS (state blocks!)
     v2_ail_interp_map_segment(CACHE_PARA, g_cache, sizeof(g_cache));
@@ -782,6 +791,7 @@ static uint8_t  g_sink_cache[sizeof(g_cache)];
 static uint16_t g_sink_fn9a_off = 0;     // resolved after build for the cache hook
 static uint64_t g_sink_ticks = 0;
 static uint64_t g_sink_tick_base = 0;    // sample position of the sink build
+extern "C" uint64_t v2_ail_sink_ticks(void) { return g_sink_ticks; }   // UX stage 11: the MIDI lane's clock in the verify build (audio thread, like the tap)
 
 static void v2_ail_sink_build(uint64_t pos) {
     uint8_t* base = g_sink_base.load(std::memory_order_acquire);
@@ -794,6 +804,10 @@ static void v2_ail_sink_build(uint64_t pos) {
     v2_ail_sinki_load(blob, 0x10000, bank, 0x10000);
     v2_ail_sinki_set_io(v2_nopl_sink_out, v2_nopl_sink_in);
     v2_ail_sinki_set_callback(v2_ail_pit_callback);
+    // UX stage 11: the sink is what the user hears in this build — the MIDI
+    // lane (SC-55 option / V2_MIDI_DUMP) observes its dispatcher, on this thread
+    v2_ail_sinki_set_midi_tap(v2_midi_event);
+    v2_midi_set_clock(v2_ail_sink_ticks);
     v2_ail_sinki_map(0, base, 0xA0000);                     // flat arena (reads)
     memcpy(g_sink_ds, base + ((uint32_t)ds_val << 4), 0x10000);
     v2_ail_sinki_map_front(ds_val, g_sink_ds, 0x10000);     // private XMID state

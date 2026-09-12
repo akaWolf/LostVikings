@@ -555,7 +555,7 @@ static void thread_main() {
 }
 
 // ---------------------------------------------------------------- API --
-bool v2_snes_sound_enabled() { return v2_options.snes_sound.load(); }
+bool v2_snes_sound_enabled() { return v2_options.sound_mode.load() == 1; }
 
 // PC effect number -> the console's sequence id (0 = the PC sound has no console twin).
 // The scripts are the same programs on both machines but op 2 / anim command 2 carry

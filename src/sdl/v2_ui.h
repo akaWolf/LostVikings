@@ -19,12 +19,13 @@ struct V2Options {
     std::atomic<bool> integer_scale{false};  // whole multiples of the 320x240 (or 320xH) canvas only
     std::atomic<int>  border{0};             // 0 BLACK, 1 GLOW (the frame blurred and dimmed behind the picture)
     std::atomic<int>  wide{0};               // UX9 step 4: 0 OFF (the 320-px raster), 1 16:10, 2 16:9 — the view width of the next level (v2_wide_view_width)
-    std::atomic<bool> snes_sound{false};     // UX10: the SNES DE music/effects (SPC700 emulation), takes effect at the next level load
+    std::atomic<int>  sound_mode{0};         // 0 PC (OPL3, the original), 1 SNES (UX10: the SNES DE music/effects, next level), 2 SC55 (UX11: Nuked-SC55 on the driver's MIDI events)
 };
 extern V2Options v2_options;
 void v2_options_ensure_loaded();        // cwd/v2_options.cfg, once
 void v2_options_save();
 extern char v2_options_lang_code[8];   // the cfg's language code until the banks are scanned
+extern char v2_options_sc55_roms[256]; // the cfg's sc55_roms=<dir> (empty = roms/sc55)
 int v2_locale_count();                 // v2_vm.cpp: 1 + the banks found
 const char* v2_locale_code_at(int i);
 

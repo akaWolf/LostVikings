@@ -1,0 +1,21 @@
+// v2_sc55.h — the SOUND < SC55 > option: the game's XMIDI music and effects
+// on an emulated Roland SC-55 (Nuked-SC55, src/sdl/third_party/nuked_sc55,
+// GPL-2.0-or-later) instead of the OPL3. The AIL driver keeps running as
+// before (its DS words, statuses and the canon stay the OPL world's); what
+// changes is the sound: every MIDI event the driver dispatches (v2_midi.h)
+// goes to the module's UART, the module's output replaces the OPL render in
+// the audio mix. The ROM images are the user's (roms/sc55/, or the cfg's
+// sc55_roms=<dir>): rom1.bin rom2.bin waverom1.bin waverom2.bin rom_sm.bin
+// for the SC-55mk2, the sc55_*.bin set for the mk1, the cm300_* set, ...
+// (Nuked-SC55's file names); without them the option reports and stays off.
+#pragma once
+#include <cstdint>
+
+bool v2_sc55_enabled();                  // the option (v2_options.sound_mode == 2)
+bool v2_sc55_start();                    // game thread: load the ROMs once, boot the module, GS reset (idempotent); false = see v2_sc55_status()
+void v2_sc55_stop();
+bool v2_sc55_running();
+const char* v2_sc55_status();            // "SC-55mk2 running" / the last error
+void v2_sc55_midi(uint16_t status, uint16_t d1, uint16_t d2);   // game thread: one channel message to the module
+// audio thread: the module's output resampled to `rate` INTO `out` (replaces it); false = not running
+bool v2_sc55_mix(int16_t* out, uint32_t frames, uint32_t rate);

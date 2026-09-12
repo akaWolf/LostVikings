@@ -100,6 +100,11 @@ public:
     // accumulator never advances.
     uint16_t (*ail_callback_hook)() = nullptr;
     uint16_t callback_ptr_off = 0x2957;   // dword cell inside the blob
+    // UX stage 11 (the SC-55 option, v2_midi.h): observer of the blob's MIDI
+    // dispatcher 2629 — installed on the AUDIBLE instance only (the sink of
+    // the verify build; instance 0 of a V2_ONLY build running the interpreted
+    // fallback). Sees every channel message the driver dispatches, changes nothing.
+    void (*midi_tap)(uint16_t status, uint16_t d1, uint16_t d2) = nullptr;
 
     bool trace = false;          // V2_AIL_TRACE=1 — per-instruction log
     int  fault = 0;              // non-zero: interpreter hit something unmodeled
@@ -374,6 +379,12 @@ int v2_ail_pctrace_full_on = 0;
 FILE* v2_ail_pctrace_full_f = nullptr;
 
 void AilInterp::step() {
+    // UX stage 11: the MIDI tap. 2629 is entered through a far frame —
+    // [sp]=ret ip, [sp+2]=ret cs, [sp+4]=status, [sp+6]=data1, [sp+8]=data2
+    // (2629: push bp / mov bp,sp / ... / mov si,[bp+8] / mov di,[bp+6] /
+    // mov cl,[bp+0Ah]); this step executes that `push bp`, once per call.
+    if (midi_tap && r.ip == 0x2629 && r.cs == code_para)
+        midi_tap(rd16(r.ss, (uint16_t)(r.sp + 4)), rd16(r.ss, (uint16_t)(r.sp + 6)), rd16(r.ss, (uint16_t)(r.sp + 8)));
     // Stage 6.1 w3: execution trace of the blob (the native-sequencer
     // reverse aid). V2_AIL_PCTRACE=<path> logs "ip op" per step; the
     // stream over one fn67 tick IS the tick algorithm.
@@ -885,6 +896,7 @@ extern "C" void v2_ail_interp_get_io_hooks(void (**o)(uint16_t, uint8_t),
 }
 
 extern "C" void v2_ail_interp_set_callback(uint16_t (*cb)()) { g_ail.ail_callback_hook = cb; }
+extern "C" void v2_ail_interp_set_midi_tap(void (*fn)(uint16_t, uint16_t, uint16_t)) { g_ail.midi_tap = fn; }   // UX stage 11: the current instance
 
 // ---------------------------------------------------------------------------
 // (#83) SINK instance — the audible "speaker" of the default/verify build.
@@ -922,6 +934,7 @@ extern "C" void v2_ail_sinki_set_io(void (*out_fn)(uint16_t, uint8_t),
     g_sink_i.in_hook = in_fn;
 }
 extern "C" void v2_ail_sinki_set_callback(uint16_t (*cb)()) { g_sink_i.ail_callback_hook = cb; }
+extern "C" void v2_ail_sinki_set_midi_tap(void (*fn)(uint16_t, uint16_t, uint16_t)) { g_sink_i.midi_tap = fn; }   // UX stage 11
 extern "C" uint16_t v2_ail_sinki_call(uint16_t fn_off, const uint16_t* args, int argc) {
     uint16_t ret = g_sink_i.call_fn(fn_off, args, argc);
     if (g_sink_i.fault) {

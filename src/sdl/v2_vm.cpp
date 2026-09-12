@@ -36,6 +36,8 @@
 extern uint8_t v2_vga[65536 * 4];
 #include "v2_ui.h"
 #include "v2_snes_sound.h"   // UX stage 10: the SNES DE sound option (hooks below)
+#include "v2_sc55.h"         // UX stage 11: the SC-55 option (v2_ui_service)
+#include "v2_midi.h"         // UX stage 11: the MIDI lane's dump at exit
 #include "v2_callcount.h"   // M1 call-parity (#65)
 #include "v2_ds_layout.h"
 #include "v2_timing.h"
@@ -9172,6 +9174,17 @@ static void v2_ui_service(uint8_t* s) {
           if (v2_net_join_async(v2_ui_net_addr)) v2_ui_toast("CONNECTING...");
           else v2_ui_toast("JOIN FAILED");
       } }
+    // UX stage 11: the SC-55 option boots the module when chosen (a second of
+    // firmware start-up; the ROMs are the user's — no ROMs: a toast, the OPL stays)
+    {
+        static int last_snd = -1;
+        const int snd = v2_options.sound_mode.load();
+        if (snd != last_snd) {
+            if (snd == 2) { if (!v2_sc55_start()) { v2_ui_toast(v2_sc55_status()); v2_options.sound_mode = 0; } }
+            else if (last_snd == 2) v2_sc55_stop();
+            last_snd = v2_options.sound_mode.load();
+        }
+    }
     // options: parallax on/off at runtime (display lane), interludes on/off
     static int last_par = -1;
     int par = v2_options.parallax.load() ? 1 : 0;
@@ -15865,7 +15878,7 @@ void v2_vm_op_13(V2VM& vm) {
         if (v2_fntest_vm_soft) { v2_fntest_vm_soft = 3; return; }
         // V2: trigger graceful exit similar to orig behavior.
         headless_golden_dump();   // direction V: menu-quit is a clean exit (all builds)
-        extern bool need_quit; need_quit = true; SDL_Delay(50); _exit(0);
+        extern bool need_quit; need_quit = true; SDL_Delay(50); v2_midi_shutdown(); _exit(0);
     }
 
     // All paths: ADD bx, 3
@@ -20752,6 +20765,7 @@ void v2_run_animation_vm(uint16_t ds_val) {
                     headless_golden_dump();   // direction V: DOS-quit is a clean exit (all builds)
                     fflush(stdout); fflush(stderr);
                     extern bool need_quit; need_quit = true; SDL_Delay(50);
+                    v2_midi_shutdown();   // UX stage 11: V2_MIDI_DUMP (_exit skips atexit)
                     _exit(0);
                 } else {
                     // Normal quit prompt (orig loc_10389 tail, seg000 3411-3438):
@@ -20795,6 +20809,7 @@ void v2_run_animation_vm(uint16_t ds_val) {
                         headless_golden_dump();   // direction V: prompt-quit is a clean exit (all builds)
                         fflush(stdout); fflush(stderr);
                         extern bool need_quit; need_quit = true; SDL_Delay(50);
+                        v2_midi_shutdown();   // UX stage 11: V2_MIDI_DUMP (_exit skips atexit)
                         _exit(0);
                     }
                 }
@@ -22002,6 +22017,7 @@ void v2_phase_post_flip3(uint16_t ds_val) {
                                           // 2026-09-06: synth_title_f10 ends here; the wide canon had no golden for it
                 fflush(stdout); fflush(stderr);
                 extern bool need_quit; need_quit = true; SDL_Delay(50);
+                v2_midi_shutdown();   // UX stage 11: V2_MIDI_DUMP (_exit skips atexit)
                 _exit(0);
             } else {
                 // loc_10389 path: password screen via canonical helpers.
@@ -22040,6 +22056,7 @@ void v2_phase_post_flip3(uint16_t ds_val) {
                                               // end here), the dual-run judge reaches its dump through the orig side
                     fflush(stdout); fflush(stderr);
                     need_quit = true; SDL_Delay(50);
+                    v2_midi_shutdown();   // UX stage 11: V2_MIDI_DUMP (_exit skips atexit)
                     _exit(0);
                 }
                 // else: continue gameplay (user pressed N — return to game).

@@ -10,3 +10,6 @@ __pycache__/
 
 # UX stage 6: fetched from nixpkgs by tools/assets/unifont_glyphs.py, not bundled
 fonts/unifont.otf
+
+# UX stage 11: the SC-55 option reads the module ROMs from here — Roland's images, never committed
+roms/

@@ -164,6 +164,8 @@ CFLAGS   := $(SDL) $(DBG) $(INCLUDES) $(V2_DEFINES) $(PLATFORM_DEFINES)
 # verify hash kernels were ~77% of CPU at the project-wide -O0.
 # gcc takes the LAST -O flag, so appending wins over the -O0 in $(DBG).
 $(OBJDIR)/src/sdl/v2_hash_hot.o: CXXFLAGS += -O2
+# UX stage 11: the Nuked-SC55 core is built for embedding (no window / audio device / MIDI input of its own), optimised like the SPC core
+$(OBJDIR)/src/sdl/third_party/nuked_sc55/%.o: CXXFLAGS += -DNUKED_SC55_EMBEDDED -O2
 # The generated world-script executors (src/sdl/gen/exec_01cN.cpp, one unit per
 # chunk: piece functions + router, see v2_vm_gen.h) and v2_vm.cpp itself cap
 # the debug detail at -g1: with full -ggdb3 var-tracking the old single unit
@@ -242,7 +244,16 @@ CXX_SRCS := \
   src/sdl/third_party/snes_spc/Snes_Spc.cpp \
   src/sdl/third_party/snes_spc/Spc_Cpu.cpp \
   src/sdl/third_party/snes_spc/Spc_Dsp.cpp \
-  src/sdl/third_party/snes_spc/Spc_Filter.cpp
+  src/sdl/third_party/snes_spc/Spc_Filter.cpp \
+  src/sdl/v2_midi.cpp \
+  src/sdl/v2_sc55.cpp \
+  src/sdl/third_party/nuked_sc55/mcu.cpp \
+  src/sdl/third_party/nuked_sc55/mcu_opcodes.cpp \
+  src/sdl/third_party/nuked_sc55/mcu_interrupt.cpp \
+  src/sdl/third_party/nuked_sc55/mcu_timer.cpp \
+  src/sdl/third_party/nuked_sc55/pcm.cpp \
+  src/sdl/third_party/nuked_sc55/submcu.cpp \
+  src/sdl/third_party/nuked_sc55/lcd_stub.cpp
 # play.cpp: only in non-HEADLESS (HEADLESS uses headless_audio_stub.cpp instead)
 ifndef HEADLESS
 CXX_SRCS += src/sdl/play.cpp
@@ -287,7 +298,16 @@ CXX_SRCS := \
   src/sdl/third_party/snes_spc/Snes_Spc.cpp \
   src/sdl/third_party/snes_spc/Spc_Cpu.cpp \
   src/sdl/third_party/snes_spc/Spc_Dsp.cpp \
-  src/sdl/third_party/snes_spc/Spc_Filter.cpp
+  src/sdl/third_party/snes_spc/Spc_Filter.cpp \
+  src/sdl/v2_midi.cpp \
+  src/sdl/v2_sc55.cpp \
+  src/sdl/third_party/nuked_sc55/mcu.cpp \
+  src/sdl/third_party/nuked_sc55/mcu_opcodes.cpp \
+  src/sdl/third_party/nuked_sc55/mcu_interrupt.cpp \
+  src/sdl/third_party/nuked_sc55/mcu_timer.cpp \
+  src/sdl/third_party/nuked_sc55/pcm.cpp \
+  src/sdl/third_party/nuked_sc55/submcu.cpp \
+  src/sdl/third_party/nuked_sc55/lcd_stub.cpp
 # play.cpp: only in non-HEADLESS (HEADLESS uses headless_audio_stub.cpp instead)
 ifndef HEADLESS
 CXX_SRCS += src/sdl/play.cpp
