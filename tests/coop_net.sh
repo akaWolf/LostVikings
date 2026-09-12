@@ -14,6 +14,7 @@ PORT=${PORT:-$((7400 + RANDOM % 500))}
 [ -x "./$BIN" ] || { echo "FAIL: ./$BIN not built"; exit 2; }
 INP="tests/coop/$NAME.inp"; F=900; [ -f "tests/coop/$NAME.frames" ] && F=$(cat "tests/coop/$NAME.frames")
 export V2_FAST_VSYNC=${V2_FAST_VSYNC:-1} SDL_VIDEODRIVER=dummy SDL_AUDIODRIVER=dummy
+export V2_CONTENT=0   # the canon content: never the content/ pack of the repo root (v2_main.cpp)
 OUT="/tmp/coop_net_$$"; rm -rf "$OUT"; mkdir -p "$OUT"
 # the reference: the solo lockstep
 V2_GOLDEN_DUMP="$OUT/solo.txt" timeout 900 "./$BIN" --replay-input="$INP" --max-frames="$F" --delay=$DELAY > "$OUT/solo.log" 2>&1 || { echo "FAIL: solo run (exit $?)"; exit 1; }

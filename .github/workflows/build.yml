@@ -269,6 +269,8 @@ jobs:
           cp vikings vikings_keymap_editor vikings_keymap.cfg dist/vikings-linux-${{ matrix.arch }}-v2only/
           cp ds_static.bin exe_static.bin dist/vikings-linux-${{ matrix.arch }}-v2only/
           [ -f README.md ] && cp README.md dist/vikings-linux-${{ matrix.arch }}-v2only/
+          # the console content builder (README "Console content"): scripts + the mod package, no game data
+          bash tools/assets/content_tools_bundle.sh dist/vikings-linux-${{ matrix.arch }}-v2only/content-tools
           tar -czf vikings-linux-${{ matrix.arch }}-v2only.tar.gz -C dist vikings-linux-${{ matrix.arch }}-v2only
           ls -lh vikings-linux-${{ matrix.arch }}-v2only.tar.gz
 
@@ -326,6 +328,8 @@ jobs:
           cp vikings.exe vikings_keymap_editor.exe vikings_keymap.cfg dist/vikings-windows-x86_64-v2only/
           cp ds_static.bin exe_static.bin dist/vikings-windows-x86_64-v2only/
           [ -f README.md ] && cp README.md dist/vikings-windows-x86_64-v2only/
+          # the console content builder (README "Console content"): scripts + the mod package, no game data
+          bash tools/assets/content_tools_bundle.sh dist/vikings-windows-x86_64-v2only/content-tools
           cd dist && zip -r ../vikings-windows-x86_64-v2only.zip vikings-windows-x86_64-v2only
           ls -lh ../vikings-windows-x86_64-v2only.zip
 
@@ -417,6 +421,10 @@ jobs:
             All bundles contain `vikings`/`vikings.exe`, `vikings_keymap_editor`,
             `vikings_keymap.cfg`, `ds_static.bin` and `exe_static.bin`. SDL2 and
             the C++ runtime are statically linked — no extra DLLs/.so required.
+            The V2_ONLY bundles also carry `content-tools/`: the builder of the
+            console content pack (SNES parallax, the SNES-only levels, the Genesis
+            interludes, languages, SNES sound — README, "Console content"); run
+            `python3 content-tools/tools/assets/build_content.py` beside `DATA.DAT`.
 
             All modes require the copyrighted `DATA.DAT` from a legal copy of
             the 1992 Lost Vikings (e.g. the GOG release). It is not

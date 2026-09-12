@@ -20,6 +20,7 @@ echo "building $BIN (HEADLESS V2_ONLY)…"
 ( ulimit -s unlimited; HEADLESS=1 V2_ONLY=1 RELEASE=1 make CXX=clang++ EXE_NAME="$BIN" -j"$JOBS" ) > /tmp/wide_build_$$.log 2>&1 || { echo "FAIL: build"; tail -5 /tmp/wide_build_$$.log; exit 2; }
 OUT="/tmp/wide_canon_$$"; rm -rf "$OUT"; mkdir -p "$OUT"
 export V2_FAST_VSYNC=${V2_FAST_VSYNC:-1} V2_VIEW_W=$W
+export V2_CONTENT=0   # the canon content: never the content/ pack of the repo root (v2_main.cpp)
 run_one() {
     inp="$1"; name=$(basename "$inp" .inp); F=6000
     [ -f "tests/replays/$name.frames" ] && F=$(cat "tests/replays/$name.frames")

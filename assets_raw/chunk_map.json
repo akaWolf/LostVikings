@@ -1,0 +1,6473 @@
+{
+ "0000": {
+  "comp_size": 32,
+  "decomp_size": 1,
+  "container": "lzss?",
+  "roles": [
+   "unreferenced"
+  ],
+  "readers": []
+ },
+ "0001": {
+  "comp_size": 22018,
+  "decomp_size": 5504,
+  "container": "raw",
+  "roles": [
+   "screen_gfx"
+  ],
+  "readers": [
+   "R v2_gen_exec_1c1 chunk@0"
+  ]
+ },
+ "0002": {
+  "comp_size": 1448,
+  "decomp_size": 5759,
+  "container": "lzss",
+  "roles": [
+   "level_password_table"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 ds@26749"
+  ]
+ },
+ "0003": {
+  "comp_size": 51,
+  "decomp_size": 47,
+  "container": "lzss",
+  "roles": [
+   "palette"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 ds@32514",
+   "C v2_gen_exec_1c1 ds@32898"
+  ]
+ },
+ "0004": {
+  "comp_size": 412,
+  "decomp_size": 767,
+  "container": "lzss",
+  "roles": [
+   "level_palette_chunks"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 ds@11901"
+  ]
+ },
+ "0005": {
+  "comp_size": 456,
+  "decomp_size": 767,
+  "container": "lzss",
+  "roles": [
+   "builtin_palette"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 ds@12669"
+  ]
+ },
+ "0006": {
+  "comp_size": 492,
+  "decomp_size": 767,
+  "container": "lzss",
+  "roles": [
+   "builtin_palette"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 ds@13437"
+  ]
+ },
+ "0007": {
+  "comp_size": 361,
+  "decomp_size": 767,
+  "container": "lzss",
+  "roles": [
+   "builtin_palette"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 ds@14205"
+  ]
+ },
+ "0008": {
+  "comp_size": 385,
+  "decomp_size": 767,
+  "container": "lzss",
+  "roles": [
+   "builtin_palette"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 ds@14973"
+  ]
+ },
+ "0009": {
+  "comp_size": 401,
+  "decomp_size": 767,
+  "container": "lzss",
+  "roles": [
+   "builtin_palette"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 ds@15741"
+  ]
+ },
+ "000A": {
+  "comp_size": 296,
+  "decomp_size": 767,
+  "container": "lzss",
+  "roles": [
+   "builtin_palette"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 ds@16509"
+  ]
+ },
+ "000B": {
+  "comp_size": 324,
+  "decomp_size": 767,
+  "container": "lzss",
+  "roles": [
+   "builtin_palette"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 ds@17277"
+  ]
+ },
+ "000C": {
+  "comp_size": 372,
+  "decomp_size": 767,
+  "container": "lzss",
+  "roles": [
+   "builtin_palette"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 ds@18045"
+  ]
+ },
+ "000D": {
+  "comp_size": 384,
+  "decomp_size": 1567,
+  "container": "lzss",
+  "roles": [
+   "builtin_palette"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 ds@18813"
+  ]
+ },
+ "000E": {
+  "comp_size": 2534,
+  "decomp_size": 6143,
+  "container": "lzss",
+  "roles": [
+   "hud_item_gfx"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 ds@20605"
+  ]
+ },
+ "000F": {
+  "comp_size": 47,
+  "decomp_size": 47,
+  "container": "lzss",
+  "roles": [
+   "palette"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 ds@32850"
+  ]
+ },
+ "0010": {
+  "comp_size": 36,
+  "decomp_size": 47,
+  "container": "lzss",
+  "roles": [
+   "palette"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 ds@32850"
+  ]
+ },
+ "0011": {
+  "comp_size": 305,
+  "decomp_size": 383,
+  "container": "lzss",
+  "roles": [
+   "palette"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 ds@32514"
+  ]
+ },
+ "0012": {
+  "comp_size": 296,
+  "decomp_size": 383,
+  "container": "lzss",
+  "roles": [
+   "palette"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 ds@32514"
+  ]
+ },
+ "0013": {
+  "comp_size": 7281,
+  "decomp_size": 17471,
+  "container": "lzss",
+  "roles": [
+   "tileset"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 tilegfx@0"
+  ]
+ },
+ "0014": {
+  "comp_size": 1012,
+  "decomp_size": 2183,
+  "container": "lzss",
+  "roles": [
+   "tile_masks"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 gsmask@0"
+  ]
+ },
+ "0015": {
+  "comp_size": 1449,
+  "decomp_size": 1623,
+  "container": "lzss",
+  "roles": [
+   "bg_tileset"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 gstiledata@0"
+  ]
+ },
+ "0016": {
+  "comp_size": 9318,
+  "decomp_size": 21311,
+  "container": "lzss",
+  "roles": [
+   "tileset"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 tilegfx@0"
+  ]
+ },
+ "0017": {
+  "comp_size": 1134,
+  "decomp_size": 2663,
+  "container": "lzss",
+  "roles": [
+   "tile_masks"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 gsmask@0"
+  ]
+ },
+ "0018": {
+  "comp_size": 1399,
+  "decomp_size": 1335,
+  "container": "lzss",
+  "roles": [
+   "bg_tileset"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 gstiledata@0"
+  ]
+ },
+ "0019": {
+  "comp_size": 10472,
+  "decomp_size": 26047,
+  "container": "lzss",
+  "roles": [
+   "tileset"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 tilegfx@0"
+  ]
+ },
+ "001A": {
+  "comp_size": 1785,
+  "decomp_size": 3255,
+  "container": "lzss",
+  "roles": [
+   "tile_masks"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 gsmask@0"
+  ]
+ },
+ "001B": {
+  "comp_size": 1805,
+  "decomp_size": 1903,
+  "container": "lzss",
+  "roles": [
+   "bg_tileset"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 gstiledata@0"
+  ]
+ },
+ "001C": {
+  "comp_size": 9389,
+  "decomp_size": 21311,
+  "container": "lzss",
+  "roles": [
+   "tileset"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 tilegfx@0"
+  ]
+ },
+ "001D": {
+  "comp_size": 1138,
+  "decomp_size": 2663,
+  "container": "lzss",
+  "roles": [
+   "tile_masks"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 gsmask@0"
+  ]
+ },
+ "001E": {
+  "comp_size": 1319,
+  "decomp_size": 1247,
+  "container": "lzss",
+  "roles": [
+   "bg_tileset"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 gstiledata@0"
+  ]
+ },
+ "001F": {
+  "comp_size": 9960,
+  "decomp_size": 23551,
+  "container": "lzss",
+  "roles": [
+   "tileset"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 tilegfx@0"
+  ]
+ },
+ "0020": {
+  "comp_size": 1312,
+  "decomp_size": 2943,
+  "container": "lzss",
+  "roles": [
+   "tile_masks"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 gsmask@0"
+  ]
+ },
+ "0021": {
+  "comp_size": 1552,
+  "decomp_size": 1583,
+  "container": "lzss",
+  "roles": [
+   "bg_tileset"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 gstiledata@0"
+  ]
+ },
+ "0022": {
+  "comp_size": 8622,
+  "decomp_size": 19711,
+  "container": "lzss",
+  "roles": [
+   "tileset"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 tilegfx@0"
+  ]
+ },
+ "0023": {
+  "comp_size": 1185,
+  "decomp_size": 2463,
+  "container": "lzss",
+  "roles": [
+   "tile_masks"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 gsmask@0"
+  ]
+ },
+ "0024": {
+  "comp_size": 1296,
+  "decomp_size": 1303,
+  "container": "lzss",
+  "roles": [
+   "bg_tileset"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 gstiledata@0"
+  ]
+ },
+ "0025": {
+  "comp_size": 8184,
+  "decomp_size": 18367,
+  "container": "lzss",
+  "roles": [
+   "tileset"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 tilegfx@0"
+  ]
+ },
+ "0026": {
+  "comp_size": 660,
+  "decomp_size": 2295,
+  "container": "lzss",
+  "roles": [
+   "tile_masks"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 gsmask@0"
+  ]
+ },
+ "0027": {
+  "comp_size": 1291,
+  "decomp_size": 1271,
+  "container": "lzss",
+  "roles": [
+   "bg_tileset"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 gstiledata@0"
+  ]
+ },
+ "0028": {
+  "comp_size": 439,
+  "decomp_size": 555,
+  "container": "lzss",
+  "roles": [
+   "level_header_stripe"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 ds@9651"
+  ],
+  "level": {
+   "width": 61,
+   "height": 23,
+   "tilemap": "0029",
+   "tileset": "0013",
+   "bg_tileset": "0015"
+  }
+ },
+ "0029": {
+  "comp_size": 1338,
+  "decomp_size": 2805,
+  "container": "lzss",
+  "roles": [
+   "tilemap"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 tilemap@0"
+  ],
+  "width": 61,
+  "height": 23,
+  "header": "0028"
+ },
+ "002A": {
+  "comp_size": 490,
+  "decomp_size": 616,
+  "container": "lzss",
+  "roles": [
+   "level_header_stripe"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 ds@9651"
+  ],
+  "level": {
+   "width": 64,
+   "height": 48,
+   "tilemap": "002B",
+   "tileset": "0016",
+   "bg_tileset": "0018"
+  }
+ },
+ "002B": {
+  "comp_size": 2535,
+  "decomp_size": 6143,
+  "container": "lzss",
+  "roles": [
+   "tilemap"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 tilemap@0"
+  ],
+  "width": 64,
+  "height": 48,
+  "header": "002A"
+ },
+ "002C": {
+  "comp_size": 395,
+  "decomp_size": 505,
+  "container": "lzss",
+  "roles": [
+   "level_header_stripe"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 ds@9651"
+  ],
+  "level": {
+   "width": 80,
+   "height": 32,
+   "tilemap": "002D",
+   "tileset": "0019",
+   "bg_tileset": "001B"
+  }
+ },
+ "002D": {
+  "comp_size": 1630,
+  "decomp_size": 5119,
+  "container": "lzss",
+  "roles": [
+   "tilemap"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 tilemap@0"
+  ],
+  "width": 80,
+  "height": 32,
+  "header": "002C"
+ },
+ "002E": {
+  "comp_size": 438,
+  "decomp_size": 552,
+  "container": "lzss",
+  "roles": [
+   "level_header_stripe"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 ds@9651"
+  ],
+  "level": {
+   "width": 64,
+   "height": 32,
+   "tilemap": "002F",
+   "tileset": "001C",
+   "bg_tileset": "001E"
+  }
+ },
+ "002F": {
+  "comp_size": 1936,
+  "decomp_size": 4095,
+  "container": "lzss",
+  "roles": [
+   "tilemap"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 tilemap@0"
+  ],
+  "width": 64,
+  "height": 32,
+  "header": "002E"
+ },
+ "0030": {
+  "comp_size": 525,
+  "decomp_size": 664,
+  "container": "lzss",
+  "roles": [
+   "level_header_stripe"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 ds@9651"
+  ],
+  "level": {
+   "width": 64,
+   "height": 48,
+   "tilemap": "0031",
+   "tileset": "001F",
+   "bg_tileset": "0021"
+  }
+ },
+ "0031": {
+  "comp_size": 2534,
+  "decomp_size": 6143,
+  "container": "lzss",
+  "roles": [
+   "tilemap"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 tilemap@0"
+  ],
+  "width": 64,
+  "height": 48,
+  "header": "0030"
+ },
+ "0032": {
+  "comp_size": 462,
+  "decomp_size": 628,
+  "container": "lzss",
+  "roles": [
+   "level_header_stripe"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 ds@9651"
+  ],
+  "level": {
+   "width": 64,
+   "height": 48,
+   "tilemap": "0033",
+   "tileset": "0022",
+   "bg_tileset": "0024"
+  }
+ },
+ "0033": {
+  "comp_size": 1811,
+  "decomp_size": 6143,
+  "container": "lzss",
+  "roles": [
+   "tilemap"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 tilemap@0"
+  ],
+  "width": 64,
+  "height": 48,
+  "header": "0032"
+ },
+ "0034": {
+  "comp_size": 534,
+  "decomp_size": 680,
+  "container": "lzss",
+  "roles": [
+   "level_header_stripe"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 ds@9651"
+  ],
+  "level": {
+   "width": 64,
+   "height": 48,
+   "tilemap": "0035",
+   "tileset": "0025",
+   "bg_tileset": "0027"
+  }
+ },
+ "0035": {
+  "comp_size": 2165,
+  "decomp_size": 6143,
+  "container": "lzss",
+  "roles": [
+   "tilemap"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 tilemap@0"
+  ],
+  "width": 64,
+  "height": 48,
+  "header": "0034"
+ },
+ "0036": {
+  "comp_size": 54,
+  "decomp_size": 47,
+  "container": "lzss",
+  "roles": [
+   "palette"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 ds@32850"
+  ]
+ },
+ "0037": {
+  "comp_size": 49,
+  "decomp_size": 47,
+  "container": "lzss",
+  "roles": [
+   "palette"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 ds@32850"
+  ]
+ },
+ "0038": {
+  "comp_size": 258,
+  "decomp_size": 383,
+  "container": "lzss",
+  "roles": [
+   "palette"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 ds@32514"
+  ]
+ },
+ "0039": {
+  "comp_size": 11644,
+  "decomp_size": 28607,
+  "container": "lzss",
+  "roles": [
+   "tileset"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 tilegfx@0"
+  ]
+ },
+ "003A": {
+  "comp_size": 980,
+  "decomp_size": 3575,
+  "container": "lzss",
+  "roles": [
+   "tile_masks"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 gsmask@0"
+  ]
+ },
+ "003B": {
+  "comp_size": 1711,
+  "decomp_size": 1927,
+  "container": "lzss",
+  "roles": [
+   "bg_tileset"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 gstiledata@0"
+  ]
+ },
+ "003C": {
+  "comp_size": 6727,
+  "decomp_size": 15423,
+  "container": "lzss",
+  "roles": [
+   "tileset"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 tilegfx@0"
+  ]
+ },
+ "003D": {
+  "comp_size": 635,
+  "decomp_size": 1927,
+  "container": "lzss",
+  "roles": [
+   "tile_masks"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 gsmask@0"
+  ]
+ },
+ "003E": {
+  "comp_size": 794,
+  "decomp_size": 815,
+  "container": "lzss",
+  "roles": [
+   "bg_tileset"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 gstiledata@0"
+  ]
+ },
+ "003F": {
+  "comp_size": 7390,
+  "decomp_size": 17023,
+  "container": "lzss",
+  "roles": [
+   "tileset"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 tilegfx@0"
+  ]
+ },
+ "0040": {
+  "comp_size": 717,
+  "decomp_size": 2127,
+  "container": "lzss",
+  "roles": [
+   "tile_masks"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 gsmask@0"
+  ]
+ },
+ "0041": {
+  "comp_size": 848,
+  "decomp_size": 919,
+  "container": "lzss",
+  "roles": [
+   "bg_tileset"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 gstiledata@0"
+  ]
+ },
+ "0042": {
+  "comp_size": 8004,
+  "decomp_size": 19135,
+  "container": "lzss",
+  "roles": [
+   "tileset"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 tilegfx@0"
+  ]
+ },
+ "0043": {
+  "comp_size": 795,
+  "decomp_size": 2391,
+  "container": "lzss",
+  "roles": [
+   "tile_masks"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 gsmask@0"
+  ]
+ },
+ "0044": {
+  "comp_size": 1044,
+  "decomp_size": 1151,
+  "container": "lzss",
+  "roles": [
+   "bg_tileset"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 gstiledata@0"
+  ]
+ },
+ "0045": {
+  "comp_size": 6413,
+  "decomp_size": 15359,
+  "container": "lzss",
+  "roles": [
+   "tileset"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 tilegfx@0"
+  ]
+ },
+ "0046": {
+  "comp_size": 571,
+  "decomp_size": 1919,
+  "container": "lzss",
+  "roles": [
+   "tile_masks"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 gsmask@0"
+  ]
+ },
+ "0047": {
+  "comp_size": 844,
+  "decomp_size": 927,
+  "container": "lzss",
+  "roles": [
+   "bg_tileset"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 gstiledata@0"
+  ]
+ },
+ "0048": {
+  "comp_size": 7346,
+  "decomp_size": 18303,
+  "container": "lzss",
+  "roles": [
+   "tileset"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 tilegfx@0"
+  ]
+ },
+ "0049": {
+  "comp_size": 654,
+  "decomp_size": 2287,
+  "container": "lzss",
+  "roles": [
+   "tile_masks"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 gsmask@0"
+  ]
+ },
+ "004A": {
+  "comp_size": 1139,
+  "decomp_size": 1255,
+  "container": "lzss",
+  "roles": [
+   "bg_tileset"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 gstiledata@0"
+  ]
+ },
+ "004B": {
+  "comp_size": 462,
+  "decomp_size": 623,
+  "container": "lzss",
+  "roles": [
+   "level_header_stripe"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 ds@9651"
+  ],
+  "level": {
+   "width": 108,
+   "height": 16,
+   "tilemap": "004C",
+   "tileset": "0039",
+   "bg_tileset": "003B"
+  }
+ },
+ "004C": {
+  "comp_size": 1361,
+  "decomp_size": 3455,
+  "container": "lzss",
+  "roles": [
+   "tilemap"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 tilemap@0"
+  ],
+  "width": 108,
+  "height": 16,
+  "header": "004B"
+ },
+ "004D": {
+  "comp_size": 472,
+  "decomp_size": 653,
+  "container": "lzss",
+  "roles": [
+   "level_header_stripe"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 ds@9651"
+  ],
+  "level": {
+   "width": 48,
+   "height": 49,
+   "tilemap": "004E",
+   "tileset": "003C",
+   "bg_tileset": "003E"
+  }
+ },
+ "004E": {
+  "comp_size": 1379,
+  "decomp_size": 4703,
+  "container": "lzss",
+  "roles": [
+   "tilemap"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 tilemap@0"
+  ],
+  "width": 48,
+  "height": 49,
+  "header": "004D"
+ },
+ "004F": {
+  "comp_size": 544,
+  "decomp_size": 683,
+  "container": "lzss",
+  "roles": [
+   "level_header_stripe"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 ds@9651"
+  ],
+  "level": {
+   "width": 48,
+   "height": 64,
+   "tilemap": "0050",
+   "tileset": "003F",
+   "bg_tileset": "0041"
+  }
+ },
+ "0050": {
+  "comp_size": 1697,
+  "decomp_size": 6143,
+  "container": "lzss",
+  "roles": [
+   "tilemap"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 tilemap@0"
+  ],
+  "width": 48,
+  "height": 64,
+  "header": "004F"
+ },
+ "0051": {
+  "comp_size": 565,
+  "decomp_size": 746,
+  "container": "lzss",
+  "roles": [
+   "level_header_stripe"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 ds@9651"
+  ],
+  "level": {
+   "width": 48,
+   "height": 48,
+   "tilemap": "0052",
+   "tileset": "0042",
+   "bg_tileset": "0044"
+  }
+ },
+ "0052": {
+  "comp_size": 1364,
+  "decomp_size": 4607,
+  "container": "lzss",
+  "roles": [
+   "tilemap"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 tilemap@0"
+  ],
+  "width": 48,
+  "height": 48,
+  "header": "0051"
+ },
+ "0053": {
+  "comp_size": 499,
+  "decomp_size": 712,
+  "container": "lzss",
+  "roles": [
+   "level_header_stripe"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 ds@9651"
+  ],
+  "level": {
+   "width": 80,
+   "height": 48,
+   "tilemap": "0054",
+   "tileset": "0045",
+   "bg_tileset": "0047"
+  }
+ },
+ "0054": {
+  "comp_size": 1894,
+  "decomp_size": 7679,
+  "container": "lzss",
+  "roles": [
+   "tilemap"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 tilemap@0"
+  ],
+  "width": 80,
+  "height": 48,
+  "header": "0053"
+ },
+ "0055": {
+  "comp_size": 516,
+  "decomp_size": 686,
+  "container": "lzss",
+  "roles": [
+   "level_header_stripe"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 ds@9651"
+  ],
+  "level": {
+   "width": 48,
+   "height": 64,
+   "tilemap": "0056",
+   "tileset": "0048",
+   "bg_tileset": "004A"
+  }
+ },
+ "0056": {
+  "comp_size": 1903,
+  "decomp_size": 6143,
+  "container": "lzss",
+  "roles": [
+   "tilemap"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 tilemap@0"
+  ],
+  "width": 48,
+  "height": 64,
+  "header": "0055"
+ },
+ "0057": {
+  "comp_size": 268,
+  "decomp_size": 383,
+  "container": "lzss",
+  "roles": [
+   "palette"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 ds@32514"
+  ]
+ },
+ "0058": {
+  "comp_size": 305,
+  "decomp_size": 383,
+  "container": "lzss",
+  "roles": [
+   "palette"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 ds@32514"
+  ]
+ },
+ "0059": {
+  "comp_size": 314,
+  "decomp_size": 383,
+  "container": "lzss",
+  "roles": [
+   "palette"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 ds@32514"
+  ]
+ },
+ "005A": {
+  "comp_size": 10716,
+  "decomp_size": 25855,
+  "container": "lzss",
+  "roles": [
+   "tileset"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 tilegfx@0"
+  ]
+ },
+ "005B": {
+  "comp_size": 776,
+  "decomp_size": 3231,
+  "container": "lzss",
+  "roles": [
+   "tile_masks"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 gsmask@0"
+  ]
+ },
+ "005C": {
+  "comp_size": 1462,
+  "decomp_size": 1527,
+  "container": "lzss",
+  "roles": [
+   "bg_tileset"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 gstiledata@0"
+  ]
+ },
+ "005D": {
+  "comp_size": 9886,
+  "decomp_size": 22719,
+  "container": "lzss",
+  "roles": [
+   "tileset"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 tilegfx@0"
+  ]
+ },
+ "005E": {
+  "comp_size": 765,
+  "decomp_size": 2839,
+  "container": "lzss",
+  "roles": [
+   "tile_masks"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 gsmask@0"
+  ]
+ },
+ "005F": {
+  "comp_size": 1243,
+  "decomp_size": 1239,
+  "container": "lzss",
+  "roles": [
+   "bg_tileset"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 gstiledata@0"
+  ]
+ },
+ "0060": {
+  "comp_size": 13357,
+  "decomp_size": 30335,
+  "container": "lzss",
+  "roles": [
+   "tileset"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 tilegfx@0"
+  ]
+ },
+ "0061": {
+  "comp_size": 963,
+  "decomp_size": 3791,
+  "container": "lzss",
+  "roles": [
+   "tile_masks"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 gsmask@0"
+  ]
+ },
+ "0062": {
+  "comp_size": 1681,
+  "decomp_size": 1735,
+  "container": "lzss",
+  "roles": [
+   "bg_tileset"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 gstiledata@0"
+  ]
+ },
+ "0063": {
+  "comp_size": 9184,
+  "decomp_size": 20735,
+  "container": "lzss",
+  "roles": [
+   "tileset"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 tilegfx@0"
+  ]
+ },
+ "0064": {
+  "comp_size": 680,
+  "decomp_size": 2591,
+  "container": "lzss",
+  "roles": [
+   "tile_masks"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 gsmask@0"
+  ]
+ },
+ "0065": {
+  "comp_size": 1073,
+  "decomp_size": 1087,
+  "container": "lzss",
+  "roles": [
+   "bg_tileset"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 gstiledata@0"
+  ]
+ },
+ "0066": {
+  "comp_size": 8579,
+  "decomp_size": 18623,
+  "container": "lzss",
+  "roles": [
+   "tileset"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 tilegfx@0"
+  ]
+ },
+ "0067": {
+  "comp_size": 680,
+  "decomp_size": 2327,
+  "container": "lzss",
+  "roles": [
+   "tile_masks"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 gsmask@0"
+  ]
+ },
+ "0068": {
+  "comp_size": 912,
+  "decomp_size": 871,
+  "container": "lzss",
+  "roles": [
+   "bg_tileset"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 gstiledata@0"
+  ]
+ },
+ "0069": {
+  "comp_size": 9233,
+  "decomp_size": 19839,
+  "container": "lzss",
+  "roles": [
+   "tileset"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 tilegfx@0"
+  ]
+ },
+ "006A": {
+  "comp_size": 767,
+  "decomp_size": 2479,
+  "container": "lzss",
+  "roles": [
+   "tile_masks"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 gsmask@0"
+  ]
+ },
+ "006B": {
+  "comp_size": 1026,
+  "decomp_size": 1039,
+  "container": "lzss",
+  "roles": [
+   "bg_tileset"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 gstiledata@0"
+  ]
+ },
+ "006C": {
+  "comp_size": 12971,
+  "decomp_size": 29951,
+  "container": "lzss",
+  "roles": [
+   "tileset"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 tilegfx@0"
+  ]
+ },
+ "006D": {
+  "comp_size": 988,
+  "decomp_size": 3743,
+  "container": "lzss",
+  "roles": [
+   "tile_masks"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 gsmask@0"
+  ]
+ },
+ "006E": {
+  "comp_size": 1451,
+  "decomp_size": 1447,
+  "container": "lzss",
+  "roles": [
+   "bg_tileset"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 gstiledata@0"
+  ]
+ },
+ "006F": {
+  "comp_size": 13542,
+  "decomp_size": 31231,
+  "container": "lzss",
+  "roles": [
+   "tileset"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 tilegfx@0"
+  ]
+ },
+ "0070": {
+  "comp_size": 892,
+  "decomp_size": 3903,
+  "container": "lzss",
+  "roles": [
+   "tile_masks"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 gsmask@0"
+  ]
+ },
+ "0071": {
+  "comp_size": 1330,
+  "decomp_size": 1343,
+  "container": "lzss",
+  "roles": [
+   "bg_tileset"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 gstiledata@0"
+  ]
+ },
+ "0072": {
+  "comp_size": 540,
+  "decomp_size": 717,
+  "container": "lzss",
+  "roles": [
+   "level_header_stripe"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 ds@9651"
+  ],
+  "level": {
+   "width": 66,
+   "height": 48,
+   "tilemap": "0073",
+   "tileset": "005A",
+   "bg_tileset": "005C"
+  }
+ },
+ "0073": {
+  "comp_size": 1615,
+  "decomp_size": 6335,
+  "container": "lzss",
+  "roles": [
+   "tilemap"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 tilemap@0"
+  ],
+  "width": 66,
+  "height": 48,
+  "header": "0072"
+ },
+ "0074": {
+  "comp_size": 574,
+  "decomp_size": 713,
+  "container": "lzss",
+  "roles": [
+   "level_header_stripe"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 ds@9651"
+  ],
+  "level": {
+   "width": 54,
+   "height": 39,
+   "tilemap": "0075",
+   "tileset": "005D",
+   "bg_tileset": "005F"
+  }
+ },
+ "0075": {
+  "comp_size": 1379,
+  "decomp_size": 4211,
+  "container": "lzss",
+  "roles": [
+   "tilemap"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 tilemap@0"
+  ],
+  "width": 54,
+  "height": 39,
+  "header": "0074"
+ },
+ "0076": {
+  "comp_size": 624,
+  "decomp_size": 833,
+  "container": "lzss",
+  "roles": [
+   "level_header_stripe"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 ds@9651"
+  ],
+  "level": {
+   "width": 66,
+   "height": 48,
+   "tilemap": "0077",
+   "tileset": "0060",
+   "bg_tileset": "0062"
+  }
+ },
+ "0077": {
+  "comp_size": 2520,
+  "decomp_size": 6335,
+  "container": "lzss",
+  "roles": [
+   "tilemap"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 tilemap@0"
+  ],
+  "width": 66,
+  "height": 48,
+  "header": "0076"
+ },
+ "0078": {
+  "comp_size": 682,
+  "decomp_size": 1071,
+  "container": "lzss",
+  "roles": [
+   "level_header_stripe"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 ds@9651"
+  ],
+  "level": {
+   "width": 48,
+   "height": 70,
+   "tilemap": "0079",
+   "tileset": "0063",
+   "bg_tileset": "0065"
+  }
+ },
+ "0079": {
+  "comp_size": 1902,
+  "decomp_size": 6719,
+  "container": "lzss",
+  "roles": [
+   "tilemap"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 tilemap@0"
+  ],
+  "width": 48,
+  "height": 70,
+  "header": "0078"
+ },
+ "007A": {
+  "comp_size": 674,
+  "decomp_size": 909,
+  "container": "lzss",
+  "roles": [
+   "level_header_stripe"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 ds@9651"
+  ],
+  "level": {
+   "width": 56,
+   "height": 48,
+   "tilemap": "007B",
+   "tileset": "0066",
+   "bg_tileset": "0068"
+  }
+ },
+ "007B": {
+  "comp_size": 1170,
+  "decomp_size": 5375,
+  "container": "lzss",
+  "roles": [
+   "tilemap"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 tilemap@0"
+  ],
+  "width": 56,
+  "height": 48,
+  "header": "007A"
+ },
+ "007C": {
+  "comp_size": 674,
+  "decomp_size": 1018,
+  "container": "lzss",
+  "roles": [
+   "level_header_stripe"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 ds@9651"
+  ],
+  "level": {
+   "width": 75,
+   "height": 48,
+   "tilemap": "007D",
+   "tileset": "0069",
+   "bg_tileset": "006B"
+  }
+ },
+ "007D": {
+  "comp_size": 1347,
+  "decomp_size": 7199,
+  "container": "lzss",
+  "roles": [
+   "tilemap"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 tilemap@0"
+  ],
+  "width": 75,
+  "height": 48,
+  "header": "007C"
+ },
+ "007E": {
+  "comp_size": 702,
+  "decomp_size": 930,
+  "container": "lzss",
+  "roles": [
+   "level_header_stripe"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 ds@9651"
+  ],
+  "level": {
+   "width": 36,
+   "height": 79,
+   "tilemap": "007F",
+   "tileset": "006C",
+   "bg_tileset": "006E"
+  }
+ },
+ "007F": {
+  "comp_size": 1406,
+  "decomp_size": 5687,
+  "container": "lzss",
+  "roles": [
+   "tilemap"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 tilemap@0"
+  ],
+  "width": 36,
+  "height": 79,
+  "header": "007E"
+ },
+ "0080": {
+  "comp_size": 674,
+  "decomp_size": 864,
+  "container": "lzss",
+  "roles": [
+   "level_header_stripe"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 ds@9651"
+  ],
+  "level": {
+   "width": 45,
+   "height": 49,
+   "tilemap": "0081",
+   "tileset": "006F",
+   "bg_tileset": "0071"
+  }
+ },
+ "0081": {
+  "comp_size": 1081,
+  "decomp_size": 4409,
+  "container": "lzss",
+  "roles": [
+   "tilemap"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 tilemap@0"
+  ],
+  "width": 45,
+  "height": 49,
+  "header": "0080"
+ },
+ "0082": {
+  "comp_size": 286,
+  "decomp_size": 383,
+  "container": "lzss",
+  "roles": [
+   "palette"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 ds@32514"
+  ]
+ },
+ "0083": {
+  "comp_size": 270,
+  "decomp_size": 383,
+  "container": "lzss",
+  "roles": [
+   "palette"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 ds@32514"
+  ]
+ },
+ "0084": {
+  "comp_size": 5643,
+  "decomp_size": 15935,
+  "container": "lzss",
+  "roles": [
+   "tileset"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 tilegfx@0"
+  ]
+ },
+ "0085": {
+  "comp_size": 561,
+  "decomp_size": 1991,
+  "container": "lzss",
+  "roles": [
+   "tile_masks"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 gsmask@0"
+  ]
+ },
+ "0086": {
+  "comp_size": 927,
+  "decomp_size": 1007,
+  "container": "lzss",
+  "roles": [
+   "bg_tileset"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 gstiledata@0"
+  ]
+ },
+ "0087": {
+  "comp_size": 9836,
+  "decomp_size": 25215,
+  "container": "lzss",
+  "roles": [
+   "tileset"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 tilegfx@0"
+  ]
+ },
+ "0088": {
+  "comp_size": 1090,
+  "decomp_size": 3151,
+  "container": "lzss",
+  "roles": [
+   "tile_masks"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 gsmask@0"
+  ]
+ },
+ "0089": {
+  "comp_size": 1578,
+  "decomp_size": 1919,
+  "container": "lzss",
+  "roles": [
+   "bg_tileset"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 gstiledata@0"
+  ]
+ },
+ "008A": {
+  "comp_size": 9172,
+  "decomp_size": 23551,
+  "container": "lzss",
+  "roles": [
+   "tileset"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 tilegfx@0"
+  ]
+ },
+ "008B": {
+  "comp_size": 1027,
+  "decomp_size": 2943,
+  "container": "lzss",
+  "roles": [
+   "tile_masks"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 gsmask@0"
+  ]
+ },
+ "008C": {
+  "comp_size": 1502,
+  "decomp_size": 1887,
+  "container": "lzss",
+  "roles": [
+   "bg_tileset"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 gstiledata@0"
+  ]
+ },
+ "008D": {
+  "comp_size": 6821,
+  "decomp_size": 17279,
+  "container": "lzss",
+  "roles": [
+   "tileset"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 tilegfx@0"
+  ]
+ },
+ "008E": {
+  "comp_size": 661,
+  "decomp_size": 2159,
+  "container": "lzss",
+  "roles": [
+   "tile_masks"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 gsmask@0"
+  ]
+ },
+ "008F": {
+  "comp_size": 1086,
+  "decomp_size": 1207,
+  "container": "lzss",
+  "roles": [
+   "bg_tileset"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 gstiledata@0"
+  ]
+ },
+ "0090": {
+  "comp_size": 11758,
+  "decomp_size": 28735,
+  "container": "lzss",
+  "roles": [
+   "tileset"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 tilegfx@0"
+  ]
+ },
+ "0091": {
+  "comp_size": 1180,
+  "decomp_size": 3591,
+  "container": "lzss",
+  "roles": [
+   "tile_masks"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 gsmask@0"
+  ]
+ },
+ "0092": {
+  "comp_size": 2172,
+  "decomp_size": 2887,
+  "container": "lzss",
+  "roles": [
+   "bg_tileset"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 gstiledata@0"
+  ]
+ },
+ "0093": {
+  "comp_size": 9719,
+  "decomp_size": 24575,
+  "container": "lzss",
+  "roles": [
+   "tileset"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 tilegfx@0"
+  ]
+ },
+ "0094": {
+  "comp_size": 1046,
+  "decomp_size": 3071,
+  "container": "lzss",
+  "roles": [
+   "tile_masks"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 gsmask@0"
+  ]
+ },
+ "0095": {
+  "comp_size": 1655,
+  "decomp_size": 2087,
+  "container": "lzss",
+  "roles": [
+   "bg_tileset"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 gstiledata@0"
+  ]
+ },
+ "0096": {
+  "comp_size": 6353,
+  "decomp_size": 16063,
+  "container": "lzss",
+  "roles": [
+   "tileset"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 tilegfx@0"
+  ]
+ },
+ "0097": {
+  "comp_size": 640,
+  "decomp_size": 2007,
+  "container": "lzss",
+  "roles": [
+   "tile_masks"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 gsmask@0"
+  ]
+ },
+ "0098": {
+  "comp_size": 925,
+  "decomp_size": 999,
+  "container": "lzss",
+  "roles": [
+   "bg_tileset"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 gstiledata@0"
+  ]
+ },
+ "0099": {
+  "comp_size": 6052,
+  "decomp_size": 16191,
+  "container": "lzss",
+  "roles": [
+   "tileset"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 tilegfx@0"
+  ]
+ },
+ "009A": {
+  "comp_size": 488,
+  "decomp_size": 2023,
+  "container": "lzss",
+  "roles": [
+   "tile_masks"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 gsmask@0"
+  ]
+ },
+ "009B": {
+  "comp_size": 1040,
+  "decomp_size": 1167,
+  "container": "lzss",
+  "roles": [
+   "bg_tileset"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 gstiledata@0"
+  ]
+ },
+ "009C": {
+  "comp_size": 621,
+  "decomp_size": 896,
+  "container": "lzss",
+  "roles": [
+   "level_header_stripe"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 ds@9651"
+  ],
+  "level": {
+   "width": 92,
+   "height": 34,
+   "tilemap": "009D",
+   "tileset": "0084",
+   "bg_tileset": "0086"
+  }
+ },
+ "009D": {
+  "comp_size": 1590,
+  "decomp_size": 6255,
+  "container": "lzss",
+  "roles": [
+   "tilemap"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 tilemap@0"
+  ],
+  "width": 92,
+  "height": 34,
+  "header": "009C"
+ },
+ "009E": {
+  "comp_size": 698,
+  "decomp_size": 940,
+  "container": "lzss",
+  "roles": [
+   "level_header_stripe"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 ds@9651"
+  ],
+  "level": {
+   "width": 65,
+   "height": 79,
+   "tilemap": "009F",
+   "tileset": "0087",
+   "bg_tileset": "0089"
+  }
+ },
+ "009F": {
+  "comp_size": 3003,
+  "decomp_size": 10269,
+  "container": "lzss",
+  "roles": [
+   "tilemap"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 tilemap@0"
+  ],
+  "width": 65,
+  "height": 79,
+  "header": "009E"
+ },
+ "00A0": {
+  "comp_size": 683,
+  "decomp_size": 1016,
+  "container": "lzss",
+  "roles": [
+   "level_header_stripe"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 ds@9651"
+  ],
+  "level": {
+   "width": 101,
+   "height": 37,
+   "tilemap": "00A1",
+   "tileset": "008A",
+   "bg_tileset": "008C"
+  }
+ },
+ "00A1": {
+  "comp_size": 2247,
+  "decomp_size": 7473,
+  "container": "lzss",
+  "roles": [
+   "tilemap"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 tilemap@0"
+  ],
+  "width": 101,
+  "height": 37,
+  "header": "00A0"
+ },
+ "00A2": {
+  "comp_size": 805,
+  "decomp_size": 1388,
+  "container": "lzss",
+  "roles": [
+   "level_header_stripe"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 ds@9651"
+  ],
+  "level": {
+   "width": 88,
+   "height": 70,
+   "tilemap": "00A3",
+   "tileset": "008D",
+   "bg_tileset": "008F"
+  }
+ },
+ "00A3": {
+  "comp_size": 2678,
+  "decomp_size": 12319,
+  "container": "lzss",
+  "roles": [
+   "tilemap"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 tilemap@0"
+  ],
+  "width": 88,
+  "height": 70,
+  "header": "00A2"
+ },
+ "00A4": {
+  "comp_size": 698,
+  "decomp_size": 929,
+  "container": "lzss",
+  "roles": [
+   "level_header_stripe"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 ds@9651"
+  ],
+  "level": {
+   "width": 50,
+   "height": 79,
+   "tilemap": "00A5",
+   "tileset": "0090",
+   "bg_tileset": "0092"
+  }
+ },
+ "00A5": {
+  "comp_size": 2908,
+  "decomp_size": 7899,
+  "container": "lzss",
+  "roles": [
+   "tilemap"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 tilemap@0"
+  ],
+  "width": 50,
+  "height": 79,
+  "header": "00A4"
+ },
+ "00A6": {
+  "comp_size": 770,
+  "decomp_size": 1128,
+  "container": "lzss",
+  "roles": [
+   "level_header_stripe"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 ds@9651"
+  ],
+  "level": {
+   "width": 64,
+   "height": 80,
+   "tilemap": "00A7",
+   "tileset": "0093",
+   "bg_tileset": "0095"
+  }
+ },
+ "00A7": {
+  "comp_size": 3132,
+  "decomp_size": 10239,
+  "container": "lzss",
+  "roles": [
+   "tilemap"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 tilemap@0"
+  ],
+  "width": 64,
+  "height": 80,
+  "header": "00A6"
+ },
+ "00A8": {
+  "comp_size": 715,
+  "decomp_size": 1001,
+  "container": "lzss",
+  "roles": [
+   "level_header_stripe"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 ds@9651"
+  ],
+  "level": {
+   "width": 88,
+   "height": 59,
+   "tilemap": "00A9",
+   "tileset": "0096",
+   "bg_tileset": "0098"
+  }
+ },
+ "00A9": {
+  "comp_size": 2303,
+  "decomp_size": 10383,
+  "container": "lzss",
+  "roles": [
+   "tilemap"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 tilemap@0"
+  ],
+  "width": 88,
+  "height": 59,
+  "header": "00A8"
+ },
+ "00AA": {
+  "comp_size": 823,
+  "decomp_size": 1222,
+  "container": "lzss",
+  "roles": [
+   "level_header_stripe"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 ds@9651"
+  ],
+  "level": {
+   "width": 88,
+   "height": 59,
+   "tilemap": "00AB",
+   "tileset": "0099",
+   "bg_tileset": "009B"
+  }
+ },
+ "00AB": {
+  "comp_size": 2238,
+  "decomp_size": 10383,
+  "container": "lzss",
+  "roles": [
+   "tilemap"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 tilemap@0"
+  ],
+  "width": 88,
+  "height": 59,
+  "header": "00AA"
+ },
+ "00AC": {
+  "comp_size": 253,
+  "decomp_size": 383,
+  "container": "lzss",
+  "roles": [
+   "palette"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 ds@32514"
+  ]
+ },
+ "00AD": {
+  "comp_size": 34,
+  "decomp_size": 47,
+  "container": "lzss?",
+  "roles": [
+   "palette16_by_sig"
+  ],
+  "readers": []
+ },
+ "00AE": {
+  "comp_size": 12746,
+  "decomp_size": 34367,
+  "container": "lzss",
+  "roles": [
+   "tileset"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 tilegfx@0"
+  ]
+ },
+ "00AF": {
+  "comp_size": 559,
+  "decomp_size": 4295,
+  "container": "lzss",
+  "roles": [
+   "tile_masks"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 gsmask@0"
+  ]
+ },
+ "00B0": {
+  "comp_size": 2330,
+  "decomp_size": 2999,
+  "container": "lzss",
+  "roles": [
+   "bg_tileset"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 gstiledata@0"
+  ]
+ },
+ "00B1": {
+  "comp_size": 12344,
+  "decomp_size": 32959,
+  "container": "lzss",
+  "roles": [
+   "tileset"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 tilegfx@0"
+  ]
+ },
+ "00B2": {
+  "comp_size": 536,
+  "decomp_size": 4119,
+  "container": "lzss",
+  "roles": [
+   "tile_masks"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 gsmask@0"
+  ]
+ },
+ "00B3": {
+  "comp_size": 2006,
+  "decomp_size": 2463,
+  "container": "lzss",
+  "roles": [
+   "bg_tileset"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 gstiledata@0"
+  ]
+ },
+ "00B4": {
+  "comp_size": 12979,
+  "decomp_size": 35135,
+  "container": "lzss",
+  "roles": [
+   "tileset"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 tilegfx@0"
+  ]
+ },
+ "00B5": {
+  "comp_size": 622,
+  "decomp_size": 4391,
+  "container": "lzss",
+  "roles": [
+   "tile_masks"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 gsmask@0"
+  ]
+ },
+ "00B6": {
+  "comp_size": 2553,
+  "decomp_size": 3207,
+  "container": "lzss",
+  "roles": [
+   "bg_tileset"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 gstiledata@0"
+  ]
+ },
+ "00B7": {
+  "comp_size": 12815,
+  "decomp_size": 33983,
+  "container": "lzss",
+  "roles": [
+   "tileset"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 tilegfx@0"
+  ]
+ },
+ "00B8": {
+  "comp_size": 581,
+  "decomp_size": 4247,
+  "container": "lzss",
+  "roles": [
+   "tile_masks"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 gsmask@0"
+  ]
+ },
+ "00B9": {
+  "comp_size": 1948,
+  "decomp_size": 2255,
+  "container": "lzss",
+  "roles": [
+   "bg_tileset"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 gstiledata@0"
+  ]
+ },
+ "00BA": {
+  "comp_size": 12515,
+  "decomp_size": 32831,
+  "container": "lzss",
+  "roles": [
+   "tileset"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 tilegfx@0"
+  ]
+ },
+ "00BB": {
+  "comp_size": 568,
+  "decomp_size": 4103,
+  "container": "lzss",
+  "roles": [
+   "tile_masks"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 gsmask@0"
+  ]
+ },
+ "00BC": {
+  "comp_size": 1883,
+  "decomp_size": 2263,
+  "container": "lzss",
+  "roles": [
+   "bg_tileset"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 gstiledata@0"
+  ]
+ },
+ "00BD": {
+  "comp_size": 11081,
+  "decomp_size": 29503,
+  "container": "lzss",
+  "roles": [
+   "tileset"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 tilegfx@0"
+  ]
+ },
+ "00BE": {
+  "comp_size": 531,
+  "decomp_size": 3687,
+  "container": "lzss",
+  "roles": [
+   "tile_masks"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 gsmask@0"
+  ]
+ },
+ "00BF": {
+  "comp_size": 1863,
+  "decomp_size": 2231,
+  "container": "lzss",
+  "roles": [
+   "bg_tileset"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 gstiledata@0"
+  ]
+ },
+ "00C0": {
+  "comp_size": 13622,
+  "decomp_size": 35455,
+  "container": "lzss",
+  "roles": [
+   "tileset"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 tilegfx@0"
+  ]
+ },
+ "00C1": {
+  "comp_size": 595,
+  "decomp_size": 4431,
+  "container": "lzss",
+  "roles": [
+   "tile_masks"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 gsmask@0"
+  ]
+ },
+ "00C2": {
+  "comp_size": 2110,
+  "decomp_size": 2543,
+  "container": "lzss",
+  "roles": [
+   "bg_tileset"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 gstiledata@0"
+  ]
+ },
+ "00C3": {
+  "comp_size": 8864,
+  "decomp_size": 24639,
+  "container": "lzss",
+  "roles": [
+   "tileset"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 tilegfx@0"
+  ]
+ },
+ "00C4": {
+  "comp_size": 408,
+  "decomp_size": 3079,
+  "container": "lzss",
+  "roles": [
+   "tile_masks"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 gsmask@0"
+  ]
+ },
+ "00C5": {
+  "comp_size": 1579,
+  "decomp_size": 1975,
+  "container": "lzss",
+  "roles": [
+   "bg_tileset"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 gstiledata@0"
+  ]
+ },
+ "00C6": {
+  "comp_size": 353,
+  "decomp_size": 399,
+  "container": "lzss",
+  "roles": [
+   "level_header_stripe"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 ds@9651"
+  ],
+  "level": {
+   "width": 30,
+   "height": 30,
+   "tilemap": "00C7",
+   "tileset": "00C3",
+   "bg_tileset": "00C5"
+  }
+ },
+ "00C7": {
+  "comp_size": 1026,
+  "decomp_size": 1799,
+  "container": "lzss",
+  "roles": [
+   "tilemap"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 tilemap@0"
+  ],
+  "width": 30,
+  "height": 30,
+  "header": "00C6"
+ },
+ "00C8": {
+  "comp_size": 641,
+  "decomp_size": 892,
+  "container": "lzss",
+  "roles": [
+   "level_header_stripe"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 ds@9651"
+  ],
+  "level": {
+   "width": 64,
+   "height": 51,
+   "tilemap": "00C9",
+   "tileset": "00AE",
+   "bg_tileset": "00B0"
+  }
+ },
+ "00C9": {
+  "comp_size": 2886,
+  "decomp_size": 6527,
+  "container": "lzss",
+  "roles": [
+   "tilemap"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 tilemap@0"
+  ],
+  "width": 64,
+  "height": 51,
+  "header": "00C8"
+ },
+ "00CA": {
+  "comp_size": 539,
+  "decomp_size": 702,
+  "container": "lzss",
+  "roles": [
+   "level_header_stripe"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 ds@9651"
+  ],
+  "level": {
+   "width": 51,
+   "height": 50,
+   "tilemap": "00CB",
+   "tileset": "00B1",
+   "bg_tileset": "00B3"
+  }
+ },
+ "00CB": {
+  "comp_size": 2290,
+  "decomp_size": 5099,
+  "container": "lzss",
+  "roles": [
+   "tilemap"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 tilemap@0"
+  ],
+  "width": 51,
+  "height": 50,
+  "header": "00CA"
+ },
+ "00CC": {
+  "comp_size": 549,
+  "decomp_size": 699,
+  "container": "lzss",
+  "roles": [
+   "level_header_stripe"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 ds@9651"
+  ],
+  "level": {
+   "width": 80,
+   "height": 40,
+   "tilemap": "00CD",
+   "tileset": "00B4",
+   "bg_tileset": "00B6"
+  }
+ },
+ "00CD": {
+  "comp_size": 2619,
+  "decomp_size": 6399,
+  "container": "lzss",
+  "roles": [
+   "tilemap"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 tilemap@0"
+  ],
+  "width": 80,
+  "height": 40,
+  "header": "00CC"
+ },
+ "00CE": {
+  "comp_size": 900,
+  "decomp_size": 1326,
+  "container": "lzss",
+  "roles": [
+   "level_header_stripe"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 ds@9651"
+  ],
+  "level": {
+   "width": 80,
+   "height": 50,
+   "tilemap": "00CF",
+   "tileset": "00B7",
+   "bg_tileset": "00B9"
+  }
+ },
+ "00CF": {
+  "comp_size": 3074,
+  "decomp_size": 7999,
+  "container": "lzss",
+  "roles": [
+   "tilemap"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 tilemap@0"
+  ],
+  "width": 80,
+  "height": 50,
+  "header": "00CE"
+ },
+ "00D0": {
+  "comp_size": 924,
+  "decomp_size": 1430,
+  "container": "lzss",
+  "roles": [
+   "level_header_stripe"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 ds@9651"
+  ],
+  "level": {
+   "width": 77,
+   "height": 51,
+   "tilemap": "00D1",
+   "tileset": "00BA",
+   "bg_tileset": "00BC"
+  }
+ },
+ "00D1": {
+  "comp_size": 2974,
+  "decomp_size": 7853,
+  "container": "lzss",
+  "roles": [
+   "tilemap"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 tilemap@0"
+  ],
+  "width": 77,
+  "height": 51,
+  "header": "00D0"
+ },
+ "00D2": {
+  "comp_size": 924,
+  "decomp_size": 1444,
+  "container": "lzss",
+  "roles": [
+   "level_header_stripe"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 ds@9651"
+  ],
+  "level": {
+   "width": 56,
+   "height": 95,
+   "tilemap": "00D3",
+   "tileset": "00BD",
+   "bg_tileset": "00BF"
+  }
+ },
+ "00D3": {
+  "comp_size": 3558,
+  "decomp_size": 10639,
+  "container": "lzss",
+  "roles": [
+   "tilemap"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 tilemap@0"
+  ],
+  "width": 56,
+  "height": 95,
+  "header": "00D2"
+ },
+ "00D4": {
+  "comp_size": 843,
+  "decomp_size": 1229,
+  "container": "lzss",
+  "roles": [
+   "level_header_stripe"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 ds@9651"
+  ],
+  "level": {
+   "width": 103,
+   "height": 56,
+   "tilemap": "00D5",
+   "tileset": "00C0",
+   "bg_tileset": "00C2"
+  }
+ },
+ "00D5": {
+  "comp_size": 4067,
+  "decomp_size": 11535,
+  "container": "lzss",
+  "roles": [
+   "tilemap"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 tilemap@0"
+  ],
+  "width": 103,
+  "height": 56,
+  "header": "00D4"
+ },
+ "00D6": {
+  "comp_size": 272,
+  "decomp_size": 383,
+  "container": "lzss?",
+  "roles": [
+   "unreferenced"
+  ],
+  "readers": []
+ },
+ "00D7": {
+  "comp_size": 7654,
+  "decomp_size": 20607,
+  "container": "lzss?",
+  "roles": [
+   "unreferenced"
+  ],
+  "readers": []
+ },
+ "00D8": {
+  "comp_size": 404,
+  "decomp_size": 2575,
+  "container": "lzss?",
+  "roles": [
+   "unreferenced"
+  ],
+  "readers": []
+ },
+ "00D9": {
+  "comp_size": 1594,
+  "decomp_size": 1615,
+  "container": "lzss?",
+  "roles": [
+   "unreferenced"
+  ],
+  "readers": []
+ },
+ "00DA": {
+  "comp_size": 263,
+  "decomp_size": 310,
+  "container": "lzss?",
+  "roles": [
+   "unreferenced"
+  ],
+  "readers": []
+ },
+ "00DB": {
+  "comp_size": 521,
+  "decomp_size": 659,
+  "container": "lzss?",
+  "roles": [
+   "unreferenced"
+  ],
+  "readers": []
+ },
+ "00DC": {
+  "comp_size": 52,
+  "decomp_size": 47,
+  "container": "lzss",
+  "roles": [
+   "palette"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 ds@33234"
+  ]
+ },
+ "00DD": {
+  "comp_size": 20338,
+  "decomp_size": 23947,
+  "container": "lzss",
+  "roles": [
+   "anim_bank"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 chunk@0"
+  ]
+ },
+ "00DE": {
+  "comp_size": 164,
+  "decomp_size": 575,
+  "container": "lzss",
+  "roles": [
+   "sprite_gfx"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 sprite@8064",
+   "C v2_gen_exec_1c1 sprite@8352",
+   "C v2_gen_exec_1c1 sprite@7488",
+   "C v2_gen_exec_1c1 sprite@8640",
+   "C v2_gen_exec_1c1 sprite@6912",
+   "C v2_gen_exec_1c1 sprite@11520",
+   "C v2_gen_exec_1c1 sprite@8208",
+   "C v2_gen_exec_1c1 sprite@7632",
+   "C v2_gen_exec_1c1 sprite@9936",
+   "C v2_gen_exec_1c1 sprite@8496",
+   "C v2_gen_exec_1c1 sprite@7200",
+   "C v2_gen_exec_1c1 sprite@9072"
+  ]
+ },
+ "00DF": {
+  "comp_size": 324,
+  "decomp_size": 575,
+  "container": "lzss",
+  "roles": [
+   "sprite_gfx"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 sprite@8640",
+   "C v2_gen_exec_1c1 sprite@8928",
+   "C v2_gen_exec_1c1 sprite@8064",
+   "C v2_gen_exec_1c1 sprite@9216",
+   "C v2_gen_exec_1c1 sprite@7488",
+   "C v2_gen_exec_1c1 sprite@12096",
+   "C v2_gen_exec_1c1 sprite@8784",
+   "C v2_gen_exec_1c1 sprite@8208",
+   "C v2_gen_exec_1c1 sprite@10512",
+   "C v2_gen_exec_1c1 sprite@9072",
+   "C v2_gen_exec_1c1 sprite@7776",
+   "C v2_gen_exec_1c1 sprite@9648"
+  ]
+ },
+ "00E0": {
+  "comp_size": 21921,
+  "decomp_size": 24221,
+  "container": "lzss",
+  "roles": [
+   "anim_bank"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 chunk@23952"
+  ]
+ },
+ "00E1": {
+  "comp_size": 21885,
+  "decomp_size": 25046,
+  "container": "lzss",
+  "roles": [
+   "anim_bank"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 chunk@48176"
+  ]
+ },
+ "00E2": {
+  "comp_size": 20637,
+  "decomp_size": 22752,
+  "container": "lzss",
+  "roles": [
+   "anim_bank"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 chunk@91312"
+  ]
+ },
+ "00E3": {
+  "comp_size": 16382,
+  "decomp_size": 18067,
+  "container": "lzss",
+  "roles": [
+   "anim_bank"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 chunk@73232"
+  ]
+ },
+ "00E4": {
+  "comp_size": 20811,
+  "decomp_size": 22203,
+  "container": "lzss",
+  "roles": [
+   "anim_bank"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 chunk@114080"
+  ]
+ },
+ "00E5": {
+  "comp_size": 54,
+  "decomp_size": 47,
+  "container": "lzss",
+  "roles": [
+   "palette"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 ds@33042",
+   "C v2_gen_exec_1c1 ds@33186"
+  ]
+ },
+ "00E6": {
+  "comp_size": 203,
+  "decomp_size": 287,
+  "container": "lzss",
+  "roles": [
+   "sprite_gfx"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 sprite@10656",
+   "C v2_gen_exec_1c1 sprite@5184",
+   "C v2_gen_exec_1c1 sprite@17856",
+   "C v2_gen_exec_1c1 sprite@12096",
+   "C v2_gen_exec_1c1 sprite@11232"
+  ]
+ },
+ "00E7": {
+  "comp_size": 319,
+  "decomp_size": 1151,
+  "container": "lzss",
+  "roles": [
+   "sprite_gfx"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 sprite@9936",
+   "C v2_gen_exec_1c1 sprite@9792"
+  ]
+ },
+ "00E8": {
+  "comp_size": 446,
+  "decomp_size": 863,
+  "container": "lzss",
+  "roles": [
+   "sprite_gfx"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 sprite@13248",
+   "C v2_gen_exec_1c1 sprite@12672",
+   "C v2_gen_exec_1c1 sprite@12240",
+   "C v2_gen_exec_1c1 sprite@20592",
+   "C v2_gen_exec_1c1 sprite@17424",
+   "C v2_gen_exec_1c1 sprite@21024",
+   "C v2_gen_exec_1c1 sprite@12096",
+   "C v2_gen_exec_1c1 sprite@14688",
+   "C v2_gen_exec_1c1 sprite@14256",
+   "C v2_gen_exec_1c1 sprite@8640",
+   "C v2_gen_exec_1c1 sprite@11520",
+   "C v2_gen_exec_1c1 sprite@13680"
+  ]
+ },
+ "00E9": {
+  "comp_size": 766,
+  "decomp_size": 2303,
+  "container": "lzss",
+  "roles": [
+   "sprite_gfx"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 sprite@10944",
+   "C v2_gen_exec_1c1 sprite@10368"
+  ]
+ },
+ "00EA": {
+  "comp_size": 282,
+  "decomp_size": 1151,
+  "container": "lzss",
+  "roles": [
+   "sprite_gfx"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 sprite@19008",
+   "C v2_gen_exec_1c1 sprite@16416",
+   "C v2_gen_exec_1c1 sprite@14976",
+   "C v2_gen_exec_1c1 sprite@15264"
+  ]
+ },
+ "00EB": {
+  "comp_size": 1534,
+  "decomp_size": 2316,
+  "container": "lzss",
+  "roles": [
+   "anim_bank"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 chunk@146992",
+   "C v2_gen_exec_1c1 chunk@144736"
+  ]
+ },
+ "00EC": {
+  "comp_size": 1286,
+  "decomp_size": 1827,
+  "container": "lzss",
+  "roles": [
+   "anim_bank"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 chunk@147056"
+  ]
+ },
+ "00ED": {
+  "comp_size": 261,
+  "decomp_size": 287,
+  "container": "lzss",
+  "roles": [
+   "sprite_gfx"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 sprite@14112",
+   "C v2_gen_exec_1c1 sprite@13536",
+   "C v2_gen_exec_1c1 sprite@16992"
+  ]
+ },
+ "00EE": {
+  "comp_size": 45,
+  "decomp_size": 47,
+  "container": "lzss",
+  "roles": [
+   "palette"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 ds@33090"
+  ]
+ },
+ "00EF": {
+  "comp_size": 1100,
+  "decomp_size": 2021,
+  "container": "lzss",
+  "roles": [
+   "anim_bank"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 chunk@149744",
+   "C v2_gen_exec_1c1 chunk@157744",
+   "C v2_gen_exec_1c1 chunk@151760",
+   "C v2_gen_exec_1c1 chunk@150624",
+   "C v2_gen_exec_1c1 chunk@145232"
+  ]
+ },
+ "00F0": {
+  "comp_size": 4793,
+  "decomp_size": 13823,
+  "container": "lzss?",
+  "roles": [
+   "unreferenced"
+  ],
+  "readers": []
+ },
+ "00F1": {
+  "comp_size": 54,
+  "decomp_size": 47,
+  "container": "lzss?",
+  "roles": [
+   "palette16_by_sig"
+  ],
+  "readers": []
+ },
+ "00F2": {
+  "comp_size": 800,
+  "decomp_size": 2042,
+  "container": "lzss",
+  "roles": [
+   "anim_bank"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 chunk@141568"
+  ]
+ },
+ "00F3": {
+  "comp_size": 1473,
+  "decomp_size": 3455,
+  "container": "lzss?",
+  "roles": [
+   "unreferenced"
+  ],
+  "readers": []
+ },
+ "00F4": {
+  "comp_size": 364,
+  "decomp_size": 1151,
+  "container": "lzss",
+  "roles": [
+   "sprite_gfx"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 sprite@18720",
+   "C v2_gen_exec_1c1 sprite@19728"
+  ]
+ },
+ "00F5": {
+  "comp_size": 511,
+  "decomp_size": 2303,
+  "container": "lzss",
+  "roles": [
+   "sprite_gfx"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 sprite@5760",
+   "C v2_gen_exec_1c1 sprite@6048",
+   "C v2_gen_exec_1c1 sprite@5184",
+   "C v2_gen_exec_1c1 sprite@6336",
+   "C v2_gen_exec_1c1 sprite@4608",
+   "C v2_gen_exec_1c1 sprite@9216",
+   "C v2_gen_exec_1c1 sprite@5904",
+   "C v2_gen_exec_1c1 sprite@5328",
+   "C v2_gen_exec_1c1 sprite@7632",
+   "C v2_gen_exec_1c1 sprite@6192",
+   "C v2_gen_exec_1c1 sprite@4896",
+   "C v2_gen_exec_1c1 sprite@6768"
+  ]
+ },
+ "00F6": {
+  "comp_size": 38,
+  "decomp_size": 47,
+  "container": "lzss",
+  "roles": [
+   "palette"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 ds@33090",
+   "C v2_gen_exec_1c1 ds@33138"
+  ]
+ },
+ "00F7": {
+  "comp_size": 35,
+  "decomp_size": 47,
+  "container": "lzss",
+  "roles": [
+   "palette"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 ds@33090"
+  ]
+ },
+ "00F8": {
+  "comp_size": 4018,
+  "decomp_size": 4841,
+  "container": "lzss",
+  "roles": [
+   "anim_bank"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 chunk@139168",
+   "C v2_gen_exec_1c1 chunk@143568",
+   "C v2_gen_exec_1c1 chunk@136288"
+  ]
+ },
+ "00F9": {
+  "comp_size": 54,
+  "decomp_size": 47,
+  "container": "lzss",
+  "roles": [
+   "palette"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 ds@33138"
+  ]
+ },
+ "00FA": {
+  "comp_size": 6658,
+  "decomp_size": 7263,
+  "container": "lzss",
+  "roles": [
+   "anim_bank"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 chunk@136288",
+   "C v2_gen_exec_1c1 chunk@145776"
+  ]
+ },
+ "00FB": {
+  "comp_size": 34,
+  "decomp_size": 47,
+  "container": "lzss",
+  "roles": [
+   "palette"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 ds@33186"
+  ]
+ },
+ "00FC": {
+  "comp_size": 2269,
+  "decomp_size": 4627,
+  "container": "lzss",
+  "roles": [
+   "anim_bank"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 chunk@144016",
+   "C v2_gen_exec_1c1 chunk@148416",
+   "C v2_gen_exec_1c1 chunk@141136"
+  ]
+ },
+ "00FD": {
+  "comp_size": 247,
+  "decomp_size": 575,
+  "container": "lzss",
+  "roles": [
+   "sprite_gfx"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 sprite@5184",
+   "C v2_gen_exec_1c1 sprite@5472",
+   "C v2_gen_exec_1c1 sprite@4608",
+   "C v2_gen_exec_1c1 sprite@5760",
+   "C v2_gen_exec_1c1 sprite@12960"
+  ]
+ },
+ "00FE": {
+  "comp_size": 48,
+  "decomp_size": 47,
+  "container": "lzss",
+  "roles": [
+   "palette"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 ds@33138"
+  ]
+ },
+ "00FF": {
+  "comp_size": 3589,
+  "decomp_size": 4408,
+  "container": "lzss",
+  "roles": [
+   "anim_bank"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 chunk@136288",
+   "C v2_gen_exec_1c1 chunk@141568",
+   "C v2_gen_exec_1c1 chunk@141984"
+  ]
+ },
+ "0100": {
+  "comp_size": 47,
+  "decomp_size": 47,
+  "container": "lzss",
+  "roles": [
+   "palette"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 ds@33138",
+   "C v2_gen_exec_1c1 ds@33090"
+  ]
+ },
+ "0101": {
+  "comp_size": 2179,
+  "decomp_size": 3244,
+  "container": "lzss",
+  "roles": [
+   "anim_bank"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 chunk@141408",
+   "C v2_gen_exec_1c1 chunk@136288",
+   "C v2_gen_exec_1c1 chunk@146400"
+  ]
+ },
+ "0102": {
+  "comp_size": 34,
+  "decomp_size": 47,
+  "container": "lzss",
+  "roles": [
+   "palette"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 ds@33186"
+  ]
+ },
+ "0103": {
+  "comp_size": 2837,
+  "decomp_size": 4482,
+  "container": "lzss",
+  "roles": [
+   "anim_bank"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 chunk@136288",
+   "C v2_gen_exec_1c1 chunk@138864"
+  ]
+ },
+ "0104": {
+  "comp_size": 45,
+  "decomp_size": 47,
+  "container": "lzss",
+  "roles": [
+   "palette"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 ds@33090"
+  ]
+ },
+ "0105": {
+  "comp_size": 3173,
+  "decomp_size": 5108,
+  "container": "lzss",
+  "roles": [
+   "anim_bank"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 chunk@136288"
+  ]
+ },
+ "0106": {
+  "comp_size": 111,
+  "decomp_size": 287,
+  "container": "lzss",
+  "roles": [
+   "sprite_gfx"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 sprite@16704",
+   "C v2_gen_exec_1c1 sprite@13824",
+   "C v2_gen_exec_1c1 sprite@15840",
+   "C v2_gen_exec_1c1 sprite@21024",
+   "C v2_gen_exec_1c1 sprite@9792"
+  ]
+ },
+ "0107": {
+  "comp_size": 50,
+  "decomp_size": 47,
+  "container": "lzss",
+  "roles": [
+   "palette"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 ds@33186",
+   "C v2_gen_exec_1c1 ds@33138"
+  ]
+ },
+ "0108": {
+  "comp_size": 3298,
+  "decomp_size": 5274,
+  "container": "lzss",
+  "roles": [
+   "anim_bank"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 chunk@140704",
+   "C v2_gen_exec_1c1 chunk@140784",
+   "C v2_gen_exec_1c1 chunk@136288"
+  ]
+ },
+ "0109": {
+  "comp_size": 51,
+  "decomp_size": 47,
+  "container": "lzss",
+  "roles": [
+   "palette"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 ds@33138"
+  ]
+ },
+ "010A": {
+  "comp_size": 1369,
+  "decomp_size": 2072,
+  "container": "lzss",
+  "roles": [
+   "anim_bank"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 chunk@143360"
+  ]
+ },
+ "010B": {
+  "comp_size": 46,
+  "decomp_size": 47,
+  "container": "lzss",
+  "roles": [
+   "palette"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 ds@33090"
+  ]
+ },
+ "010C": {
+  "comp_size": 747,
+  "decomp_size": 761,
+  "container": "lzss",
+  "roles": [
+   "anim_bank"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 chunk@138848",
+   "C v2_gen_exec_1c1 chunk@144160",
+   "C v2_gen_exec_1c1 chunk@141600"
+  ]
+ },
+ "010D": {
+  "comp_size": 52,
+  "decomp_size": 47,
+  "container": "lzss",
+  "roles": [
+   "palette"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 ds@33138"
+  ]
+ },
+ "010E": {
+  "comp_size": 2345,
+  "decomp_size": 5298,
+  "container": "lzss",
+  "roles": [
+   "anim_bank"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 chunk@139616",
+   "C v2_gen_exec_1c1 chunk@136288"
+  ]
+ },
+ "010F": {
+  "comp_size": 156,
+  "decomp_size": 287,
+  "container": "lzss",
+  "roles": [
+   "sprite_gfx"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 sprite@6048",
+   "C v2_gen_exec_1c1 sprite@7200",
+   "C v2_gen_exec_1c1 sprite@16704",
+   "C v2_gen_exec_1c1 sprite@5760",
+   "C v2_gen_exec_1c1 sprite@13248",
+   "C v2_gen_exec_1c1 sprite@14112"
+  ]
+ },
+ "0110": {
+  "comp_size": 1017,
+  "decomp_size": 2303,
+  "container": "lzss",
+  "roles": [
+   "sprite_gfx"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 sprite@18144"
+  ]
+ },
+ "0111": {
+  "comp_size": 48,
+  "decomp_size": 47,
+  "container": "lzss",
+  "roles": [
+   "palette"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 ds@33186"
+  ]
+ },
+ "0112": {
+  "comp_size": 1346,
+  "decomp_size": 2554,
+  "container": "lzss",
+  "roles": [
+   "anim_bank"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 chunk@136288",
+   "C v2_gen_exec_1c1 chunk@141600",
+   "C v2_gen_exec_1c1 chunk@149648"
+  ]
+ },
+ "0113": {
+  "comp_size": 119,
+  "decomp_size": 143,
+  "container": "lzss",
+  "roles": [
+   "sprite_gfx"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 sprite@15552",
+   "C v2_gen_exec_1c1 sprite@7488",
+   "C v2_gen_exec_1c1 sprite@20448",
+   "C v2_gen_exec_1c1 sprite@6048",
+   "C v2_gen_exec_1c1 sprite@22680",
+   "C v2_gen_exec_1c1 sprite@21888",
+   "C v2_gen_exec_1c1 sprite@23040",
+   "C v2_gen_exec_1c1 sprite@18576"
+  ]
+ },
+ "0114": {
+  "comp_size": 55,
+  "decomp_size": 47,
+  "container": "lzss",
+  "roles": [
+   "palette"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 ds@33138",
+   "C v2_gen_exec_1c1 ds@33090"
+  ]
+ },
+ "0115": {
+  "comp_size": 1490,
+  "decomp_size": 2143,
+  "container": "lzss",
+  "roles": [
+   "anim_bank"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 chunk@136288",
+   "C v2_gen_exec_1c1 chunk@144048"
+  ]
+ },
+ "0116": {
+  "comp_size": 198,
+  "decomp_size": 431,
+  "container": "lzss",
+  "roles": [
+   "sprite_gfx"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 sprite@6336",
+   "C v2_gen_exec_1c1 sprite@16992"
+  ]
+ },
+ "0117": {
+  "comp_size": 54,
+  "decomp_size": 47,
+  "container": "lzss",
+  "roles": [
+   "palette"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 ds@33186"
+  ]
+ },
+ "0118": {
+  "comp_size": 50,
+  "decomp_size": 47,
+  "container": "lzss",
+  "roles": [
+   "palette"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 ds@33186"
+  ]
+ },
+ "0119": {
+  "comp_size": 2199,
+  "decomp_size": 2747,
+  "container": "lzss",
+  "roles": [
+   "anim_bank"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 chunk@141296",
+   "C v2_gen_exec_1c1 chunk@138448",
+   "C v2_gen_exec_1c1 chunk@136288",
+   "C v2_gen_exec_1c1 chunk@143456"
+  ]
+ },
+ "011A": {
+  "comp_size": 54,
+  "decomp_size": 47,
+  "container": "lzss",
+  "roles": [
+   "palette"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 ds@33138",
+   "C v2_gen_exec_1c1 ds@33090"
+  ]
+ },
+ "011B": {
+  "comp_size": 53,
+  "decomp_size": 47,
+  "container": "lzss",
+  "roles": [
+   "palette"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 ds@33138"
+  ]
+ },
+ "011C": {
+  "comp_size": 4098,
+  "decomp_size": 4992,
+  "container": "lzss",
+  "roles": [
+   "anim_bank"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 chunk@136288",
+   "C v2_gen_exec_1c1 chunk@161312",
+   "C v2_gen_exec_1c1 chunk@138448"
+  ]
+ },
+ "011D": {
+  "comp_size": 2173,
+  "decomp_size": 3975,
+  "container": "lzss",
+  "roles": [
+   "anim_bank"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 chunk@148656",
+   "C v2_gen_exec_1c1 chunk@153056",
+   "C v2_gen_exec_1c1 chunk@144048",
+   "C v2_gen_exec_1c1 chunk@145776",
+   "C v2_gen_exec_1c1 chunk@141296",
+   "C v2_gen_exec_1c1 chunk@141200",
+   "C v2_gen_exec_1c1 chunk@139040",
+   "C v2_gen_exec_1c1 chunk@152048",
+   "C v2_gen_exec_1c1 chunk@145984",
+   "C v2_gen_exec_1c1 chunk@148640",
+   "C v2_gen_exec_1c1 chunk@149824",
+   "C v2_gen_exec_1c1 chunk@145440",
+   "C v2_gen_exec_1c1 chunk@144928",
+   "C v2_gen_exec_1c1 chunk@146064",
+   "C v2_gen_exec_1c1 chunk@142368",
+   "C v2_gen_exec_1c1 chunk@139616",
+   "C v2_gen_exec_1c1 chunk@141408",
+   "C v2_gen_exec_1c1 chunk@144656",
+   "C v2_gen_exec_1c1 chunk@139536",
+   "C v2_gen_exec_1c1 chunk@136288",
+   "C v2_gen_exec_1c1 chunk@146208"
+  ]
+ },
+ "011E": {
+  "comp_size": 297,
+  "decomp_size": 1151,
+  "container": "lzss",
+  "roles": [
+   "sprite_gfx"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 sprite@9792",
+   "C v2_gen_exec_1c1 sprite@9216",
+   "C v2_gen_exec_1c1 sprite@16128",
+   "C v2_gen_exec_1c1 sprite@8064",
+   "C v2_gen_exec_1c1 sprite@14544",
+   "C v2_gen_exec_1c1 sprite@12384"
+  ]
+ },
+ "011F": {
+  "comp_size": 1240,
+  "decomp_size": 4319,
+  "container": "lzss",
+  "roles": [
+   "sprite_gfx"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 sprite@9504",
+   "C v2_gen_exec_1c1 sprite@9216",
+   "C v2_gen_exec_1c1 sprite@14688",
+   "C v2_gen_exec_1c1 sprite@13752"
+  ]
+ },
+ "0120": {
+  "comp_size": 140,
+  "decomp_size": 215,
+  "container": "lzss",
+  "roles": [
+   "sprite_gfx"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 sprite@13536"
+  ]
+ },
+ "0121": {
+  "comp_size": 287,
+  "decomp_size": 863,
+  "container": "lzss",
+  "roles": [
+   "sprite_gfx"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 sprite@19008",
+   "C v2_gen_exec_1c1 sprite@11520"
+  ]
+ },
+ "0122": {
+  "comp_size": 657,
+  "decomp_size": 3455,
+  "container": "lzss",
+  "roles": [
+   "sprite_gfx"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 sprite@8640",
+   "C v2_gen_exec_1c1 sprite@8064",
+   "C v2_gen_exec_1c1 sprite@17856"
+  ]
+ },
+ "0123": {
+  "comp_size": 51,
+  "decomp_size": 47,
+  "container": "lzss",
+  "roles": [
+   "palette"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 ds@32946"
+  ]
+ },
+ "0124": {
+  "comp_size": 39,
+  "decomp_size": 47,
+  "container": "lzss",
+  "roles": [
+   "palette"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 ds@32994"
+  ]
+ },
+ "0125": {
+  "comp_size": 1440,
+  "decomp_size": 4607,
+  "container": "lzss?",
+  "roles": [
+   "unreferenced"
+  ],
+  "readers": []
+ },
+ "0126": {
+  "comp_size": 815,
+  "decomp_size": 2303,
+  "container": "lzss",
+  "roles": [
+   "sprite_gfx"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 sprite@14976"
+  ]
+ },
+ "0127": {
+  "comp_size": 955,
+  "decomp_size": 1727,
+  "container": "lzss",
+  "roles": [
+   "sprite_gfx"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 sprite@14688",
+   "C v2_gen_exec_1c1 sprite@12384",
+   "C v2_gen_exec_1c1 sprite@13824",
+   "C v2_gen_exec_1c1 sprite@5760",
+   "C v2_gen_exec_1c1 sprite@15408",
+   "C v2_gen_exec_1c1 sprite@14112",
+   "C v2_gen_exec_1c1 sprite@11952"
+  ]
+ },
+ "0128": {
+  "comp_size": 685,
+  "decomp_size": 1151,
+  "container": "lzss",
+  "roles": [
+   "sprite_gfx"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 sprite@12672"
+  ]
+ },
+ "0129": {
+  "comp_size": 280,
+  "decomp_size": 575,
+  "container": "lzss",
+  "roles": [
+   "sprite_gfx"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 sprite@4608",
+   "C v2_gen_exec_1c1 sprite@20736",
+   "C v2_gen_exec_1c1 sprite@12384",
+   "C v2_gen_exec_1c1 sprite@17280",
+   "C v2_gen_exec_1c1 sprite@6048",
+   "C v2_gen_exec_1c1 sprite@17856",
+   "C v2_gen_exec_1c1 sprite@20448",
+   "C v2_gen_exec_1c1 sprite@22464",
+   "C v2_gen_exec_1c1 sprite@16128",
+   "C v2_gen_exec_1c1 sprite@10368",
+   "C v2_gen_exec_1c1 sprite@13248",
+   "C v2_gen_exec_1c1 sprite@12096",
+   "C v2_gen_exec_1c1 sprite@16704",
+   "C v2_gen_exec_1c1 sprite@19872",
+   "C v2_gen_exec_1c1 sprite@21024",
+   "C v2_gen_exec_1c1 sprite@18864",
+   "C v2_gen_exec_1c1 sprite@11232"
+  ]
+ },
+ "012A": {
+  "comp_size": 434,
+  "decomp_size": 1151,
+  "container": "lzss",
+  "roles": [
+   "sprite_gfx"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 sprite@13824",
+   "C v2_gen_exec_1c1 sprite@13536",
+   "C v2_gen_exec_1c1 sprite@11520",
+   "C v2_gen_exec_1c1 sprite@4608",
+   "C v2_gen_exec_1c1 sprite@9360",
+   "C v2_gen_exec_1c1 sprite@10800",
+   "C v2_gen_exec_1c1 sprite@8784",
+   "C v2_gen_exec_1c1 sprite@8640"
+  ]
+ },
+ "012B": {
+  "comp_size": 2596,
+  "decomp_size": 3623,
+  "container": "lzss",
+  "roles": [
+   "anim_bank"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 chunk@148416",
+   "C v2_gen_exec_1c1 chunk@146192"
+  ]
+ },
+ "012C": {
+  "comp_size": 301,
+  "decomp_size": 575,
+  "container": "lzss",
+  "roles": [
+   "sprite_gfx"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 sprite@9216",
+   "C v2_gen_exec_1c1 sprite@14976",
+   "C v2_gen_exec_1c1 sprite@15840",
+   "C v2_gen_exec_1c1 sprite@16416",
+   "C v2_gen_exec_1c1 sprite@14112",
+   "C v2_gen_exec_1c1 sprite@9792",
+   "C v2_gen_exec_1c1 sprite@12528",
+   "C v2_gen_exec_1c1 sprite@13536",
+   "C v2_gen_exec_1c1 sprite@13680",
+   "C v2_gen_exec_1c1 sprite@11808",
+   "C v2_gen_exec_1c1 sprite@13104",
+   "C v2_gen_exec_1c1 sprite@12960",
+   "C v2_gen_exec_1c1 sprite@9648",
+   "C v2_gen_exec_1c1 sprite@17568",
+   "C v2_gen_exec_1c1 sprite@8064",
+   "C v2_gen_exec_1c1 sprite@17280",
+   "C v2_gen_exec_1c1 sprite@17856",
+   "C v2_gen_exec_1c1 sprite@5760"
+  ]
+ },
+ "012D": {
+  "comp_size": 310,
+  "decomp_size": 575,
+  "container": "lzss",
+  "roles": [
+   "sprite_gfx"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 sprite@5184",
+   "C v2_gen_exec_1c1 sprite@15552",
+   "C v2_gen_exec_1c1 sprite@16992",
+   "C v2_gen_exec_1c1 sprite@14256",
+   "C v2_gen_exec_1c1 sprite@9504",
+   "C v2_gen_exec_1c1 sprite@14832",
+   "C v2_gen_exec_1c1 sprite@14976",
+   "C v2_gen_exec_1c1 sprite@14688",
+   "C v2_gen_exec_1c1 sprite@6624",
+   "C v2_gen_exec_1c1 sprite@21888",
+   "C v2_gen_exec_1c1 sprite@11808",
+   "C v2_gen_exec_1c1 sprite@20448",
+   "C v2_gen_exec_1c1 sprite@8064",
+   "C v2_gen_exec_1c1 sprite@13680",
+   "C v2_gen_exec_1c1 sprite@12384"
+  ]
+ },
+ "012E": {
+  "comp_size": 343,
+  "decomp_size": 863,
+  "container": "lzss",
+  "roles": [
+   "sprite_gfx"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 sprite@9792",
+   "C v2_gen_exec_1c1 sprite@20160",
+   "C v2_gen_exec_1c1 sprite@16128",
+   "C v2_gen_exec_1c1 sprite@14976",
+   "C v2_gen_exec_1c1 sprite@16992",
+   "C v2_gen_exec_1c1 sprite@19872",
+   "C v2_gen_exec_1c1 sprite@10368",
+   "C v2_gen_exec_1c1 sprite@18072",
+   "C v2_gen_exec_1c1 sprite@7488",
+   "C v2_gen_exec_1c1 sprite@11664",
+   "C v2_gen_exec_1c1 sprite@9936",
+   "C v2_gen_exec_1c1 sprite@8640",
+   "C v2_gen_exec_1c1 sprite@12240",
+   "C v2_gen_exec_1c1 sprite@5184",
+   "C v2_gen_exec_1c1 sprite@12096",
+   "C v2_gen_exec_1c1 sprite@16560",
+   "C v2_gen_exec_1c1 sprite@13536",
+   "C v2_gen_exec_1c1 sprite@8352",
+   "C v2_gen_exec_1c1 sprite@12960",
+   "C v2_gen_exec_1c1 sprite@10944",
+   "C v2_gen_exec_1c1 sprite@13824",
+   "C v2_gen_exec_1c1 sprite@12672",
+   "C v2_gen_exec_1c1 sprite@17280",
+   "C v2_gen_exec_1c1 sprite@15120",
+   "C v2_gen_exec_1c1 sprite@9504",
+   "C v2_gen_exec_1c1 sprite@19584",
+   "C v2_gen_exec_1c1 sprite@18864"
+  ]
+ },
+ "012F": {
+  "comp_size": 2258,
+  "decomp_size": 4607,
+  "container": "lzss",
+  "roles": [
+   "sprite_gfx"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 sprite@0"
+  ]
+ },
+ "0130": {
+  "comp_size": 183,
+  "decomp_size": 287,
+  "container": "lzss",
+  "roles": [
+   "sprite_gfx"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 sprite@4608"
+  ]
+ },
+ "0131": {
+  "comp_size": 723,
+  "decomp_size": 1151,
+  "container": "lzss",
+  "roles": [
+   "sprite_gfx"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 sprite@4896"
+  ]
+ },
+ "0132": {
+  "comp_size": 300,
+  "decomp_size": 575,
+  "container": "lzss",
+  "roles": [
+   "sprite_gfx"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 sprite@0",
+   "C v2_gen_exec_1c1 sprite@20736"
+  ]
+ },
+ "0133": {
+  "comp_size": 1186,
+  "decomp_size": 2303,
+  "container": "lzss",
+  "roles": [
+   "sprite_gfx"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 sprite@12672"
+  ]
+ },
+ "0134": {
+  "comp_size": 401,
+  "decomp_size": 863,
+  "container": "lzss",
+  "roles": [
+   "sprite_gfx"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 sprite@8352"
+  ]
+ },
+ "0135": {
+  "comp_size": 104,
+  "decomp_size": 215,
+  "container": "lzss",
+  "roles": [
+   "sprite_gfx"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 sprite@21312"
+  ]
+ },
+ "0136": {
+  "comp_size": 1857,
+  "decomp_size": 2565,
+  "container": "lzss",
+  "roles": [
+   "anim_bank"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 chunk@146064",
+   "C v2_gen_exec_1c1 chunk@143616",
+   "C v2_gen_exec_1c1 chunk@136288"
+  ]
+ },
+ "0137": {
+  "comp_size": 420,
+  "decomp_size": 575,
+  "container": "lzss",
+  "roles": [
+   "sprite_gfx"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 sprite@11232"
+  ]
+ },
+ "0138": {
+  "comp_size": 773,
+  "decomp_size": 1151,
+  "container": "lzss",
+  "roles": [
+   "sprite_gfx"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 sprite@15840"
+  ]
+ },
+ "0139": {
+  "comp_size": 647,
+  "decomp_size": 1151,
+  "container": "lzss",
+  "roles": [
+   "sprite_gfx"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 sprite@14256"
+  ]
+ },
+ "013A": {
+  "comp_size": 374,
+  "decomp_size": 1439,
+  "container": "lzss",
+  "roles": [
+   "sprite_gfx"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 sprite@12672",
+   "C v2_gen_exec_1c1 sprite@15408"
+  ]
+ },
+ "013B": {
+  "comp_size": 53,
+  "decomp_size": 47,
+  "container": "lzss",
+  "roles": [
+   "palette"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 ds@33090"
+  ]
+ },
+ "013C": {
+  "comp_size": 622,
+  "decomp_size": 1151,
+  "container": "lzss",
+  "roles": [
+   "sprite_gfx"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 sprite@10512",
+   "C v2_gen_exec_1c1 sprite@10656",
+   "C v2_gen_exec_1c1 sprite@11088",
+   "C v2_gen_exec_1c1 sprite@10944"
+  ]
+ },
+ "013D": {
+  "comp_size": 153,
+  "decomp_size": 287,
+  "container": "lzss",
+  "roles": [
+   "sprite_gfx"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 sprite@12384",
+   "C v2_gen_exec_1c1 sprite@19584"
+  ]
+ },
+ "013E": {
+  "comp_size": 721,
+  "decomp_size": 1151,
+  "container": "lzss",
+  "roles": [
+   "sprite_gfx"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 sprite@13104",
+   "C v2_gen_exec_1c1 sprite@11808",
+   "C v2_gen_exec_1c1 sprite@17568",
+   "C v2_gen_exec_1c1 sprite@8784",
+   "C v2_gen_exec_1c1 sprite@10080",
+   "C v2_gen_exec_1c1 sprite@13680",
+   "C v2_gen_exec_1c1 sprite@13536"
+  ]
+ },
+ "013F": {
+  "comp_size": 282,
+  "decomp_size": 575,
+  "container": "lzss",
+  "roles": [
+   "sprite_gfx"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 sprite@12960",
+   "C v2_gen_exec_1c1 sprite@5760",
+   "C v2_gen_exec_1c1 sprite@13536",
+   "C v2_gen_exec_1c1 sprite@8064",
+   "C v2_gen_exec_1c1 sprite@17856",
+   "C v2_gen_exec_1c1 sprite@19440"
+  ]
+ },
+ "0140": {
+  "comp_size": 268,
+  "decomp_size": 1151,
+  "container": "lzss",
+  "roles": [
+   "sprite_gfx"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 sprite@8640"
+  ]
+ },
+ "0141": {
+  "comp_size": 306,
+  "decomp_size": 863,
+  "container": "lzss",
+  "roles": [
+   "sprite_gfx"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 sprite@16416",
+   "C v2_gen_exec_1c1 sprite@18000",
+   "C v2_gen_exec_1c1 sprite@9504"
+  ]
+ },
+ "0142": {
+  "comp_size": 1021,
+  "decomp_size": 1699,
+  "container": "lzss",
+  "roles": [
+   "anim_bank"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 chunk@159152",
+   "C v2_gen_exec_1c1 chunk@148032",
+   "C v2_gen_exec_1c1 chunk@149760",
+   "C v2_gen_exec_1c1 chunk@145280",
+   "C v2_gen_exec_1c1 chunk@157040",
+   "C v2_gen_exec_1c1 chunk@145184",
+   "C v2_gen_exec_1c1 chunk@143024",
+   "C v2_gen_exec_1c1 chunk@156032",
+   "C v2_gen_exec_1c1 chunk@149968",
+   "C v2_gen_exec_1c1 chunk@152624",
+   "C v2_gen_exec_1c1 chunk@153808",
+   "C v2_gen_exec_1c1 chunk@149424",
+   "C v2_gen_exec_1c1 chunk@148912",
+   "C v2_gen_exec_1c1 chunk@150048",
+   "C v2_gen_exec_1c1 chunk@146352",
+   "C v2_gen_exec_1c1 chunk@143600",
+   "C v2_gen_exec_1c1 chunk@145392",
+   "C v2_gen_exec_1c1 chunk@148640",
+   "C v2_gen_exec_1c1 chunk@143520",
+   "C v2_gen_exec_1c1 chunk@140272",
+   "C v2_gen_exec_1c1 chunk@166320",
+   "C v2_gen_exec_1c1 chunk@150192"
+  ]
+ },
+ "0143": {
+  "comp_size": 1512,
+  "decomp_size": 2102,
+  "container": "lzss",
+  "roles": [
+   "anim_bank"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 chunk@157040"
+  ]
+ },
+ "0144": {
+  "comp_size": 493,
+  "decomp_size": 1151,
+  "container": "lzss",
+  "roles": [
+   "sprite_gfx"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 sprite@14400",
+   "C v2_gen_exec_1c1 sprite@13824",
+   "C v2_gen_exec_1c1 sprite@9792",
+   "C v2_gen_exec_1c1 sprite@15840"
+  ]
+ },
+ "0145": {
+  "comp_size": 965,
+  "decomp_size": 3455,
+  "container": "lzss",
+  "roles": [
+   "sprite_gfx"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 sprite@15552",
+   "C v2_gen_exec_1c1 sprite@10368",
+   "C v2_gen_exec_1c1 sprite@10224"
+  ]
+ },
+ "0146": {
+  "comp_size": 192,
+  "decomp_size": 575,
+  "container": "lzss",
+  "roles": [
+   "sprite_gfx"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 sprite@10944"
+  ]
+ },
+ "0147": {
+  "comp_size": 909,
+  "decomp_size": 2591,
+  "container": "lzss",
+  "roles": [
+   "sprite_gfx"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 sprite@14112",
+   "C v2_gen_exec_1c1 sprite@17568",
+   "C v2_gen_exec_1c1 sprite@19008"
+  ]
+ },
+ "0148": {
+  "comp_size": 509,
+  "decomp_size": 2303,
+  "container": "lzss",
+  "roles": [
+   "sprite_gfx"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 sprite@10944",
+   "C v2_gen_exec_1c1 sprite@10080",
+   "C v2_gen_exec_1c1 sprite@16704",
+   "C v2_gen_exec_1c1 sprite@8640"
+  ]
+ },
+ "0149": {
+  "comp_size": 641,
+  "decomp_size": 2303,
+  "container": "lzss",
+  "roles": [
+   "sprite_gfx"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 sprite@18144",
+   "C v2_gen_exec_1c1 sprite@12240",
+   "C v2_gen_exec_1c1 sprite@18432",
+   "C v2_gen_exec_1c1 sprite@13536",
+   "C v2_gen_exec_1c1 sprite@14400",
+   "C v2_gen_exec_1c1 sprite@16992",
+   "C v2_gen_exec_1c1 sprite@10944",
+   "C v2_gen_exec_1c1 sprite@14688",
+   "C v2_gen_exec_1c1 sprite@11232",
+   "C v2_gen_exec_1c1 sprite@13824",
+   "C v2_gen_exec_1c1 sprite@24480",
+   "C v2_gen_exec_1c1 sprite@22320",
+   "C v2_gen_exec_1c1 sprite@17280",
+   "C v2_gen_exec_1c1 sprite@15696"
+  ]
+ },
+ "014A": {
+  "comp_size": 409,
+  "decomp_size": 1151,
+  "container": "lzss",
+  "roles": [
+   "sprite_gfx"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 sprite@9792",
+   "C v2_gen_exec_1c1 sprite@12384"
+  ]
+ },
+ "014B": {
+  "comp_size": 717,
+  "decomp_size": 2303,
+  "container": "lzss",
+  "roles": [
+   "sprite_gfx"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 sprite@9792"
+  ]
+ },
+ "014C": {
+  "comp_size": 387,
+  "decomp_size": 1151,
+  "container": "lzss",
+  "roles": [
+   "sprite_gfx"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 sprite@12096",
+   "C v2_gen_exec_1c1 sprite@8064",
+   "C v2_gen_exec_1c1 sprite@9216"
+  ]
+ },
+ "014D": {
+  "comp_size": 390,
+  "decomp_size": 863,
+  "container": "lzss",
+  "roles": [
+   "sprite_gfx"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 sprite@17280",
+   "C v2_gen_exec_1c1 sprite@16128",
+   "C v2_gen_exec_1c1 sprite@21024"
+  ]
+ },
+ "014E": {
+  "comp_size": 433,
+  "decomp_size": 863,
+  "container": "lzss",
+  "roles": [
+   "sprite_gfx"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 sprite@16992"
+  ]
+ },
+ "014F": {
+  "comp_size": 127,
+  "decomp_size": 215,
+  "container": "lzss",
+  "roles": [
+   "sprite_gfx"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 sprite@16560",
+   "C v2_gen_exec_1c1 sprite@22464"
+  ]
+ },
+ "0150": {
+  "comp_size": 513,
+  "decomp_size": 863,
+  "container": "lzss",
+  "roles": [
+   "sprite_gfx"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 sprite@13248",
+   "C v2_gen_exec_1c1 sprite@14832",
+   "C v2_gen_exec_1c1 sprite@11376",
+   "C v2_gen_exec_1c1 sprite@9216",
+   "C v2_gen_exec_1c1 sprite@10368"
+  ]
+ },
+ "0151": {
+  "comp_size": 1048,
+  "decomp_size": 1727,
+  "container": "lzss",
+  "roles": [
+   "sprite_gfx"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 sprite@13104",
+   "C v2_gen_exec_1c1 sprite@14400",
+   "C v2_gen_exec_1c1 sprite@8640"
+  ]
+ },
+ "0152": {
+  "comp_size": 624,
+  "decomp_size": 1151,
+  "container": "lzss",
+  "roles": [
+   "sprite_gfx"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 sprite@10224",
+   "C v2_gen_exec_1c1 sprite@12384"
+  ]
+ },
+ "0153": {
+  "comp_size": 441,
+  "decomp_size": 863,
+  "container": "lzss",
+  "roles": [
+   "sprite_gfx"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 sprite@14112",
+   "C v2_gen_exec_1c1 sprite@15696",
+   "C v2_gen_exec_1c1 sprite@12384",
+   "C v2_gen_exec_1c1 sprite@21600"
+  ]
+ },
+ "0154": {
+  "comp_size": 341,
+  "decomp_size": 1151,
+  "container": "lzss",
+  "roles": [
+   "sprite_gfx"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 sprite@11088",
+   "C v2_gen_exec_1c1 sprite@14544",
+   "C v2_gen_exec_1c1 sprite@20736",
+   "C v2_gen_exec_1c1 sprite@15840",
+   "C v2_gen_exec_1c1 sprite@11232"
+  ]
+ },
+ "0155": {
+  "comp_size": 353,
+  "decomp_size": 1151,
+  "container": "lzss?",
+  "roles": [
+   "unreferenced"
+  ],
+  "readers": []
+ },
+ "0156": {
+  "comp_size": 265,
+  "decomp_size": 575,
+  "container": "lzss?",
+  "roles": [
+   "unreferenced"
+  ],
+  "readers": []
+ },
+ "0157": {
+  "comp_size": 1028,
+  "decomp_size": 4607,
+  "container": "lzss",
+  "roles": [
+   "sprite_gfx"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 sprite@15984",
+   "C v2_gen_exec_1c1 sprite@13824"
+  ]
+ },
+ "0158": {
+  "comp_size": 133,
+  "decomp_size": 431,
+  "container": "lzss",
+  "roles": [
+   "sprite_gfx"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 sprite@20592",
+   "C v2_gen_exec_1c1 sprite@18432"
+  ]
+ },
+ "0159": {
+  "comp_size": 832,
+  "decomp_size": 4607,
+  "container": "lzss",
+  "roles": [
+   "sprite_gfx"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 sprite@8640"
+  ]
+ },
+ "015A": {
+  "comp_size": 152,
+  "decomp_size": 431,
+  "container": "lzss",
+  "roles": [
+   "sprite_gfx"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 sprite@13248"
+  ]
+ },
+ "015B": {
+  "comp_size": 1405,
+  "decomp_size": 2303,
+  "container": "lzss",
+  "roles": [
+   "sprite_gfx"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 sprite@16992"
+  ]
+ },
+ "015C": {
+  "comp_size": 920,
+  "decomp_size": 2303,
+  "container": "lzss?",
+  "roles": [
+   "unreferenced"
+  ],
+  "readers": []
+ },
+ "015D": {
+  "comp_size": 550,
+  "decomp_size": 1151,
+  "container": "lzss",
+  "roles": [
+   "sprite_gfx"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 sprite@13536",
+   "C v2_gen_exec_1c1 sprite@10080"
+  ]
+ },
+ "015E": {
+  "comp_size": 633,
+  "decomp_size": 1151,
+  "container": "lzss",
+  "roles": [
+   "sprite_gfx"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 sprite@13824",
+   "C v2_gen_exec_1c1 sprite@12384",
+   "C v2_gen_exec_1c1 sprite@9792",
+   "C v2_gen_exec_1c1 sprite@19296",
+   "C v2_gen_exec_1c1 sprite@13536",
+   "C v2_gen_exec_1c1 sprite@18432",
+   "C v2_gen_exec_1c1 sprite@23328",
+   "C v2_gen_exec_1c1 sprite@20016"
+  ]
+ },
+ "015F": {
+  "comp_size": 475,
+  "decomp_size": 1151,
+  "container": "lzss",
+  "roles": [
+   "sprite_gfx"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 sprite@14976",
+   "C v2_gen_exec_1c1 sprite@10944",
+   "C v2_gen_exec_1c1 sprite@21168"
+  ]
+ },
+ "0160": {
+  "comp_size": 448,
+  "decomp_size": 1151,
+  "container": "lzss",
+  "roles": [
+   "sprite_gfx"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 sprite@14688",
+   "C v2_gen_exec_1c1 sprite@15552",
+   "C v2_gen_exec_1c1 sprite@16128"
+  ]
+ },
+ "0161": {
+  "comp_size": 838,
+  "decomp_size": 1727,
+  "container": "lzss",
+  "roles": [
+   "sprite_gfx"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 sprite@8064",
+   "C v2_gen_exec_1c1 sprite@21600"
+  ]
+ },
+ "0162": {
+  "comp_size": 3268,
+  "decomp_size": 4205,
+  "container": "lzss",
+  "roles": [
+   "anim_bank"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 chunk@140272"
+  ]
+ },
+ "0163": {
+  "comp_size": 4171,
+  "decomp_size": 4957,
+  "container": "lzss",
+  "roles": [
+   "anim_bank"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 chunk@144480"
+  ]
+ },
+ "0164": {
+  "comp_size": 3239,
+  "decomp_size": 4515,
+  "container": "lzss",
+  "roles": [
+   "anim_bank"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 chunk@149440"
+  ]
+ },
+ "0165": {
+  "comp_size": 3484,
+  "decomp_size": 4781,
+  "container": "lzss",
+  "roles": [
+   "anim_bank"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 chunk@153968"
+  ]
+ },
+ "0166": {
+  "comp_size": 545,
+  "decomp_size": 1446,
+  "container": "lzss",
+  "roles": [
+   "anim_bank"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 chunk@158752"
+  ]
+ },
+ "0167": {
+  "comp_size": 894,
+  "decomp_size": 1095,
+  "container": "lzss",
+  "roles": [
+   "anim_bank"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 chunk@160208"
+  ]
+ },
+ "0168": {
+  "comp_size": 407,
+  "decomp_size": 2303,
+  "container": "lzss",
+  "roles": [
+   "sprite_gfx"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 sprite@12960"
+  ]
+ },
+ "0169": {
+  "comp_size": 54,
+  "decomp_size": 47,
+  "container": "lzss",
+  "roles": [
+   "palette"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 ds@33186"
+  ]
+ },
+ "016A": {
+  "comp_size": 96,
+  "decomp_size": 143,
+  "container": "lzss",
+  "roles": [
+   "sprite_gfx"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 sprite@5760",
+   "C v2_gen_exec_1c1 sprite@5184",
+   "C v2_gen_exec_1c1 sprite@18432"
+  ]
+ },
+ "016B": {
+  "comp_size": 397,
+  "decomp_size": 767,
+  "container": "lzss",
+  "roles": [
+   "palette"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 ds@32514"
+  ]
+ },
+ "016C": {
+  "comp_size": 395,
+  "decomp_size": 599,
+  "container": "lzss",
+  "roles": [
+   "tilemap"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 tilemap@0"
+  ],
+  "width": 20,
+  "height": 15,
+  "header": "0171"
+ },
+ "016D": {
+  "comp_size": 1065,
+  "decomp_size": 1191,
+  "container": "lzss",
+  "roles": [
+   "bg_tileset"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 gstiledata@0"
+  ]
+ },
+ "016E": {
+  "comp_size": 12887,
+  "decomp_size": 22463,
+  "container": "lzss",
+  "roles": [
+   "tileset"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 tilegfx@0"
+  ]
+ },
+ "016F": {
+  "comp_size": 335,
+  "decomp_size": 2807,
+  "container": "lzss",
+  "roles": [
+   "tile_masks"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 gsmask@0"
+  ]
+ },
+ "0170": {
+  "comp_size": 6187,
+  "decomp_size": 25343,
+  "container": "lzss",
+  "roles": [
+   "anim_bank"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 chunk@13456"
+  ]
+ },
+ "0171": {
+  "comp_size": 263,
+  "decomp_size": 343,
+  "container": "lzss",
+  "roles": [
+   "level_header_stripe"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 ds@9651"
+  ],
+  "level": {
+   "width": 20,
+   "height": 15,
+   "tilemap": "016C",
+   "tileset": "016E",
+   "bg_tileset": "016D"
+  }
+ },
+ "0172": {
+  "comp_size": 53,
+  "decomp_size": 47,
+  "container": "lzss",
+  "roles": [
+   "palette"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 ds@33234"
+  ]
+ },
+ "0173": {
+  "comp_size": 2584,
+  "decomp_size": 6911,
+  "container": "lzss",
+  "roles": [
+   "sprite_gfx"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 sprite@0"
+  ]
+ },
+ "0174": {
+  "comp_size": 2005,
+  "decomp_size": 6911,
+  "container": "lzss",
+  "roles": [
+   "sprite_gfx"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 sprite@13824"
+  ]
+ },
+ "0175": {
+  "comp_size": 2371,
+  "decomp_size": 6911,
+  "container": "lzss",
+  "roles": [
+   "sprite_gfx"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 sprite@6912"
+  ]
+ },
+ "0176": {
+  "comp_size": 55,
+  "decomp_size": 47,
+  "container": "lzss",
+  "roles": [
+   "palette"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 ds@33186"
+  ]
+ },
+ "0177": {
+  "comp_size": 2493,
+  "decomp_size": 2958,
+  "container": "lzss",
+  "roles": [
+   "anim_bank"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 chunk@0"
+  ]
+ },
+ "0178": {
+  "comp_size": 459,
+  "decomp_size": 1819,
+  "container": "lzss",
+  "roles": [
+   "anim_bank"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 chunk@2960"
+  ]
+ },
+ "0179": {
+  "comp_size": 1084,
+  "decomp_size": 2401,
+  "container": "lzss",
+  "roles": [
+   "anim_bank"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 chunk@4784"
+  ]
+ },
+ "017A": {
+  "comp_size": 572,
+  "decomp_size": 1883,
+  "container": "lzss",
+  "roles": [
+   "anim_bank"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 chunk@7200"
+  ]
+ },
+ "017B": {
+  "comp_size": 244,
+  "decomp_size": 767,
+  "container": "lzss",
+  "roles": [
+   "palette"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 ds@32514"
+  ]
+ },
+ "017C": {
+  "comp_size": 60546,
+  "decomp_size": 15136,
+  "container": "raw",
+  "roles": [
+   "screen_gfx"
+  ],
+  "readers": [
+   "R v2_gen_exec_1c1 chunk@0"
+  ],
+  "width": 22,
+  "height": 15,
+  "header": "017D"
+ },
+ "017D": {
+  "comp_size": 89,
+  "decomp_size": 101,
+  "container": "lzss",
+  "roles": [
+   "level_header_stripe"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 ds@9651"
+  ],
+  "level": {
+   "width": 22,
+   "height": 15,
+   "tilemap": "017C",
+   "tileset": "FFFF",
+   "bg_tileset": "FFFF"
+  }
+ },
+ "017E": {
+  "comp_size": 89,
+  "decomp_size": 101,
+  "container": "lzss?",
+  "roles": [
+   "unreferenced"
+  ],
+  "readers": []
+ },
+ "017F": {
+  "comp_size": 55,
+  "decomp_size": 47,
+  "container": "lzss",
+  "roles": [
+   "palette"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 ds@33234",
+   "C v2_gen_exec_1c1 ds@33138"
+  ]
+ },
+ "0180": {
+  "comp_size": 22018,
+  "decomp_size": 5504,
+  "container": "raw",
+  "roles": [
+   "screen_gfx"
+  ],
+  "readers": [
+   "R v2_gen_exec_1c1 chunk@0"
+  ]
+ },
+ "0181": {
+  "comp_size": 101,
+  "decomp_size": 383,
+  "container": "lzss",
+  "roles": [
+   "palette"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 ds@32514"
+  ]
+ },
+ "0182": {
+  "comp_size": 175,
+  "decomp_size": 559,
+  "container": "lzss",
+  "roles": [
+   "tilemap"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 tilemap@0"
+  ],
+  "width": 20,
+  "height": 15,
+  "header": "0186"
+ },
+ "0183": {
+  "comp_size": 358,
+  "decomp_size": 415,
+  "container": "lzss",
+  "roles": [
+   "bg_tileset"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 gstiledata@0"
+  ]
+ },
+ "0184": {
+  "comp_size": 3979,
+  "decomp_size": 9023,
+  "container": "lzss",
+  "roles": [
+   "tileset"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 tilegfx@0"
+  ]
+ },
+ "0185": {
+  "comp_size": 903,
+  "decomp_size": 1127,
+  "container": "lzss",
+  "roles": [
+   "tile_masks"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 gsmask@0"
+  ]
+ },
+ "0186": {
+  "comp_size": 66,
+  "decomp_size": 80,
+  "container": "lzss",
+  "roles": [
+   "level_header_stripe"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 ds@9651"
+  ],
+  "level": {
+   "width": 20,
+   "height": 15,
+   "tilemap": "0182",
+   "tileset": "0184",
+   "bg_tileset": "0183"
+  }
+ },
+ "0187": {
+  "comp_size": 148,
+  "decomp_size": 767,
+  "container": "lzss",
+  "roles": [
+   "palette"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 ds@32514"
+  ]
+ },
+ "0188": {
+  "comp_size": 194,
+  "decomp_size": 599,
+  "container": "lzss",
+  "roles": [
+   "tilemap"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 tilemap@0"
+  ],
+  "width": 20,
+  "height": 15,
+  "header": "018C"
+ },
+ "0189": {
+  "comp_size": 534,
+  "decomp_size": 495,
+  "container": "lzss",
+  "roles": [
+   "bg_tileset"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 gstiledata@0"
+  ]
+ },
+ "018A": {
+  "comp_size": 6748,
+  "decomp_size": 14399,
+  "container": "lzss",
+  "roles": [
+   "tileset"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 tilegfx@0"
+  ]
+ },
+ "018B": {
+  "comp_size": 232,
+  "decomp_size": 1799,
+  "container": "lzss",
+  "roles": [
+   "tile_masks"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 gsmask@0"
+  ]
+ },
+ "018C": {
+  "comp_size": 68,
+  "decomp_size": 80,
+  "container": "lzss",
+  "roles": [
+   "level_header_stripe"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 ds@9651"
+  ],
+  "level": {
+   "width": 20,
+   "height": 15,
+   "tilemap": "0188",
+   "tileset": "018A",
+   "bg_tileset": "0189"
+  }
+ },
+ "018D": {
+  "comp_size": 96,
+  "decomp_size": 383,
+  "container": "lzss",
+  "roles": [
+   "palette"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 ds@32514"
+  ]
+ },
+ "018E": {
+  "comp_size": 236,
+  "decomp_size": 559,
+  "container": "lzss",
+  "roles": [
+   "tilemap"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 tilemap@0"
+  ],
+  "width": 20,
+  "height": 14,
+  "header": "0192"
+ },
+ "018F": {
+  "comp_size": 571,
+  "decomp_size": 655,
+  "container": "lzss",
+  "roles": [
+   "bg_tileset"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 gstiledata@0"
+  ]
+ },
+ "0190": {
+  "comp_size": 6167,
+  "decomp_size": 14527,
+  "container": "lzss",
+  "roles": [
+   "tileset"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 tilegfx@0"
+  ]
+ },
+ "0191": {
+  "comp_size": 1060,
+  "decomp_size": 1815,
+  "container": "lzss",
+  "roles": [
+   "tile_masks"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 gsmask@0"
+  ]
+ },
+ "0192": {
+  "comp_size": 172,
+  "decomp_size": 234,
+  "container": "lzss",
+  "roles": [
+   "level_header_stripe"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 ds@9651"
+  ],
+  "level": {
+   "width": 20,
+   "height": 14,
+   "tilemap": "018E",
+   "tileset": "0190",
+   "bg_tileset": "018F"
+  }
+ },
+ "0193": {
+  "comp_size": 1186,
+  "decomp_size": 3237,
+  "container": "lzss",
+  "roles": [
+   "anim_bank"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 chunk@0"
+  ]
+ },
+ "0194": {
+  "comp_size": 572,
+  "decomp_size": 2770,
+  "container": "lzss",
+  "roles": [
+   "anim_bank"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 chunk@3248"
+  ]
+ },
+ "0195": {
+  "comp_size": 4432,
+  "decomp_size": 5398,
+  "container": "lzss",
+  "roles": [
+   "anim_bank"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 chunk@6032"
+  ]
+ },
+ "0196": {
+  "comp_size": 4432,
+  "decomp_size": 5398,
+  "container": "lzss",
+  "roles": [
+   "anim_bank"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 chunk@11440"
+  ]
+ },
+ "0197": {
+  "comp_size": 864,
+  "decomp_size": 2958,
+  "container": "lzss",
+  "roles": [
+   "anim_bank"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 chunk@16848"
+  ]
+ },
+ "0198": {
+  "comp_size": 436,
+  "decomp_size": 2664,
+  "container": "lzss",
+  "roles": [
+   "anim_bank"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 chunk@19808"
+  ]
+ },
+ "0199": {
+  "comp_size": 4230,
+  "decomp_size": 5263,
+  "container": "lzss",
+  "roles": [
+   "anim_bank"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 chunk@22480"
+  ]
+ },
+ "019A": {
+  "comp_size": 4230,
+  "decomp_size": 5263,
+  "container": "lzss",
+  "roles": [
+   "anim_bank"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 chunk@27760"
+  ]
+ },
+ "019B": {
+  "comp_size": 2172,
+  "decomp_size": 3765,
+  "container": "lzss",
+  "roles": [
+   "anim_bank"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 chunk@33040"
+  ]
+ },
+ "019C": {
+  "comp_size": 2172,
+  "decomp_size": 3765,
+  "container": "lzss",
+  "roles": [
+   "anim_bank"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 chunk@36816"
+  ]
+ },
+ "019D": {
+  "comp_size": 75,
+  "decomp_size": 287,
+  "container": "lzss",
+  "roles": [
+   "sprite_gfx"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 sprite@576"
+  ]
+ },
+ "019E": {
+  "comp_size": 610,
+  "decomp_size": 1131,
+  "container": "lzss",
+  "roles": [
+   "anim_bank"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 chunk@9088"
+  ]
+ },
+ "019F": {
+  "comp_size": 456,
+  "decomp_size": 1048,
+  "container": "lzss",
+  "roles": [
+   "anim_bank"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 chunk@10224"
+  ]
+ },
+ "01A0": {
+  "comp_size": 593,
+  "decomp_size": 1126,
+  "container": "lzss",
+  "roles": [
+   "anim_bank"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 chunk@11280"
+  ]
+ },
+ "01A1": {
+  "comp_size": 435,
+  "decomp_size": 1036,
+  "container": "lzss",
+  "roles": [
+   "anim_bank"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 chunk@12416"
+  ]
+ },
+ "01A2": {
+  "comp_size": 163,
+  "decomp_size": 227,
+  "container": "lzss",
+  "roles": [
+   "transition_text"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 ds@8595"
+  ]
+ },
+ "01A3": {
+  "comp_size": 237,
+  "decomp_size": 375,
+  "container": "lzss",
+  "roles": [
+   "transition_text"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 ds@8595"
+  ]
+ },
+ "01A4": {
+  "comp_size": 400,
+  "decomp_size": 683,
+  "container": "lzss",
+  "roles": [
+   "transition_text"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 ds@8595"
+  ]
+ },
+ "01A5": {
+  "comp_size": 256,
+  "decomp_size": 383,
+  "container": "lzss",
+  "roles": [
+   "transition_text"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 ds@8595"
+  ]
+ },
+ "01A6": {
+  "comp_size": 246,
+  "decomp_size": 339,
+  "container": "lzss",
+  "roles": [
+   "transition_text"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 ds@8595"
+  ]
+ },
+ "01A7": {
+  "comp_size": 51,
+  "decomp_size": 47,
+  "container": "lzss",
+  "roles": [
+   "palette"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 ds@32514"
+  ]
+ },
+ "01A8": {
+  "comp_size": 11277,
+  "decomp_size": 27455,
+  "container": "lzss",
+  "roles": [
+   "tileset"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 tilegfx@0"
+  ]
+ },
+ "01A9": {
+  "comp_size": 1306,
+  "decomp_size": 3431,
+  "container": "lzss",
+  "roles": [
+   "tile_masks"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 gsmask@0"
+  ]
+ },
+ "01AA": {
+  "comp_size": 2727,
+  "decomp_size": 3015,
+  "container": "lzss",
+  "roles": [
+   "bg_tileset"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 gstiledata@0"
+  ]
+ },
+ "01AB": {
+  "comp_size": 1916,
+  "decomp_size": 6911,
+  "container": "lzss",
+  "roles": [
+   "tilemap"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 tilemap@0"
+  ],
+  "width": 144,
+  "height": 24,
+  "header": "01B0"
+ },
+ "01AC": {
+  "comp_size": 3031,
+  "decomp_size": 9503,
+  "container": "lzss",
+  "roles": [
+   "sprite_gfx"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 sprite@7776"
+  ]
+ },
+ "01AD": {
+  "comp_size": 363,
+  "decomp_size": 383,
+  "container": "lzss?",
+  "roles": [
+   "unreferenced"
+  ],
+  "readers": []
+ },
+ "01AE": {
+  "comp_size": 370,
+  "decomp_size": 383,
+  "container": "lzss",
+  "roles": [
+   "palette"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 ds@32514"
+  ]
+ },
+ "01AF": {
+  "comp_size": 335,
+  "decomp_size": 455,
+  "container": "lzss",
+  "roles": [
+   "level_header_stripe"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 ds@9651"
+  ],
+  "level": {
+   "width": 144,
+   "height": 24,
+   "tilemap": "01AB",
+   "tileset": "01A8",
+   "bg_tileset": "01AA"
+  }
+ },
+ "01B0": {
+  "comp_size": 289,
+  "decomp_size": 390,
+  "container": "lzss",
+  "roles": [
+   "level_header_stripe"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 ds@9651"
+  ],
+  "level": {
+   "width": 144,
+   "height": 24,
+   "tilemap": "01AB",
+   "tileset": "01A8",
+   "bg_tileset": "01AA"
+  }
+ },
+ "01B1": {
+  "comp_size": 151,
+  "decomp_size": 177,
+  "container": "lzss?",
+  "roles": [
+   "unreferenced"
+  ],
+  "readers": []
+ },
+ "01B2": {
+  "comp_size": 174,
+  "decomp_size": 230,
+  "container": "lzss?",
+  "roles": [
+   "unreferenced"
+  ],
+  "readers": []
+ },
+ "01B3": {
+  "comp_size": 168,
+  "decomp_size": 287,
+  "container": "lzss",
+  "roles": [
+   "sprite_gfx"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 sprite@0"
+  ]
+ },
+ "01B4": {
+  "comp_size": 1949,
+  "decomp_size": 4607,
+  "container": "lzss",
+  "roles": [
+   "sprite_gfx"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 sprite@3168"
+  ]
+ },
+ "01B5": {
+  "comp_size": 423,
+  "decomp_size": 2879,
+  "container": "lzss",
+  "roles": [
+   "sprite_gfx"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 sprite@288"
+  ]
+ },
+ "01B6": {
+  "comp_size": 53,
+  "decomp_size": 47,
+  "container": "lzss",
+  "roles": [
+   "palette"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 ds@32994"
+  ]
+ },
+ "01B7": {
+  "comp_size": 2075,
+  "decomp_size": 3455,
+  "container": "lzss?",
+  "roles": [
+   "unreferenced"
+  ],
+  "readers": []
+ },
+ "01B8": {
+  "comp_size": 54,
+  "decomp_size": 47,
+  "container": "lzss?",
+  "roles": [
+   "palette16_by_sig"
+  ],
+  "readers": []
+ },
+ "01B9": {
+  "comp_size": 888,
+  "decomp_size": 1506,
+  "container": "lzss",
+  "roles": [
+   "anim_bank"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 chunk@137648"
+  ]
+ },
+ "01BA": {
+  "comp_size": 777,
+  "decomp_size": 1349,
+  "container": "lzss",
+  "roles": [
+   "anim_bank"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 chunk@136288"
+  ]
+ },
+ "01BB": {
+  "comp_size": 281,
+  "decomp_size": 427,
+  "container": "lzss",
+  "roles": [
+   "transition_text"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 ds@8595"
+  ]
+ },
+ "01BC": {
+  "comp_size": 12,
+  "decomp_size": 11,
+  "container": "lzss",
+  "roles": [
+   "transition_text"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 ds@8595"
+  ]
+ },
+ "01BD": {
+  "comp_size": 450,
+  "decomp_size": 863,
+  "container": "lzss?",
+  "roles": [
+   "unreferenced"
+  ],
+  "readers": []
+ },
+ "01BE": {
+  "comp_size": 34,
+  "decomp_size": 47,
+  "container": "lzss?",
+  "roles": [
+   "palette16_by_sig"
+  ],
+  "readers": []
+ },
+ "01BF": {
+  "comp_size": 1067,
+  "decomp_size": 1439,
+  "container": "lzss?",
+  "roles": [
+   "unreferenced"
+  ],
+  "readers": []
+ },
+ "01C0": {
+  "comp_size": 386,
+  "decomp_size": 679,
+  "container": "lzss",
+  "roles": [
+   "transition_text"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 ds@8595"
+  ]
+ },
+ "01C1": {
+  "comp_size": 25762,
+  "decomp_size": 48971,
+  "container": "lzss",
+  "roles": [
+   "level_script"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 animdata@0"
+  ]
+ },
+ "01C2": {
+  "comp_size": 19919,
+  "decomp_size": 38997,
+  "container": "lzss",
+  "roles": [
+   "level_script"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 animdata@0"
+  ]
+ },
+ "01C3": {
+  "comp_size": 21973,
+  "decomp_size": 42440,
+  "container": "lzss",
+  "roles": [
+   "level_script"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 animdata@0"
+  ]
+ },
+ "01C4": {
+  "comp_size": 23728,
+  "decomp_size": 45315,
+  "container": "lzss",
+  "roles": [
+   "level_script"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 animdata@0"
+  ]
+ },
+ "01C5": {
+  "comp_size": 23172,
+  "decomp_size": 43863,
+  "container": "lzss",
+  "roles": [
+   "level_script"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 animdata@0"
+  ]
+ },
+ "01C6": {
+  "comp_size": 22113,
+  "decomp_size": 40786,
+  "container": "lzss",
+  "roles": [
+   "level_script"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 animdata@0"
+  ]
+ },
+ "01C7": {
+  "comp_size": 5444,
+  "decomp_size": 8351,
+  "container": "lzss?",
+  "roles": [
+   "sound_driver[card=0]"
+  ],
+  "readers": []
+ },
+ "01C8": {
+  "comp_size": 8025,
+  "decomp_size": 14692,
+  "container": "lzss?",
+  "roles": [
+   "sound_driver[card=1]"
+  ],
+  "readers": []
+ },
+ "01C9": {
+  "comp_size": 8676,
+  "decomp_size": 16174,
+  "container": "lzss?",
+  "roles": [
+   "sound_driver[card=2]"
+  ],
+  "readers": []
+ },
+ "01CA": {
+  "comp_size": 8066,
+  "decomp_size": 14742,
+  "container": "lzss?",
+  "roles": [
+   "sound_driver[card=3]"
+  ],
+  "readers": []
+ },
+ "01CB": {
+  "comp_size": 8066,
+  "decomp_size": 14742,
+  "container": "lzss?",
+  "roles": [
+   "sound_driver[card=4]"
+  ],
+  "readers": []
+ },
+ "01CC": {
+  "comp_size": 8769,
+  "decomp_size": 16262,
+  "container": "lzss",
+  "roles": [
+   "sound_driver[card=5]"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 sound@0"
+  ]
+ },
+ "01CD": {
+  "comp_size": 8025,
+  "decomp_size": 14692,
+  "container": "lzss?",
+  "roles": [
+   "sound_driver[card=6]"
+  ],
+  "readers": []
+ },
+ "01CE": {
+  "comp_size": 8768,
+  "decomp_size": 16250,
+  "container": "lzss?",
+  "roles": [
+   "sound_driver[card=7]"
+  ],
+  "readers": []
+ },
+ "01CF": {
+  "comp_size": 6062,
+  "decomp_size": 10624,
+  "container": "lzss?",
+  "roles": [
+   "sound_driver[card=8]"
+  ],
+  "readers": []
+ },
+ "01D0": {
+  "comp_size": 102,
+  "decomp_size": 101,
+  "container": "lzss?",
+  "roles": [
+   "xmid_track[base=1D0,card=0]"
+  ],
+  "readers": []
+ },
+ "01D1": {
+  "comp_size": 3544,
+  "decomp_size": 6815,
+  "container": "lzss?",
+  "roles": [
+   "xmid_track[base=1D0,card=1]"
+  ],
+  "readers": []
+ },
+ "01D2": {
+  "comp_size": 4052,
+  "decomp_size": 7855,
+  "container": "lzss",
+  "roles": [
+   "xmid_track[base=1D0,card=2]"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 sound@41408"
+  ]
+ },
+ "01D3": {
+  "comp_size": 5192,
+  "decomp_size": 9291,
+  "container": "lzss?",
+  "roles": [
+   "xmid_track[base=1D0,card=3]"
+  ],
+  "readers": []
+ },
+ "01D4": {
+  "comp_size": 6093,
+  "decomp_size": 10055,
+  "container": "lzss?",
+  "roles": [
+   "xmid_track[base=1D0,card=4]"
+  ],
+  "readers": []
+ },
+ "01D5": {
+  "comp_size": 102,
+  "decomp_size": 101,
+  "container": "lzss?",
+  "roles": [
+   "xmid_track[base=1D5,card=0]"
+  ],
+  "readers": []
+ },
+ "01D6": {
+  "comp_size": 3582,
+  "decomp_size": 6709,
+  "container": "lzss?",
+  "roles": [
+   "xmid_track[base=1D5,card=1]"
+  ],
+  "readers": []
+ },
+ "01D7": {
+  "comp_size": 3594,
+  "decomp_size": 6719,
+  "container": "lzss",
+  "roles": [
+   "xmid_track[base=1D5,card=2]"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 sound@41408"
+  ]
+ },
+ "01D8": {
+  "comp_size": 4303,
+  "decomp_size": 7835,
+  "container": "lzss?",
+  "roles": [
+   "xmid_track[base=1D5,card=3]"
+  ],
+  "readers": []
+ },
+ "01D9": {
+  "comp_size": 4029,
+  "decomp_size": 7687,
+  "container": "lzss?",
+  "roles": [
+   "xmid_track[base=1D5,card=4]"
+  ],
+  "readers": []
+ },
+ "01DA": {
+  "comp_size": 102,
+  "decomp_size": 101,
+  "container": "lzss?",
+  "roles": [
+   "xmid_track[base=1DA,card=0]"
+  ],
+  "readers": []
+ },
+ "01DB": {
+  "comp_size": 4336,
+  "decomp_size": 6207,
+  "container": "lzss?",
+  "roles": [
+   "xmid_track[base=1DA,card=1]"
+  ],
+  "readers": []
+ },
+ "01DC": {
+  "comp_size": 4491,
+  "decomp_size": 6389,
+  "container": "lzss",
+  "roles": [
+   "xmid_track[base=1DA,card=2]"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 sound@41408"
+  ]
+ },
+ "01DD": {
+  "comp_size": 5481,
+  "decomp_size": 8907,
+  "container": "lzss?",
+  "roles": [
+   "xmid_track[base=1DA,card=3]"
+  ],
+  "readers": []
+ },
+ "01DE": {
+  "comp_size": 7137,
+  "decomp_size": 11283,
+  "container": "lzss?",
+  "roles": [
+   "xmid_track[base=1DA,card=4]"
+  ],
+  "readers": []
+ },
+ "01DF": {
+  "comp_size": 102,
+  "decomp_size": 101,
+  "container": "lzss?",
+  "roles": [
+   "xmid_track[base=1DF,card=0]"
+  ],
+  "readers": []
+ },
+ "01E0": {
+  "comp_size": 3409,
+  "decomp_size": 6931,
+  "container": "lzss?",
+  "roles": [
+   "xmid_track[base=1DF,card=1]"
+  ],
+  "readers": []
+ },
+ "01E1": {
+  "comp_size": 3358,
+  "decomp_size": 6823,
+  "container": "lzss",
+  "roles": [
+   "xmid_track[base=1DF,card=2]"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 sound@41408"
+  ]
+ },
+ "01E2": {
+  "comp_size": 3400,
+  "decomp_size": 6265,
+  "container": "lzss?",
+  "roles": [
+   "xmid_track[base=1DF,card=3]"
+  ],
+  "readers": []
+ },
+ "01E3": {
+  "comp_size": 3963,
+  "decomp_size": 7789,
+  "container": "lzss?",
+  "roles": [
+   "xmid_track[base=1DF,card=4]"
+  ],
+  "readers": []
+ },
+ "01E4": {
+  "comp_size": 102,
+  "decomp_size": 101,
+  "container": "lzss?",
+  "roles": [
+   "xmid_track[base=1E4,card=0]"
+  ],
+  "readers": []
+ },
+ "01E5": {
+  "comp_size": 7940,
+  "decomp_size": 11923,
+  "container": "lzss?",
+  "roles": [
+   "xmid_track[base=1E4,card=1]"
+  ],
+  "readers": []
+ },
+ "01E6": {
+  "comp_size": 7338,
+  "decomp_size": 11141,
+  "container": "lzss",
+  "roles": [
+   "xmid_track[base=1E4,card=2]"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 sound@41408"
+  ]
+ },
+ "01E7": {
+  "comp_size": 8589,
+  "decomp_size": 13059,
+  "container": "lzss?",
+  "roles": [
+   "xmid_track[base=1E4,card=3]"
+  ],
+  "readers": []
+ },
+ "01E8": {
+  "comp_size": 8728,
+  "decomp_size": 13493,
+  "container": "lzss?",
+  "roles": [
+   "xmid_track[base=1E4,card=4]"
+  ],
+  "readers": []
+ },
+ "01E9": {
+  "comp_size": 102,
+  "decomp_size": 101,
+  "container": "lzss?",
+  "roles": [
+   "xmid_track[base=1E9,card=0]"
+  ],
+  "readers": []
+ },
+ "01EA": {
+  "comp_size": 3409,
+  "decomp_size": 6931,
+  "container": "lzss?",
+  "roles": [
+   "xmid_track[base=1E9,card=1]"
+  ],
+  "readers": []
+ },
+ "01EB": {
+  "comp_size": 3358,
+  "decomp_size": 6823,
+  "container": "lzss",
+  "roles": [
+   "xmid_track[base=1E9,card=2]"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 sound@41408"
+  ]
+ },
+ "01EC": {
+  "comp_size": 3400,
+  "decomp_size": 6265,
+  "container": "lzss?",
+  "roles": [
+   "xmid_track[base=1E9,card=3]"
+  ],
+  "readers": []
+ },
+ "01ED": {
+  "comp_size": 3963,
+  "decomp_size": 7789,
+  "container": "lzss?",
+  "roles": [
+   "xmid_track[base=1E9,card=4]"
+  ],
+  "readers": []
+ },
+ "01EE": {
+  "comp_size": 1159,
+  "decomp_size": 1529,
+  "container": "lzss?",
+  "roles": [
+   "xmid_track[base=1EE,card=0]"
+  ],
+  "readers": []
+ },
+ "01EF": {
+  "comp_size": 2690,
+  "decomp_size": 3301,
+  "container": "lzss?",
+  "roles": [
+   "xmid_track[base=1EE,card=1]"
+  ],
+  "readers": []
+ },
+ "01F0": {
+  "comp_size": 3840,
+  "decomp_size": 4967,
+  "container": "lzss",
+  "roles": [
+   "xmid_track[base=1EE,card=2]"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 sound@41408"
+  ]
+ },
+ "01F1": {
+  "comp_size": 3316,
+  "decomp_size": 4333,
+  "container": "lzss?",
+  "roles": [
+   "xmid_track[base=1EE,card=3]"
+  ],
+  "readers": []
+ },
+ "01F2": {
+  "comp_size": 3996,
+  "decomp_size": 5331,
+  "container": "lzss?",
+  "roles": [
+   "xmid_track[base=1EE,card=4]"
+  ],
+  "readers": []
+ },
+ "01F3": {
+  "comp_size": 1285,
+  "decomp_size": 1367,
+  "container": "lzss?",
+  "roles": [
+   "xmid_track[base=1F3,card=0]"
+  ],
+  "readers": []
+ },
+ "01F4": {
+  "comp_size": 2584,
+  "decomp_size": 2913,
+  "container": "lzss?",
+  "roles": [
+   "xmid_track[base=1F3,card=1]"
+  ],
+  "readers": []
+ },
+ "01F5": {
+  "comp_size": 2324,
+  "decomp_size": 2583,
+  "container": "lzss",
+  "roles": [
+   "xmid_track[base=1F3,card=2]"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 sound@41408"
+  ]
+ },
+ "01F6": {
+  "comp_size": 786,
+  "decomp_size": 1229,
+  "container": "lzss?",
+  "roles": [
+   "xmid_track[base=1F3,card=3]"
+  ],
+  "readers": []
+ },
+ "01F7": {
+  "comp_size": 4054,
+  "decomp_size": 5575,
+  "container": "lzss?",
+  "roles": [
+   "xmid_track[base=1F3,card=4]"
+  ],
+  "readers": []
+ },
+ "01F8": {
+  "comp_size": 102,
+  "decomp_size": 101,
+  "container": "lzss?",
+  "roles": [
+   "xmid_track[base=1F8,card=0]"
+  ],
+  "readers": []
+ },
+ "01F9": {
+  "comp_size": 3395,
+  "decomp_size": 7157,
+  "container": "lzss?",
+  "roles": [
+   "xmid_track[base=1F8,card=1]"
+  ],
+  "readers": []
+ },
+ "01FA": {
+  "comp_size": 3399,
+  "decomp_size": 7165,
+  "container": "lzss?",
+  "roles": [
+   "xmid_track[base=1F8,card=2]"
+  ],
+  "readers": []
+ },
+ "01FB": {
+  "comp_size": 3992,
+  "decomp_size": 8477,
+  "container": "lzss?",
+  "roles": [
+   "xmid_track[base=1F8,card=3]"
+  ],
+  "readers": []
+ },
+ "01FC": {
+  "comp_size": 5114,
+  "decomp_size": 9899,
+  "container": "lzss?",
+  "roles": [
+   "xmid_track[base=1F8,card=4]"
+  ],
+  "readers": []
+ },
+ "01FD": {
+  "comp_size": 102,
+  "decomp_size": 101,
+  "container": "lzss?",
+  "roles": [
+   "xmid_track[base=1FD,card=0]"
+  ],
+  "readers": []
+ },
+ "01FE": {
+  "comp_size": 1009,
+  "decomp_size": 1423,
+  "container": "lzss?",
+  "roles": [
+   "xmid_track[base=1FD,card=1]"
+  ],
+  "readers": []
+ },
+ "01FF": {
+  "comp_size": 1039,
+  "decomp_size": 1425,
+  "container": "lzss?",
+  "roles": [
+   "xmid_track[base=1FD,card=2]"
+  ],
+  "readers": []
+ },
+ "0200": {
+  "comp_size": 1407,
+  "decomp_size": 1967,
+  "container": "lzss?",
+  "roles": [
+   "xmid_track[base=1FD,card=3]"
+  ],
+  "readers": []
+ },
+ "0201": {
+  "comp_size": 1623,
+  "decomp_size": 2441,
+  "container": "lzss?",
+  "roles": [
+   "xmid_track[base=1FD,card=4]"
+  ],
+  "readers": []
+ },
+ "0202": {
+  "comp_size": 102,
+  "decomp_size": 101,
+  "container": "lzss?",
+  "roles": [
+   "xmid_track[base=202,card=0]"
+  ],
+  "readers": []
+ },
+ "0203": {
+  "comp_size": 102,
+  "decomp_size": 101,
+  "container": "lzss?",
+  "roles": [
+   "xmid_track[base=202,card=1]"
+  ],
+  "readers": []
+ },
+ "0204": {
+  "comp_size": 102,
+  "decomp_size": 101,
+  "container": "lzss",
+  "roles": [
+   "xmid_track[base=202,card=2]"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 sound@41408"
+  ]
+ },
+ "0205": {
+  "comp_size": 102,
+  "decomp_size": 101,
+  "container": "lzss?",
+  "roles": [
+   "xmid_track[base=202,card=3]"
+  ],
+  "readers": []
+ },
+ "0206": {
+  "comp_size": 102,
+  "decomp_size": 101,
+  "container": "lzss?",
+  "roles": [
+   "xmid_track[base=202,card=4]"
+  ],
+  "readers": []
+ },
+ "0207": {
+  "comp_size": 6581,
+  "decomp_size": 13807,
+  "container": "lzss?",
+  "roles": [
+   "sound_bank_207[card=0]"
+  ],
+  "readers": []
+ },
+ "0208": {
+  "comp_size": 11044,
+  "decomp_size": 19113,
+  "container": "lzss?",
+  "roles": [
+   "sound_bank_207[card=1]"
+  ],
+  "readers": []
+ },
+ "0209": {
+  "comp_size": 11044,
+  "decomp_size": 19113,
+  "container": "lzss",
+  "roles": [
+   "sound_bank_207[card=2]"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 sound@22288"
+  ]
+ },
+ "020A": {
+  "comp_size": 8641,
+  "decomp_size": 18413,
+  "container": "lzss?",
+  "roles": [
+   "sound_bank_207[card=3]"
+  ],
+  "readers": []
+ },
+ "020B": {
+  "comp_size": 9727,
+  "decomp_size": 32589,
+  "container": "lzss?",
+  "roles": [
+   "sound_bank_207[card=4]"
+  ],
+  "readers": []
+ },
+ "020C": {
+  "comp_size": 102,
+  "decomp_size": 101,
+  "container": "lzss?",
+  "roles": [
+   "sound_bank_20c[card=0]"
+  ],
+  "readers": []
+ },
+ "020D": {
+  "comp_size": 4495,
+  "decomp_size": 6005,
+  "container": "lzss?",
+  "roles": [
+   "sound_bank_20c[card=1]"
+  ],
+  "readers": []
+ },
+ "020E": {
+  "comp_size": 4495,
+  "decomp_size": 6005,
+  "container": "lzss",
+  "roles": [
+   "sound_bank_20c[card=2]"
+  ],
+  "readers": [
+   "C v2_gen_exec_1c1 sound@16272"
+  ]
+ },
+ "020F": {
+  "comp_size": 7256,
+  "decomp_size": 16257,
+  "container": "lzss?",
+  "roles": [
+   "sound_bank_20c[card=3]"
+  ],
+  "readers": []
+ },
+ "0210": {
+  "comp_size": 102,
+  "decomp_size": 101,
+  "container": "lzss?",
+  "roles": [
+   "sound_bank_20c[card=4]"
+  ],
+  "readers": []
+ },
+ "0211": {
+  "comp_size": 22018,
+  "decomp_size": 5504,
+  "container": "raw",
+  "roles": [
+   "screen_hud_only"
+  ],
+  "readers": []
+ },
+ "0212": {
+  "comp_size": 60546,
+  "decomp_size": 15136,
+  "container": "raw",
+  "roles": [
+   "screen_by_sig"
+  ],
+  "readers": []
+ },
+ "0213": {
+  "comp_size": 22018,
+  "decomp_size": 5504,
+  "container": "raw",
+  "roles": [
+   "screen_intro2"
+  ],
+  "readers": []
+ },
+ "0214": {
+  "comp_size": 142,
+  "decomp_size": 767,
+  "container": "lzss?",
+  "roles": [
+   "unreferenced"
+  ],
+  "readers": []
+ },
+ "0215": {
+  "comp_size": 459,
+  "decomp_size": 419,
+  "container": "lzss?",
+  "roles": [
+   "xmid_extra"
+  ],
+  "readers": []
+ },
+ "0216": {
+  "comp_size": 3,
+  "decomp_size": 3360,
+  "container": "lzss?",
+  "roles": [
+   "unreferenced"
+  ],
+  "readers": []
+ }
+}

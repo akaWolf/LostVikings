@@ -14,6 +14,8 @@
 #include <cstdint>
 #include <cstdlib>
 #include <cstring>
+#include <string>
+#include <vector>
 #include "v2_input_recorder.h"
 #include "v2_keymap.h"
 #include "v2_coop.h"          // UX stage 8: --coop=N
@@ -58,11 +60,53 @@ static uint8_t v2_m2c_buf[0x100000] = {0};
 // a block-scope extern would mangle as C++ and fail to link).
 extern "C" void v2_lvx_load(const uint8_t* img, uint32_t size);
 
+// The console content pack (the SNES / Genesis material of the UX plan —
+// tools/assets/build_content.py, `make content`): a content/ directory with
+// .compiled/ and exe_static.bin, beside the executable or in the working
+// directory, is the asset store when neither V2_ASSETS_DIR nor V2_EXE_STATIC
+// is set; either variable keeps precedence and disables the lookup for both
+// (the store and the image must come from one tree). V2_CONTENT=0 turns the
+// lookup off — the A/B benches of tests/ run the canon content from the repo
+// root, where content/ may sit.
+extern "C" void v2_assets_set_dir(const char* dir);   // v2_assets.cpp
+static std::string g_content_dir;
+
+static bool v2_content_dir_ok(const std::string& dir) {
+    FILE* a = fopen((dir + "/.compiled/0000.bin").c_str(), "rb");
+    FILE* b = fopen((dir + "/exe_static.bin").c_str(), "rb");
+    if (a) fclose(a);
+    if (b) fclose(b);
+    return a && b;
+}
+
+static void v2_find_content() {
+    const char* a = getenv("V2_ASSETS_DIR");
+    const char* e = getenv("V2_EXE_STATIC");
+    const char* c = getenv("V2_CONTENT");
+    if ((a && *a) || (e && *e)) return;
+    if (c && *c == '0') return;
+    std::vector<std::string> cands;
+    cands.push_back("content");
+    char* base = SDL_GetBasePath();
+    if (base) { cands.push_back(std::string(base) + "content"); SDL_free(base); }
+    for (const std::string& d : cands) {
+        if (v2_content_dir_ok(d)) { g_content_dir = d; break; }
+    }
+    if (g_content_dir.empty()) return;
+    v2_assets_set_dir((g_content_dir + "/.compiled").c_str());
+    printf("V2_ONLY: console content pack %s (V2_CONTENT=0 plays the archive as is)\n",
+           g_content_dir.c_str());
+}
+
 static void v2_load_static_data() {
     // V2_EXE_STATIC: alternate image path (task #108 — the dialog texts
-    // live in seg001 of this image; the editor plays patched copies).
+    // live in seg001 of this image; the editor plays patched copies);
+    // else the content pack's image, else exe_static.bin of the working directory.
     const char* p = getenv("V2_EXE_STATIC");
-    FILE* f = fopen((p && *p) ? p : "exe_static.bin", "rb");
+    const std::string path = (p && *p) ? std::string(p)
+                           : !g_content_dir.empty() ? g_content_dir + "/exe_static.bin"
+                           : std::string("exe_static.bin");
+    FILE* f = fopen(path.c_str(), "rb");
     if (!f) {
         fprintf(stderr,
             "V2_ONLY: exe_static.bin not found — text/menu rendering will hang.\n"
@@ -79,9 +123,9 @@ static void v2_load_static_data() {
     fclose(f);
     if (tn) v2_lvx_load(lvx_tail, (uint32_t)tn);
     else    v2_lvx_load(v2_m2c_buf, (uint32_t)n);
-    printf("V2_ONLY: loaded %zu bytes from exe_static.bin (seg001 sample @0x9480: "
+    printf("V2_ONLY: loaded %zu bytes from %s (seg001 sample @0x9480: "
            "%02X %02X %02X %02X)\n",
-           n, v2_m2c_buf[0x9480], v2_m2c_buf[0x9481], v2_m2c_buf[0x9482], v2_m2c_buf[0x9483]);
+           n, path.c_str(), v2_m2c_buf[0x9480], v2_m2c_buf[0x9481], v2_m2c_buf[0x9482], v2_m2c_buf[0x9483]);
 }
 
 // --debug CLI flag: enable orig debug-build cheats (F4 INT 3, F5/F6 level cheats).
@@ -98,6 +142,7 @@ extern "C" int v2_state_load(const char*);
 
 int main(int argc, char* argv[]) {
     printf("V2_ONLY: starting standalone v2 build (no m2c)\n");
+    v2_find_content();   // before any chunk read: the store is settled at its first use
 
     const char* record_input = nullptr;
     const char* replay_input = nullptr;

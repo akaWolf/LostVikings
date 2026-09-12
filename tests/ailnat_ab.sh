@@ -9,6 +9,7 @@
 #
 #   ./tests/ailnat_ab.sh [replay-glob] [jobs]
 set -u
+export V2_CONTENT=0   # the canon content: never the content/ pack of the repo root (v2_main.cpp)
 cd "$(dirname "$0")/.."
 GLOB="${1:-tests/replays/*.inp}"
 JOBS="${2:-4}"

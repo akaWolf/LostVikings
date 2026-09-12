@@ -11,6 +11,7 @@ cd "$(dirname "$0")/.."
 BIN=${BIN:-vikings_coop_test}
 [ -x "./$BIN" ] || { echo "FAIL: ./$BIN not built"; exit 2; }
 export V2_FAST_VSYNC=${V2_FAST_VSYNC:-1} SDL_VIDEODRIVER=dummy SDL_AUDIODRIVER=dummy
+export V2_CONTENT=0   # the canon content: never the content/ pack of the repo root (v2_main.cpp)
 OUT="/tmp/coop_smoke_$$"; rm -rf "$OUT"; mkdir -p "$OUT"
 fail=0
 for inp in tests/coop/*.inp; do

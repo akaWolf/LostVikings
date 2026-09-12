@@ -12,6 +12,7 @@
 #
 #   BIN=vikings ./tests/mt32_dump.sh      (build: V2_ONLY=1 RELEASE=1 make; the assets/ tree or DATA.DAT must be in place)
 set -u
+export V2_CONTENT=0   # the canon content: never the content/ pack of the repo root (v2_main.cpp)
 cd "$(dirname "$0")/.."
 BIN=${BIN:-vikings}
 if [ ! -x "./$BIN" ]; then echo "FAIL: $BIN not built (V2_ONLY=1 RELEASE=1 make)"; exit 1; fi

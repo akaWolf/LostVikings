@@ -507,6 +507,24 @@ def mod_rel_ok(rel):
             and ".." not in rel and not rel.startswith("/"))
 
 
+def mod_import(path):
+    """Apply a mod package (the JSON of mod_export) onto the scratch tree;
+    returns the file count. The caller packs next (do_pack). Shared by the
+    --import-mod CLI and tools/assets/build_content.py."""
+    import base64 as b64mod
+    with open(path) as f:
+        files = json.load(f)
+    for rel, b64 in files.items():
+        if not mod_rel_ok(rel):
+            raise SystemExit(f"bad path in mod: {rel!r}")
+        dst = os.path.join(SCRATCH, rel)
+        os.makedirs(os.path.dirname(dst), exist_ok=True)
+        with open(dst + ".tmp", "wb") as f:
+            f.write(b64mod.b64decode(b64))
+        os.replace(dst + ".tmp", dst)
+    return len(files)
+
+
 def mod_export():
     """Files under the mod dirs that differ from the canonical assets/."""
     import base64 as b64mod
@@ -1217,18 +1235,8 @@ def main():
         print(f"mod package: {args.export_mod} ({len(mod)} files)")
         return
     if args.import_mod:
-        import base64 as b64mod
-        with open(args.import_mod) as f:
-            files = json.load(f)
-        for rel, b64 in files.items():
-            if not mod_rel_ok(rel):
-                raise SystemExit(f"bad path in mod: {rel!r}")
-            path = os.path.join(SCRATCH, rel)
-            os.makedirs(os.path.dirname(path), exist_ok=True)
-            with open(path + ".tmp", "wb") as f:
-                f.write(b64mod.b64decode(b64))
-            os.replace(path + ".tmp", path)
-        print(f"mod applied: {len(files)} files -> {SCRATCH} (run pack next)")
+        n = mod_import(args.import_mod)
+        print(f"mod applied: {n} files -> {SCRATCH} (run pack next)")
         return
     scratch_init(args.fresh)
     srv = ThreadingHTTPServer(("127.0.0.1", args.port), H)

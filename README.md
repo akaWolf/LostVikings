@@ -179,6 +179,44 @@ context.txt explaining what diverged.
 
 ---
 
+## Console content (SNES / Genesis)
+
+The material of the console versions — the SNES parallax layers of the
+42 levels, the five SNES-only levels in the progression (TR33, SNDS,
+TMPL, RVTS, PDDY, with their passwords), the Genesis interludes between
+the worlds, the SNES 1993 level variants, the console finale, the twelve
+languages of the Blizzard Arcade Collection and the SNES music and
+effects — is a mod package over the open asset tree
+(`mods/console_content.mod.json`), not part of `DATA.DAT`. It plays in
+the **V2_ONLY** build only (the default build keeps `DATA.DAT` as the
+oracle of the orig-vs-mirror verification) and needs a *content pack*
+built from your `DATA.DAT`:
+
+```sh
+make content              # = python3 tools/assets/build_content.py (python3, ~10 s)
+V2_ONLY=1 make -j$(nproc)
+./vikings
+```
+
+`content/` (the open asset tree plus `.compiled/` and `exe_static.bin`,
+~25 MB) is picked up by a V2_ONLY binary beside it, or run from that
+directory; the start-up log says `V2_ONLY: console content pack
+content`. The F1 menu then switches the features: PARALLAX, SCENES and
+FINALE are on by default, SNES BALANCE is off, LANGUAGE and SOUND (PC /
+SNES / SC55 / MT32) as you like. The extra levels have no switch — they
+are simply in the progression. `V2_CONTENT=0` runs the plain archive
+with the same binary; `V2_ASSETS_DIR=<dir>/.compiled
+V2_EXE_STATIC=<dir>/exe_static.bin` point at a pack elsewhere (the
+level editor's scratch tree has the same layout:
+`tools/assets/edit_server.py --scratch <dir>`).
+
+The V2_ONLY release bundles carry the builder as `content-tools/` (the
+scripts, the mod package and its two inputs from the repo — no game
+data): `python3 content-tools/tools/assets/build_content.py` in the
+bundle directory, with `DATA.DAT` beside `vikings`, writes `content/`
+there. The pack itself is never redistributed: it is derived from
+`DATA.DAT` and the console ROMs.
+
 ## CLI options
 
 The three entry points have different surfaces.

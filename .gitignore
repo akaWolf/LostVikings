@@ -1,7 +1,17 @@
 vikings_keymap_editor
 .obj-keymap-editor/
-assets_raw/
+# assets_raw/ is the DATA.DAT extraction (tools/data/extract_datadat.py) — never committed,
+# except the two inputs of the console content build (tools/assets/build_content.py):
+# the chunk role map and the DSL text of the six world scripts (a byte dump cannot
+# regenerate them: chunk_map.py and lvs_full.py need the runtime traces of the canon).
+assets_raw/*
+!assets_raw/chunk_map.json
+!assets_raw/lvs/
+assets_raw/lvs/*
+!assets_raw/lvs/*.lvsf
 /assets/
+# the console content pack built by tools/assets/build_content.py (make content)
+/content/
 __pycache__/
 
 # Nix GC-root symlinks (toolchain pins)

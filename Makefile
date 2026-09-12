@@ -417,9 +417,15 @@ C_OBJS   := $(patsubst %.c,   $(OBJDIR)/%.o, $(C_SRCS))
 ALL_OBJS := $(CXX_OBJS) $(C_OBJS)
 DEPS     := $(ALL_OBJS:.o=.d)
 
-.PHONY: all clean keymap_editor
+.PHONY: all clean keymap_editor content
 
 all: $(EXE_NAME)
+
+# The console content pack for the V2_ONLY engine (the SNES / Genesis material
+# of the UX plan): DATA.DAT + mods/console_content.mod.json -> content/, which a
+# V2_ONLY binary beside it picks up by itself. tools/assets/build_content.py.
+content:
+	python3 tools/assets/build_content.py
 
 # Standalone keymap editor — links ONLY against SDL2 + v2_keymap.cpp. No m2c,
 # no adlmidi, no game logic. Independent of HEADLESS / V2_ONLY toggles.

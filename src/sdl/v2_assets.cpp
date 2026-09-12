@@ -13,11 +13,27 @@
 #include <cstdlib>
 #include <cstring>
 
+static const char* g_assets_dir = nullptr;
+static bool g_assets_dir_init = false;
+
 static const char* v2_assets_dir_cached() {
-    static const char* d = nullptr;
-    static bool init = false;
-    if (!init) { d = getenv("V2_ASSETS_DIR"); if (d && !*d) d = nullptr; init = true; }
-    return d;
+    if (!g_assets_dir_init) {
+        g_assets_dir = getenv("V2_ASSETS_DIR");
+        if (g_assets_dir && !*g_assets_dir) g_assets_dir = nullptr;
+        g_assets_dir_init = true;
+    }
+    return g_assets_dir;
+}
+
+// The console content pack (v2_main.cpp, V2_ONLY): content/.compiled found beside
+// the executable or in the working directory becomes the store when
+// V2_ASSETS_DIR is unset — the variable keeps precedence. Called before the
+// first chunk read; a later call still applies (the cache is a plain pointer).
+extern "C" void v2_assets_set_dir(const char* dir) {
+    const char* env = getenv("V2_ASSETS_DIR");
+    if (env && *env) return;
+    g_assets_dir = strdup(dir);
+    g_assets_dir_init = true;
 }
 
 extern "C" int v2_assets_on() { return v2_assets_dir_cached() != nullptr; }

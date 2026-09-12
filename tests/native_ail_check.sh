@@ -12,6 +12,7 @@
 #   - the blob slot counter never exceeds 5 (music + 4 SFX = DOS model)
 #   - OPL register writes actually flow (trace lines)
 set -u
+export V2_CONTENT=0   # the canon content: never the content/ pack of the repo root (v2_main.cpp)
 cd "$(dirname "$0")/.."
 
 if [ ! -x ./vikings ]; then
