@@ -310,11 +310,12 @@ OPS = {
     0xA7: ('mp', 'partner.{1} ^= (acc ? {0} : 0)'),
     0xA8: ('mw', 'if acc == bit({1} & {0})', 'T'), 0xA9: ('mf', 'if acc == bit(self.{1} & {0})', 'T'),
     0xAA: ('mg', 'if acc == bit([{1}] & {0})', 'T'), 0xAB: ('mp', 'if acc == bit(partner.{1} & {0})', 'T'),
-    0xAC: ('', 'if acc == random()&1', 'T'), 0xAD: ('mw', 'if acc == bit({1} & {0}) #AD', 'T'),
+    0xAC: ('', 'if acc == random()&1', 'T'), 0xAD: ('mw', 'if acc != bit({1} & {0})', 'T'),   # v2_vm_op_AD: eq -> skip, ne -> jump
     0xAE: ('mf', 'if acc != bit(self.{1} & {0})', 'T'), 0xAF: ('mg', 'if acc != bit([{1}] & {0})', 'T'),
-    0xB0: ('mp', 'if acc != bit(partner.{1} & {0})', 'T'),
+    0xB0: ('mp', 'if acc != bit(partner.{1} & {0})', 'T'), 0xB1: ('', 'if acc != random()&1', 'T'),
     0xB2: ('mw', 'if acc == bit({1} & {0})', 'C'), 0xB3: ('mf', 'if acc == bit(self.{1} & {0})', 'C'),
-    0xB4: ('mg', 'if acc == bit([{1}] & {0})', 'C'), 0xB5: ('mp', 'if acc != bit(partner.{1} & {0})', 'C'),
+    0xB4: ('mg', 'if acc == bit([{1}] & {0})', 'C'), 0xB5: ('mp', 'if acc == bit(partner.{1} & {0})', 'C'),   # v2_vm_op_B5: ne -> skip, eq -> call
+    0xB7: ('mw', 'if acc != bit({1} & {0})', 'C'), 0xBA: ('mp', 'if acc != bit(partner.{1} & {0})', 'C'),
     0xB6: ('', 'if acc == rng17()&1', 'T'), 0xB8: ('mf', 'if acc != bit(self.{1} & {0})', 'C'),
     0xB9: ('mg', 'if acc != bit([{1}] & {0})', 'C'), 0xBB: ('', 'if acc != random()&1', 'C'),
     0xBC: ('f', 'self.{0} = (acc <<= 8)'), 0xBD: ('g', '[{0}] = (acc <<= 8)'), 0xBE: ('p', 'partner.{0} = (acc <<= 8)'),

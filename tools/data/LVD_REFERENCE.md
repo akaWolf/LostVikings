@@ -170,17 +170,20 @@ A branch statement (`if …`, `search_*`) ends in `goto L`; a call-branch in `ca
 | AA | `if acc == bit([{1}] & {0}) goto L` | m g | branch |
 | AB | `if acc == bit(partner.{1} & {0}) goto L` | m p | branch |
 | AC | `if acc == random()&1 goto L` | — | branch |
-| AD | `if acc == bit({1} & {0}) #AD goto L` | m w | branch |
+| AD | `if acc != bit({1} & {0}) goto L` | m w | branch |
 | AE | `if acc != bit(self.{1} & {0}) goto L` | m f | branch |
 | AF | `if acc != bit([{1}] & {0}) goto L` | m g | branch |
 | B0 | `if acc != bit(partner.{1} & {0}) goto L` | m p | branch |
+| B1 | `if acc != random()&1 goto L` | — | branch |
 | B2 | `if acc == bit({1} & {0}) call L` | m w | call-branch |
 | B3 | `if acc == bit(self.{1} & {0}) call L` | m f | call-branch |
 | B4 | `if acc == bit([{1}] & {0}) call L` | m g | call-branch |
-| B5 | `if acc != bit(partner.{1} & {0}) call L` | m p | call-branch |
+| B5 | `if acc == bit(partner.{1} & {0}) call L` | m p | call-branch |
 | B6 | `if acc == rng17()&1 goto L` | — | branch |
+| B7 | `if acc != bit({1} & {0}) call L` | m w | call-branch |
 | B8 | `if acc != bit(self.{1} & {0}) call L` | m f | call-branch |
 | B9 | `if acc != bit([{1}] & {0}) call L` | m g | call-branch |
+| BA | `if acc != bit(partner.{1} & {0}) call L` | m p | call-branch |
 | BB | `if acc != random()&1 call L` | — | call-branch |
 | BC | `self.{0} = (acc <<= 8)` | f |  |
 | BD | `[{0}] = (acc <<= 8)` | g |  |
