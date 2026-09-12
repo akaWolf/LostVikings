@@ -9100,7 +9100,12 @@
   "1C5:4A": "bubble_vent",
   "*:3E": "fireball_vent_tile",
   "*:8D": "conveyor_belt",
-  "*:8E": "conveyor_belt_long"
+  "*:8E": "conveyor_belt_long",
+  "*:78": "snake_b",
+  "*:7A": "blue_robot_b",
+  "*:7B": "platform_red_d",
+  "*:7C": "platform_red_e",
+  "*:80": "platform_red_f"
  },
  "anims": {
   "1C1:3608": "gameover_ctl_a_setup",
