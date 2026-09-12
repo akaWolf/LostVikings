@@ -472,7 +472,8 @@ def emit_free(cid):
     # overlap resolution: keep the first frame per byte; overlapped
     # secondary frames are not emitted (their bytes are already owned) —
     # referenced ones become alias labels into the owning line.
-    owner = {}       # byte addr -> (owner_addr, owner_kind)
+    owner = {}       # byte addr -> owner_addr
+    owner_kind = {}  # owner_addr -> 'op' | 'an'
     kept = []
     aliases = []     # (label_prefix, addr, owner_addr)
     def span_of(addr, kind, payload):
@@ -489,7 +490,10 @@ def emit_free(cid):
             ln = span_of(addr, kind, payload)
             if any((addr + i) in owner for i in range(ln)):
                 lblset = obj_lbl if kind == 'op' else an_lbl
-                if addr in lblset:
+                # a second frame of the same kind at the SAME address is a duplicate of the
+                # kept one, not an overlap: its label already stands there (an alias
+                # `S_x = S_x+0` would be noise — 2197 of them in the six scripts)
+                if addr in lblset and not (owner[addr] == addr and owner_kind.get(addr) == kind):
                     aliases.append(('S' if kind == 'op' else 'A',
                                     addr, owner[addr]))
                 for i in range(ln):   # tail bytes the owner chain misses
@@ -499,6 +503,7 @@ def emit_free(cid):
             for i in range(ln):
                 owner[addr + i] = addr
                 dropped_tail.discard(addr + i)
+            owner_kind[addr] = kind
         kept.append((addr, kind, payload))
     # re-emit still-uncovered dropped-tail bytes as anchored mini-blobs
     for a in sorted(dropped_tail):

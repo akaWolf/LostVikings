@@ -199,10 +199,11 @@ OPS = {
     0x39: ('rrr', 'discard3 {0},{1},{2}'), 0x3A: ('', 'res_deduct(partner) #3A'),
     0x3B: ('w', 'shake_y({0})'), 0x3C: ('b', 'if coll_down_1584e(f={0})', 'C'),
     0x3D: ('rrr', 'pal_shade({0},{1},{2})'), 0x3E: ('', 'pal_shade_off'),
-    0x3F: ('', 'subsprites_on'), 0x40: ('', 'subsprites_off'),
+    0x3F: ('', 'sprites_hide'), 0x40: ('', 'sprites_show'),   # 3F ORs 0x4000 into every sub-sprite's flags — every draw pass skips flags & 0x6000 (v2_draw_sprites, 1DD9C); 40 clears bits 13-14
     0x42: ('', 'cmdq_push(2)'), 0x43: ('', 'cmdq_push(4)'), 0xCB: ('', 'cmdq_push(4) #CB'),
     0x46: ('w', 'cmdq_push(6, {0})'), 0x47: ('', 'nop47'),
-    0x4B: ('', 'flags_set 0x2000'),           # its own op (the generic `self.flags |= 0x2000` is 51+62) 0x4C: ('rrr', 'pal_shade2({0},{1},{2})'), 0x4D: ('', 'pal_shade2_off'),
+    0x4B: ('', 'flags_set 0x2000'),           # its own op (the generic `self.flags |= 0x2000` is 51+62)
+    0x4C: ('rrr', 'pal_shade2({0},{1},{2})'), 0x4D: ('', 'pal_shade2_off'),   # the second shade channel (DS_PAL_SHADE_*2, values << 1)
     0x4E: ('', 'if !platform0', 'T'), 0x4F: ('', 'if !platform', 'T'),
     0x51: ('w', 'acc = {0}'), 0x52: ('f', 'acc = self.{0}'), 0x53: ('g', 'acc = [{0}]'),
     0x54: ('p', 'acc = partner.{0}'), 0x55: ('', 'acc = random()'),
@@ -267,6 +268,11 @@ OPS = {
 }
 CHANNEL_OPS = {0x14, 0x15, 0x16, 0x34, 0x26, 0x27, 0x28, 0x29, 0x2A, 0x2B, 0x50, 0x41, 0x44, 0x45, 0x48, 0x49, 0x4A, 0xD4}
 CONTROL = {0x00: 'yield', 0x01: 'nop', 0x06: 'return', 0x0F: 'exit', 0x10: 'despawn'}
+# op 13 sub-commands (v2_vm_op_13: al = the first operand byte; d9 reads a palette pointer
+# behind it, 01 = the DOS exit of the menu's QUIT, 11 = the HUD picture copied up into the
+# viewport and the HUD cleared; the two bytes behind 01/11 are never read — written as `pad`)
+OP13 = {0x01: 'quit_to_dos', 0x11: 'hud_to_viewport'}
+OP13_RX = re.compile(r'^(quit_to_dos|hud_to_viewport) pad (0x[0-9A-Fa-f]+|\d+),(0x[0-9A-Fa-f]+|\d+)$')
 # consumer ops that take `acc` as their single right-hand value: sugar
 SUGAR_CONSUMERS = ({0x56, 0x57, 0x58, 0x59, 0x5A, 0x5B, 0x5C, 0x5D, 0x5E, 0x5F, 0x60, 0x61, 0x62, 0x63,
                     0x64, 0x65, 0x66, 0x67, 0x96, 0xC7, 0xC8, 0xCA,
@@ -625,6 +631,7 @@ def decompile_text(cid, text, names):
         if op == 0x13:
             flush()
             if sym and sym[0] == 'd9': out.append(f'    op13 d9 {sym[1]}')
+            elif len(body) == 3 and body[0] in OP13: out.append(f'    {OP13[body[0]]} pad {imm(body[1])},{imm(body[2])}')
             else: out.append(f'    op13 {body.hex()}')
             continue
         if op in CHANNEL_OPS:
@@ -848,6 +855,10 @@ class Lowerer:
         if w[0] in ('goto', 'call') and len(w) == 2:
             return [f'o {0x03 if w[0] == "goto" else 0x05:02X} {self.label(w[1])}']
         if w[0] == 'anim': return [f'o 19 {w[1]}']
+        m13 = OP13_RX.match(s)
+        if m13:
+            sub = next(k for k, v in OP13.items() if v == m13.group(1))
+            return ['o 13 %02x%02x%02x' % (sub, int(m13.group(2), 0), int(m13.group(3), 0))]
         if w[0] == 'op13':
             rest = w[1].split()
             return ['o 13 d9 ' + rest[1]] if rest[0] == 'd9' else ['o 13 ' + rest[0]]
