@@ -1596,6 +1596,9 @@ static void v2_music_start_178d6_v2(uint8_t* s) {
 static void v2_seq_stop_all_17912_v2(uint8_t* s) {
     if (v2gs(s).music_mute() != 0 && v2gs(s).sfx_mute() != 0) return;
     uint16_t si = (v2gs(s).snd_flag_b() == 1) ? 2 : 0;
+#ifndef HEADLESS
+    v2_mt32_note_stop_all(si, *(uint16_t*)(s + 0x990C));   // UX stage 11: the MT-32 world's slot 0 (the preload handle the FM world never had)
+#endif
     while ((int16_t)si < 0x0A) {
         uint16_t handle_off = (uint16_t)(si - 0x66F4); // wraps to 0x990C+
         uint16_t handle = *(uint16_t*)(s + handle_off);

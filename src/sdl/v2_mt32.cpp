@@ -38,7 +38,7 @@ namespace {
 // ---------------------------------------------------------------------------
 // the call ring (game thread -> audio thread), the init transcript, the tracks
 // ---------------------------------------------------------------------------
-enum { K_CALL = 1, K_TRACK = 2 };
+enum { K_CALL = 1, K_TRACK = 2, K_STOPALL = 3 };
 struct Ent { uint8_t kind; uint8_t argc; uint16_t code; uint16_t ret; uint16_t args[10]; uint16_t slot; };
 const size_t RING = 4096;
 Ent g_ring[RING];
@@ -79,6 +79,9 @@ uint16_t g_cache_size = 0;       // its fn99 answer
 double   g_tick_hz = 0.0;        // [desc+0x14] + 5 (the fn66 stub's sum, sub_1c61b)
 uint64_t g_ticks = 0, g_tick_base = 0;
 bool     g_preloaded = false;
+int16_t  g_slot0 = -1;           // the world's [990C]: the music slot's handle — the preload's after init, the music's after its fn97
+int32_t  g_fm_slot0 = 0x10000;   // the FM world's [990C] as last seen (sub_17912's hook, fn97 of slot 0); 0x10000 = unknown. The game's
+                                 // slot-0 calls carry THIS value (a stale 0 from the DS image before any music!) — they mean g_slot0 in the world
 int16_t  g_hmap[256];            // FM-world handle -> instance handle (-1 = unknown)
 uint16_t g_off[0x100];           // fn code -> handler offset in the MT-32 blob
 uint64_t g_calls = 0, g_skipped = 0;
@@ -286,9 +289,18 @@ void preload() {
     }
     uint16_t s2[2] = { g_drv, h };
     icall(0xAA, s2, 2);
+    g_slot0 = (h == 0xFFFF) ? -1 : (int16_t)h;   // the game's [990C] now holds this handle (sub_176bd eip 0x76DA)
+    // The sequence itself (a channel lock, program changes 0..63 over 8.4 s, unlock) ran in the
+    // background in DOS while the 6 s of timbre SysEx crawled down the MIDI wire and the logos
+    // followed — long done by the first music. Here the wire is instant and the loads are too, so
+    // it is driven to its end now: fn67 until the state block leaves "playing" (the driver's time
+    // is nothing but these ticks; no other sequence exists yet). Same driver state as after the
+    // 8.4 s; the module receives the 64 program changes in one go (no notes among them).
+    int ff = 0;
+    { uint16_t t[1] = { 0 }; while (ff < 1400 && rdw(g_ds, (uint16_t)(state_off + 0x1A)) == 1) { v2_ail_mt32i_call(g_off[0x67], t, 1); ff++; } }
     g_preloaded = true;
-    fprintf(stderr, "V2-MT32: 0x215 preload — handle %04X, %d timbres installed%s (%llu MIDI bytes, %llu sysex so far)\n",
-            h, installed, missing ? ", MISSING" : "", (unsigned long long)g_bytes_out, (unsigned long long)g_sysex_out);
+    fprintf(stderr, "V2-MT32: 0x215 preload — handle %04X, %d timbres installed%s, sequence run through in %d ticks (state %u) (%llu MIDI bytes, %llu sysex so far)\n",
+            h, installed, missing ? ", MISSING" : "", ff, rdw(g_ds, (uint16_t)(state_off + 0x1A)), (unsigned long long)g_bytes_out, (unsigned long long)g_sysex_out);
 }
 
 bool is_handle_fn(uint16_t code) {
@@ -308,8 +320,10 @@ void trace_channels(const char* why) {
     fprintf(stderr, "%s (tick %llu)\n", line, (unsigned long long)g_ticks);
 }
 
+uint64_t g_ring_fn67 = 0, g_ring_calls = 0;
 void run_call(const Ent& e) {
     uint16_t a[10]; memcpy(a, e.args, sizeof a); int argc = e.argc;
+    g_ring_calls++; if (e.code == 0x67) g_ring_fn67++;
     switch (e.code) {
     case 0x64: {   // init: the MT-32 driver's own descriptor
         g_drv = a[0];
@@ -352,18 +366,28 @@ void run_call(const Ent& e) {
         if (a[2] == g_pub.sfx_para) a[2] = P_SFX; else if (a[2] == g_pub.track_para) a[2] = P_TRACK;   // the XMIDI data: the MT-32 set
         const uint16_t mt = icall(0x97, a, argc);
         if (e.ret < 256) g_hmap[e.ret] = (mt == 0xFFFF) ? -1 : (int16_t)mt;
+        if (a[4] == rdw(g_ds, 0x9920)) { g_slot0 = (mt == 0xFFFF) ? -1 : (int16_t)mt; g_fm_slot0 = e.ret; }   // the music slot (si = 0): the game overwrites [990C] in both worlds
         if (trace_on() || mt == 0xFFFF) fprintf(stderr, "V2-MT32: fn97 seq=%u xmid=%04X -> handle %04X (FM %04X)\n", a[3], a[2], mt, e.ret);
         return;
     }
     default:
         if (is_handle_fn(e.code) && argc >= 2) {
             const uint16_t fm = a[1];
+            bool via_slot0 = false;
             if (fm != 0xFFFF) {
-                if (fm >= 256 || g_hmap[fm] < 0) { g_skipped++; return; }   // registered before this world started
-                a[1] = (uint16_t)g_hmap[fm];
+                if (g_fm_slot0 <= 0xFFFF && fm == (uint16_t)g_fm_slot0) {   // the game read [990C]: the world's own slot-0 handle
+                    if (g_slot0 < 0) { g_skipped++; return; }
+                    a[1] = (uint16_t)g_slot0; via_slot0 = true;
+                } else {
+                    if (fm >= 256 || g_hmap[fm] < 0) { g_skipped++; return; }   // registered before this world started
+                    a[1] = (uint16_t)g_hmap[fm];
+                }
             }
             const uint16_t r = icall(e.code, a, argc);
-            if (e.code == 0x98 && fm < 256) g_hmap[fm] = -1;
+            if (e.code == 0x98) {
+                if (via_slot0) { if (trace_on()) fprintf(stderr, "V2-MT32: slot 0 released (world handle %04X, FM %04X)\n", g_slot0, fm); g_slot0 = -1; g_fm_slot0 = 0xFFFF; }
+                else if (fm < 256) { if (g_hmap[fm] == g_slot0) g_slot0 = -1; g_hmap[fm] = -1; }
+            }
             if (e.code == 0xAA || e.code == 0xAB || e.code == 0x98) { char why[48]; snprintf(why, sizeof why, "after fn%02X h=%04X", e.code, fm); trace_channels(why); }
             if (e.code == 0x9B && trace_on() && r != e.ret) fprintf(stderr, "V2-MT32: fn9B handle %04X -> %04X (FM world %04X): a timbre request the MT-32 world leaves pending (bank %02X patch %02X)\n", fm, r, e.ret, r >> 8, r & 0xFF);
             return;
@@ -388,7 +412,7 @@ void build(uint32_t rate) {
     v2_ail_mt32i_map_front(P_TRACK, g_track, sizeof g_track);
     v2_ail_mt32i_map_front(g_pub.ds_para, g_ds, sizeof g_ds);
     g_mpu_in_n = 0; g_unk_n = 0;
-    g_ticks = 0; g_tick_base = 0; g_preloaded = false; g_calls = 0; g_skipped = 0; g_desc_off = 0; g_cache_size = 0; g_tick_hz = 0.0;
+    g_ticks = 0; g_tick_base = 0; g_preloaded = false; g_slot0 = -1; g_fm_slot0 = 0x10000; g_calls = 0; g_skipped = 0; g_desc_off = 0; g_cache_size = 0; g_tick_hz = 0.0;
     g_bytes_out = 0; g_sysex_out = 0; g_short_out = 0;
     if (!g_dump.on) { const char* p = getenv("V2_MT32_DUMP"); if (p && *p) { g_dump.on = true; g_dump.path = p; } }
     g_toast.store(munt_open(rate) ? 1 : 2, std::memory_order_release);   // without ROMs the driver still runs (the dump); the mix falls through to the OPL
@@ -436,6 +460,7 @@ const char* v2_mt32_status() { return g_status; }
 // producers (game thread)
 // ---------------------------------------------------------------------------
 void v2_mt32_note_call(uint16_t fn_code, const uint16_t* args, int argc, uint16_t ret) {
+    if (fn_code == 0x67) return;             // the audible driver's timer ticks: the MT-32 world ticks on its own sample clock (v2_mt32_pump)
     Ent e; e.kind = K_CALL; e.code = fn_code; e.ret = ret; e.argc = (uint8_t)(argc > 10 ? 10 : argc); e.slot = 0;
     memset(e.args, 0, sizeof e.args); for (int i = 0; i < e.argc; i++) e.args[i] = args[i];
     if (!g_init_done) {                      // the boot chain, kept for a world that starts later
@@ -458,6 +483,15 @@ void v2_mt32_note_track(uint16_t chunk_rel) {
     Ent e; memset(&e, 0, sizeof e); e.kind = K_TRACK; e.slot = (uint16_t)slot; e.code = cid;
     const size_t wr = g_wr.load(std::memory_order_relaxed), nx = (wr + 1) & (RING - 1);
     if (nx == g_rd.load(std::memory_order_acquire)) { fprintf(stderr, "V2-MT32: call ring FULL — track %04X dropped\n", cid); return; }
+    g_ring[wr] = e;
+    g_wr.store(nx, std::memory_order_release);
+}
+
+void v2_mt32_note_stop_all(uint16_t si_start, uint16_t fm_slot0_handle) {
+    if (!g_armed.load(std::memory_order_acquire)) return;
+    Ent e; memset(&e, 0, sizeof e); e.kind = K_STOPALL; e.args[0] = si_start; e.args[1] = fm_slot0_handle;
+    const size_t wr = g_wr.load(std::memory_order_relaxed), nx = (wr + 1) & (RING - 1);
+    if (nx == g_rd.load(std::memory_order_acquire)) return;
     g_ring[wr] = e;
     g_wr.store(nx, std::memory_order_release);
 }
@@ -506,6 +540,17 @@ void v2_mt32_pump(uint64_t pos, uint32_t offset_frames, uint32_t rate) {
         if (e.kind == K_TRACK) {
             memcpy(g_track, g_trk_stage[e.slot], g_trk_stage_len[e.slot]);
             if (trace_on()) fprintf(stderr, "V2-MT32: track chunk %04X (%u bytes) in the buffer\n", e.code, g_trk_stage_len[e.slot]);
+        } else if (e.kind == K_STOPALL) {
+            // sub_17912 in the MT-32 world: slot 0 holds the preload's handle where the FM world holds
+            // none (the FM stream carries no call for it) — stop + release it as the game's loop does
+            if (trace_on()) fprintf(stderr, "V2-MT32: sub_17912 stop-all si_start=%u FM slot0=%04X world slot0=%d (tick %llu)\n", e.args[0], e.args[1], g_slot0, (unsigned long long)g_ticks);
+            if (e.args[0] == 0) g_fm_slot0 = e.args[1];      // the calls that follow for slot 0 carry this value
+            if (e.args[0] == 0 && e.args[1] == 0xFFFF && g_slot0 >= 0) {
+                uint16_t q[2] = { g_drv, (uint16_t)g_slot0 };
+                icall(0xAB, q, 2); icall(0x98, q, 2);
+                if (trace_on()) fprintf(stderr, "V2-MT32: stop-all released the preload handle %04X\n", g_slot0);
+                g_slot0 = -1;
+            }
         } else run_call(e);
         rd = (rd + 1) & (RING - 1);
     }
@@ -528,9 +573,11 @@ bool v2_mt32_mix(int16_t* out, uint32_t frames, uint32_t rate) {
         if (acc >= rate) {
             acc -= rate; sec++;
             double e = 0; for (uint32_t i = 0; i < frames * 2; i++) e += (double)out[i] * out[i];
-            fprintf(stderr, "V2-MT32 sec %llu: notes %llu, sysex %llu, bytes %llu, play failures %llu, active %d, rms %.0f, tick %llu\n",
+            const uint16_t st = rdw(g_ds, 0x9920);   // the music state block: tempo inc/target, interval countdown, status
+            fprintf(stderr, "V2-MT32 sec %llu: notes %llu, sysex %llu, bytes %llu, play failures %llu, active %d, rms %.0f, tick %llu (ring calls %llu, fn67 via ring %llu); music state +32=%u +34=%u +1E=%u +1A=%u\n",
                     (unsigned long long)sec, (unsigned long long)g_notes_sent, (unsigned long long)g_sysex_out, (unsigned long long)g_bytes_out,
-                    (unsigned long long)g_play_fail, g_synth->isActive() ? 1 : 0, sqrt(e / (frames * 2)), (unsigned long long)g_ticks);
+                    (unsigned long long)g_play_fail, g_synth->isActive() ? 1 : 0, sqrt(e / (frames * 2)), (unsigned long long)g_ticks,
+                    (unsigned long long)g_ring_calls, (unsigned long long)g_ring_fn67, rdw(g_ds, (uint16_t)(st + 0x32)), rdw(g_ds, (uint16_t)(st + 0x34)), rdw(g_ds, (uint16_t)(st + 0x1E)), rdw(g_ds, (uint16_t)(st + 0x1A)));
         }
     }
     return true;

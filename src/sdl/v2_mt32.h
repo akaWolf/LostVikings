@@ -36,6 +36,7 @@ const char* v2_mt32_status();           // "MT-32: ..." for the menu / toasts
 // game thread — the producers
 void v2_mt32_note_call(uint16_t fn_code, const uint16_t* args, int argc, uint16_t ret);   // every driver call the audible driver got (+ what it returned)
 void v2_mt32_note_track(uint16_t chunk_rel);       // sub_1775d loaded a track: chunk_rel = table[track] (the FM variant is +[86B8]; the MT-32 one is +3)
+void v2_mt32_note_stop_all(uint16_t si_start, uint16_t fm_slot0_handle);   // sub_17912 ran: the MT-32 world's slot 0 may hold the preload's handle the FM world never had
 void v2_mt32_publish(const uint8_t* game_ds, uint16_t ds_para,
                      uint8_t* arena, uint16_t arena_para, uint32_t arena_size,
                      uint16_t bank_para, uint16_t sfx_para, uint16_t track_para);   // at the audible driver's boot: the paragraphs the game's pointers use
