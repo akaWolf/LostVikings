@@ -12,8 +12,14 @@ permissions:
   contents: read
 
 jobs:
-  linux:
-    name: Linux ${{ matrix.arch }} (release, static C++ runtime)
+  # The tests and the release build are separate jobs: the HEADLESS binary
+  # (.obj-headless) and the release binary (.obj) share no objects, and each
+  # compile of the transpiled VM takes ~19 min on the hosted runners — run in
+  # one job they were serial (HEADLESS 19 + replays 7 + release 19 = 46 min,
+  # the critical path of the whole workflow); in two they overlap. The tests
+  # still gate the published release through the `needs` of the release job.
+  test:
+    name: Tests ${{ matrix.arch }} (HEADLESS smoke + scenario replays)
     runs-on: ${{ matrix.runner }}
     strategy:
       fail-fast: false
@@ -32,9 +38,6 @@ jobs:
           sudo apt-get install -y --no-install-recommends \
             build-essential clang libsdl2-dev pkg-config
 
-      # HEADLESS build first so the smoke test can run before we touch the
-      # release artifact. .obj-headless and .obj are separate trees, so the
-      # subsequent default build does not need a `make clean` in between.
       - name: Generated-executor declarations are current (tools/data/gen_vm_decls.py --check)
         run: python3 tools/data/gen_vm_decls.py --check
       - name: Build HEADLESS variant
@@ -93,6 +96,26 @@ jobs:
       - name: Scenario replays
         if: hashFiles('DATA.DAT') != ''
         run: ./tests/scenarios.sh
+
+  linux:
+    name: Linux ${{ matrix.arch }} (release, static C++ runtime)
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { arch: x86_64, runner: ubuntu-latest }
+          - { arch: arm64,  runner: ubuntu-24.04-arm }   # GitHub's hosted arm64 Linux runner (public repos)
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: true
+
+      - name: Install build deps
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential clang libsdl2-dev pkg-config
 
       - name: Build release vikings (RELEASE=1 STATIC=1 SDL_STATIC=1)
         run: |
@@ -319,7 +342,9 @@ jobs:
     #                  branch name in the body. Does not displace "Latest".
     # Skipped for PR events to avoid review-time spam.
     name: Publish GitHub release
-    needs: [linux, windows, linux-v2only, windows-v2only]
+    # `test` first: no release is published while the HEADLESS smoke test or
+    # the scenario replays fail on either architecture.
+    needs: [test, linux, windows, linux-v2only, windows-v2only]
     if: github.event_name == 'push'
     runs-on: ubuntu-latest
     permissions:

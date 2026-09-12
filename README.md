@@ -24,7 +24,7 @@ register stream a real Sound Blaster Pro got in 1992.
 
 ## Pre-built downloads
 
-Every push to any branch produces a GitHub Release with four artifacts:
+Every push to any branch produces a GitHub Release with six artifacts:
 
 | File | Platform | Mode |
 | --- | --- | --- |
@@ -290,7 +290,15 @@ More detail: `tests/README.md` and `HEADLESS_MODE_ANALYSIS.md`.
 ## CI
 
 `.github/workflows/build.yml` runs on every push (any branch) and every
-PR, producing the four artifacts described above. Every push to any
+PR, producing the six artifacts described above. The jobs: `test`
+(x86_64 and arm64: the HEADLESS build, `tests/smoke.sh`, the scenario
+replays), `linux` (x86_64 and arm64), `windows`, `linux-v2only` (both
+architectures), `windows-v2only` and `release`. The tests and the release
+builds run in parallel — the two compiles of the transpiled VM share no
+objects and take ~19 min each on the hosted runners, so one job doing
+both in sequence was the workflow's critical path (46 min against ~27
+now); `release` `needs` every job, so nothing is published while the
+smoke test or a replay fails on either architecture. Every push to any
 branch also publishes a GitHub Release:
 
 - Branch push → **pre-release** named `Build N (branch @ short_sha)`.
@@ -299,10 +307,12 @@ branch also publishes a GitHub Release:
 
 ### Optional: full-gameplay CI smoke
 
-The CI Linux job runs `tests/smoke.sh`. Without access to `DATA.DAT` it
-runs the init-only path (still useful for catching link / SDL / replay
-parser regressions). To upgrade CI to a full gameplay smoke, host
-`DATA.DAT` on a server you control and add the URL as a repo secret:
+The CI `test` job (x86_64 and arm64) runs `tests/smoke.sh` and, when
+`DATA.DAT` is present, `tests/scenarios.sh`. Without access to `DATA.DAT`
+the smoke test runs the init-only path (still useful for catching link /
+SDL / replay parser regressions) and the replays are skipped. To upgrade
+CI to a full gameplay smoke, host `DATA.DAT` on a server you control and
+add the URL as a repo secret:
 
 ```sh
 gh secret set DATA_DAT_URL --body 'https://user:pass@yourserver/DATA.DAT'
@@ -338,7 +348,7 @@ src/
   adlmidi/                git submodule; ONLY chips/nuked/nukedopl3.c is built
 tests/                    HEADLESS test scripts + replays
 tests/golden_states/      per-replay final-state dumps (the golden oracle)
-.github/workflows/build.yml  CI: linux + windows × {default, V2_ONLY}
+.github/workflows/build.yml  CI: test (HEADLESS smoke + replays, x86_64/arm64) ∥ linux (x86_64/arm64) + windows × {default, V2_ONLY} → release
 ```
 
 `docs2/` holds reverse-engineering notes generated during the
