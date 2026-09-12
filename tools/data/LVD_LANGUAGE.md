@@ -152,6 +152,28 @@ last statement is a jump to itself is written `loop NAME:` with the jump
 implied. Field names come from the dictionary too (`fields`: `event` /
 `event_arg` for the engine's `state_18a5` / `state_18cd`).
 
+Tier 2 (state-level idioms, exact and two-way like the lines above; found by
+a statement-shape census of the six scripts):
+
+```
+    if bit(self.flags#08 & 0x40#0C) == bit(1) goto L   ;  acc = bit(self.flags#08 & 0x40#0C); if acc == bit(1 & 0x1#00) goto L
+    if bit([input_edges] & 0x80#0E) != bit(1) goto L   ;  the value loaded FIRST (`!= bit(1)`, `== bit(0)`, `!= bit(0)` likewise)
+    bits [input_edges]:                                ;  two or more `== / != bit(1)` tests of one word in a row, goto only
+        0x8000#1E -> gameover_ctl_yes                  ;  == bit(1)
+        !0x40#0C -> gameover_ctl_statues_password      ;  != bit(1)
+    anim erik_a_walk goto erik_walk                    ;  anim A  +  goto B  (a jump back to the state itself stays `loop X: anim A`)
+wait_anim statue_hide_wait goto statue_done            ;  loop X: anim_step / yield / nop / if anim_timer_zero goto L
+wait_anim bird_windup flags_set goto bird_fly          ;  the same behind `flags_set 0x2000`
+watch trex_idle: if 0 != self.event call trex_on_hurt  ;  loop X: yield / nop / if C call L  (any if…call)
+```
+
+The mirrored bit test is the same test as `if X & M goto L` with the two
+loads in the other order (the value's bit first, then the constant): the two
+spellings keep the two opcode orders apart, exactly like `switch` / `select`.
+`wait_anim` and `watch` are whole one-line states (column 0): the state runs
+its animation (or yields) every frame until the branch fires; the implied
+`goto X` at the end is the loop's own.
+
 Channel forms (opcodes whose operands are typed channels): `spawn(t=10, x=…,
 y=…, pool=…, fl=…)`, `tile[x,y] = v`, `a, b = delta(nearest_vik)`,
 `a, b = quad(x, y)`, `l = tile_type(x, y)`, `text(id=…, edge=…, x=…, y=…)`,
@@ -207,6 +229,38 @@ func t60_5:                     ; @5C1E
   the literal stores, then the optional `acc = X`, then `call F` — in that
   order, because a store uses the accumulator. The value a function leaves in
   `acc` is its result by convention; nothing enforces it.
+
+## Templates
+
+Author templates are the one-way part of the language: the compiler expands
+them before it reads anything else, the decompiler never writes them (the
+scripts of the game stay in the exact forms above, `lvsd.py check` is
+unaffected). A template is a named piece of text with parameters:
+
+```
+template blink(anim, next):          ; the header, at column 0
+state @wait:                         ; @name: a label local to the template —
+    anim $anim goto $next            ;   unique per instantiation (u3_wait)
+loop @spin:
+    yield
+    nop
+    if anim_timer_zero goto @wait
+end                                  ; the terminator, at column 0
+use blink(anim=erik_a_walk, next=erik_walk)      ; column 0: the body as written
+state erik_walk:
+    use step(where=erik_walk)        ; indented: a body of statements only
+```
+
+* `$name` (or `${name}`) is replaced by the argument's text; every parameter
+  must be given (`use NAME(a=X, b=Y)`), unknown names are errors, an
+  unresolved `$` in the body is an error.
+* `@label` becomes `u<N>_label` for the N-th `use` of the file, in the
+  header line and in every reference, so a template can be used twice.
+* A `use` at column 0 may produce whole states (its body has headers); an
+  indented `use` must produce statements only. Templates may use templates
+  (eight levels deep at most).
+* `lvsd.py selftest` (also part of `check`) compiles a template text and the
+  same text written by hand and compares the bytes.
 
 ## Animations
 

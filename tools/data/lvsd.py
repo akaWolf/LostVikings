@@ -889,8 +889,14 @@ def decompile_text(cid, text, names):
     out, nfn, ncall = fold_funcs(out)
     stats['func'] = nfn; stats['callargs'] = ncall
     out, stats['loops'] = fold_loops(out)
+    # tier 2 (after the loops: a self-loop stays `loop X: anim A`)
+    out, stats['bitsv'] = fold_bits_value(out, names)
+    out, stats['bitblocks'] = fold_bits_blocks(out)
+    out, stats['animgoto'] = fold_anim_goto(out)
+    out, stats['waitanim'], stats['watch'] = fold_loop_states(out)
     out.append(f'; stats: {stats["stmt"]} statements, {stats["sugar"]} folded loads, {nsw} switch blocks, {nsay} say lines, {nfn} funcs, {ncall} calls with args, {stats["states"]} states ({stats["named"]} named), {stats["anim"]} anim statements, {stats["anims"]} anim labels ({stats["anamed"]} named), {stats["pal"]} palettes, '
-               f'idioms: {stats["bits"]} bit tests, {stats["facing"]} same_facing, {stats["gates"]} mask gates, {stats["hurt"]} hurt, {stats["abv"]} anim_by_viking, {stats["loops"]} loops')
+               f'idioms: {stats["bits"]} bit tests, {stats["facing"]} same_facing, {stats["gates"]} mask gates, {stats["hurt"]} hurt, {stats["abv"]} anim_by_viking, {stats["loops"]} loops, '
+               f'tier 2: {stats["bitsv"]} mirrored bit tests, {stats["bitblocks"]} bits blocks, {stats["animgoto"]} anim+goto, {stats["waitanim"]} wait_anim, {stats["watch"]} watch')
     return '\n'.join(out) + '\n', stats
 
 
@@ -922,9 +928,17 @@ ACC_ARG_RX = re.compile(r'^acc = (.+)$')
 
 
 def label_of(line):
-    """the name a header/label line defines: `state X:`, `loop X:`, `func X:`, or an inner label `  X:`"""
-    m = re.match(r'^(?:(?:state|func|loop) (\S+)|  (\S+)):', line.split(';', 1)[0].rstrip())
-    return (m.group(1) or m.group(2)) if m else None
+    """the name a header/label line defines: `state X:`, `loop X:`, `func X:`, an inner label `  X:`,
+    or a tier-2 one-line state (`wait_anim X … goto L`, `watch X: …`)"""
+    code = line.split(';', 1)[0].rstrip()
+    m = re.match(r'^(?:(?:state|func|loop) (\S+)|  (\S+)):', code)
+    if m: return m.group(1) or m.group(2)
+    m = WAIT_ANIM_HDR_RX.match(code) or WATCH_HDR_RX.match(code)
+    return m.group(1) if m else None
+
+# tier 2 one-line states (defined before Cfg uses them)
+WAIT_ANIM_HDR_RX = re.compile(r'^wait_anim ([A-Za-z_][A-Za-z0-9_]*)( flags_set)? goto ([A-Za-z_][A-Za-z0-9_]*|=[0-9A-Fa-f]{4})$')
+WATCH_HDR_RX = re.compile(r'^watch ([A-Za-z_][A-Za-z0-9_]*): (if .* call (?:[A-Za-z_][A-Za-z0-9_]*|=[0-9A-Fa-f]{4}))$')
 
 
 class Cfg:
@@ -957,6 +971,13 @@ class Cfg:
                 cur = [m.group(2), i, [], False]; self.blocks.append(cur); self.kind[m.group(2)] = 'state' if m.group(1) == 'loop' else m.group(1)
                 if m.group(1) == 'loop': self.loops.add(m.group(2))
                 continue
+            # tier 2: one-line loop states — `wait_anim X [flags_set] goto L`, `watch X: if C call L`
+            m = WAIT_ANIM_HDR_RX.match(code) or WATCH_HDR_RX.match(code)
+            if m:
+                if cur is not None: cur[3] = True
+                name = m.group(1)
+                cur = [name, i, [(i, code.strip())], False]; self.blocks.append(cur); self.kind[name] = 'state'
+                self.loops.add(name); cur = None; continue
             m = re.match(r'^  (\S+):$', code)
             if m:
                 if cur is not None: cur[3] = True
@@ -977,13 +998,16 @@ class Cfg:
                 if m: calls.append((m.group(1), li)); continue
                 m = re.match(r'^if .* call (\S+)$', st)
                 if m: calls.append((m.group(1), li)); continue
-                m = re.match(r'^(0x[0-9A-Fa-f]+|\d+) -> (\S+)$', st)
+                m = re.match(r'^!?(0x[0-9A-Fa-f]+(?:#[0-9A-Fa-f]{2})?|\d+) -> (\S+)$', st)
                 if m: succ.append((m.group(2), li)); continue
+                m = re.match(r'^watch \S+: if .* call (\S+)$', st)          # tier 2: the watch loop's call
+                if m: calls.append((m.group(1), li)); continue
                 m = re.search(r'\bgoto (\S+)$', st)
                 if m: succ.append((m.group(1), li))
             last = stmts[-1][1].split()[0] if stmts else ''
             falls = last not in NONFALL
             if last == 'anim_by_viking': falls = stmts[-1][1].endswith(' fallthrough')   # the olaf branch falls through only in that variant
+            if last == 'wait_anim' or (last == 'anim' and re.match(r'^anim \S+ goto \S+$', stmts[-1][1])): falls = False   # tier 2: end in a goto
             if name in self.loops:
                 succ.append((name, stmts[-1][0] if stmts else hi)); falls = False      # the implicit `goto X` of a loop
             if falls and adj and k + 1 < len(self.blocks):
@@ -1296,6 +1320,199 @@ def fold_loops(lines):
     return out, n
 
 
+# ------------------------------------------------ tier 2 (level C DSL) --
+# State-level idioms, exact and two-way like the tier-1 lines; found by the
+# statement-shape census of the six scripts (scratch ngram.py, 2026-09-09).
+
+# the mirrored bit test: `acc = bit(X & M)` (the VALUE loaded first) + `if acc ==/!= bit(K & 1) goto L`
+#   -> if bit(X & M) ==/!= bit(K) goto L       (bit(K) on the right: the constant-first forms spell `== 0` / `!= 0`)
+BITV_LINE_RX = re.compile(rf'^if bit\({OPD_RX} & {MASK_RX}\) (==|!=) bit\(([01])\) {KIND_RX} {TARGET_RX}$')
+def fold_bits_value(lines, names):
+    b1 = re.escape(live(names)['bit1'])
+    A = re.compile(rf'^    acc = bit\({OPD_RX} & {MASK_RX}\)$')
+    B = re.compile(rf'^    if acc (==|!=) bit\(([01]) & {b1}\) {KIND_RX} {TARGET_RX}$')
+    out = []; i = 0; n = 0
+    while i < len(lines):
+        ma = A.match(lines[i]); mb = B.match(lines[i + 1]) if ma and i + 1 < len(lines) else None
+        if ma and mb:
+            x, m = ma.groups(); cmp, k, kind, tgt = mb.groups()
+            out.append(f'    if bit({x} & {m}) {cmp} bit({k}) {kind} {tgt}'); i += 2; n += 1; continue
+        out.append(lines[i]); i += 1
+    return out, n
+def expand_bits_value(raw, names):
+    m = BITV_LINE_RX.match(raw)
+    if not m: return None
+    x, mk, cmp, k, kind, tgt = m.groups()
+    return [f'acc = bit({x} & {mk})', f'if acc {cmp} bit({k} & {live(names)["bit1"]}) {kind} {tgt}']
+
+# bits block: two or more consecutive mirrored tests on the same word with `bit(1)` and goto
+#   -> bits X:  /  M -> L  /  !M -> L        (== / != bit(1))
+BITS_CASE_RX = re.compile(rf'^    if bit\({OPD_RX} & {MASK_RX}\) (==|!=) bit\(1\) goto {TARGET_RX}$')
+def fold_bits_blocks(lines):
+    out = []; i = 0; n = 0
+    while i < len(lines):
+        m = BITS_CASE_RX.match(lines[i])
+        if not m: out.append(lines[i]); i += 1; continue
+        x = m.group(1); j = i; cases = []
+        while j < len(lines):
+            mm = BITS_CASE_RX.match(lines[j])
+            if not mm or mm.group(1) != x: break
+            cases.append((('!' if mm.group(3) == '!=' else '') + mm.group(2), mm.group(4))); j += 1
+        if len(cases) < 2: out.append(lines[i]); i += 1; continue
+        out.append(f'    bits {x}:')
+        for mk, tgt in cases: out.append(f'        {mk} -> {tgt}')
+        n += 1; i = j
+    return out, n
+
+# anim + goto: `anim A` / `goto B` -> anim A goto B   (a self-loop stays `loop X: anim A`)
+ANIM_GOTO_RX = re.compile(rf'^anim (\S+) goto {TARGET_RX}$')
+def fold_anim_goto(lines):
+    out = []; i = 0; n = 0
+    while i < len(lines):
+        ma = re.match(r'^    anim (\S+)$', lines[i]); mg = re.match(rf'^    goto {TARGET_RX}$', lines[i + 1]) if ma and i + 1 < len(lines) else None
+        if ma and mg:
+            out.append(f'    anim {ma.group(1)} goto {mg.group(1)}'); i += 2; n += 1; continue
+        out.append(lines[i]); i += 1
+    return out, n
+def expand_anim_goto(raw):
+    m = ANIM_GOTO_RX.match(raw)
+    return [f'anim {m.group(1)}', f'goto {m.group(2)}'] if m else None
+
+# one-line loop states (after fold_loops):
+#   loop X: anim_step / yield / nop / if anim_timer_zero goto L          -> wait_anim X goto L
+#   loop X: flags_set 0x2000 / anim_step / yield / nop / if anim_timer_zero goto L  -> wait_anim X flags_set goto L
+#   loop X: yield / nop / if C call L                                    -> watch X: if C call L
+def fold_loop_states(lines):
+    out = []; i = 0; nw = 0; nh = 0
+    def stmt(k): return lines[k].split(';', 1)[0].rstrip() if k < len(lines) else None
+    def body(k):
+        j = k + 1; b = []
+        while j < len(lines) and stmt(j) is not None and (lines[j].startswith('    ') or not stmt(j).strip()):
+            if stmt(j).strip(): b.append(stmt(j))
+            j += 1
+        return b, j
+    while i < len(lines):
+        m = re.match(r'^loop (\S+):(.*)$', lines[i])
+        if m:
+            b, j = body(i); name, tail = m.group(1), m.group(2)
+            fl = b[:1] == ['    flags_set 0x2000']
+            core = b[1:] if fl else b
+            mt = re.match(rf'^    if anim_timer_zero goto {TARGET_RX}$', core[3]) if len(core) == 4 else None
+            if mt and core[:3] == ['    anim_step', '    yield', '    nop']:
+                out.append(f'wait_anim {name}{" flags_set" if fl else ""} goto {mt.group(1)}{tail}'); i = j; nw += 1; continue
+            mc = re.match(rf'^    (if .* call {TARGET_RX})$', b[2]) if len(b) == 3 else None
+            if mc and b[:2] == ['    yield', '    nop']:
+                out.append(f'watch {name}: {mc.group(1)}{tail}'); i = j; nh += 1; continue
+        out.append(lines[i]); i += 1
+    return out, nw, nh
+
+# author templates (one way: the compiler expands, the decompiler never writes them)
+#   template NAME(a, b):          body lines — statements and/or whole states —
+#       ...  $a ... $b ...        with $param (or ${param}) substituted and every
+#   end                           @label made unique per instantiation (u<N>_label)
+#   use NAME(a=X, b=Y)            at column 0: the body as written; indented: a statement body
+TEMPLATE_HDR_RX = re.compile(r'^template ([A-Za-z_][A-Za-z0-9_]*)\(([^)]*)\):$')
+USE_RX = re.compile(r'^use ([A-Za-z_][A-Za-z0-9_]*)\((.*)\)$')
+def expand_templates(text):
+    lines = text.splitlines(); tpl = {}; out = []; i = 0
+    while i < len(lines):
+        code = lines[i].partition(';')[0].rstrip()
+        m = TEMPLATE_HDR_RX.match(code)
+        if not m:
+            out.append(lines[i]); i += 1; continue
+        name = m.group(1); params = [x.strip() for x in m.group(2).split(',') if x.strip()]
+        body = []; i += 1
+        while i < len(lines) and lines[i].partition(';')[0].rstrip() != 'end':
+            body.append(lines[i]); i += 1
+        if i >= len(lines): raise ValueError(f'template {name}: no `end`')
+        i += 1
+        if name in tpl: raise ValueError(f'template {name} defined twice')
+        tpl[name] = (params, body)
+    if not tpl: return text
+    uses = [0]
+    def expand(lines, depth):
+        res = []
+        for l in lines:
+            code = l.partition(';')[0].rstrip(); raw = code.strip()
+            mu = USE_RX.match(raw)
+            if not mu:
+                res.append(l); continue
+            if depth > 8: raise ValueError(f'use {mu.group(1)}: templates nested too deep')
+            if mu.group(1) not in tpl: raise ValueError(f'use {mu.group(1)}: no such template')
+            params, body = tpl[mu.group(1)]
+            args = {}
+            for a in [x.strip() for x in mu.group(2).split(',') if x.strip()]:
+                if '=' not in a: raise ValueError(f'use {mu.group(1)}: argument {a!r} — expected name=value')
+                k, v = a.split('=', 1); k = k.strip(); v = v.strip()
+                if k not in params: raise ValueError(f'use {mu.group(1)}: unknown parameter {k!r}')
+                args[k] = v
+            missing = [k for k in params if k not in args]
+            if missing: raise ValueError(f'use {mu.group(1)}: missing {", ".join(missing)}')
+            uses[0] += 1; uid = f'u{uses[0]}'
+            indented = code.startswith(' ')
+            sub = []
+            for b in body:
+                t = b
+                for k, v in args.items(): t = t.replace('${' + k + '}', v).replace('$' + k, v)
+                t = re.sub(r'@([A-Za-z_][A-Za-z0-9_]*)', lambda mm: f'{uid}_{mm.group(1)}', t)
+                if '$' in t.partition(';')[0]: raise ValueError(f'use {mu.group(1)}: unresolved $ in {t.strip()!r}')
+                if indented and not t.startswith((' ', '\t')) and t.strip(): raise ValueError(f'use {mu.group(1)}: a statement-level use needs a body of statements only')
+                sub.append(t)
+            res.extend(expand(sub, depth + 1))
+        return res
+    return '\n'.join(expand(out, 0)) + '\n'
+
+TEMPLATE_SELFTEST = ('''chunk 0FF0 size 64
+class t01 record=01 sprite=FFFE flags=01 entry=blink rest=0000
+template blink(anim, next):
+state @wait:
+    anim $anim goto $next
+loop @spin:
+    yield
+    nop
+    if anim_timer_zero goto @wait
+end
+state blink:
+    use step(where=blink_2)
+    goto blink_2
+template step(where):
+    self.timer = 0x10
+    if self.timer == 0 goto $where
+end
+use blink(anim=A_walk, next=blink_2)
+state blink_2:
+    return
+anim A_walk:
+    wait 4
+    stop
+''', '''chunk 0FF0 size 64
+class t01 record=01 sprite=FFFE flags=01 entry=blink rest=0000
+state blink:
+    self.timer = 0x10
+    if self.timer == 0 goto blink_2
+    goto blink_2
+state u2_wait:
+    anim A_walk
+    goto blink_2
+loop u2_spin:
+    yield
+    nop
+    if anim_timer_zero goto u2_wait
+state blink_2:
+    return
+anim A_walk:
+    wait 4
+    stop
+''')
+def selftest(names):
+    """the template expansion against the hand-written text: the same bytes"""
+    a, _ = compile_lvd(TEMPLATE_SELFTEST[0], names)
+    b, _ = compile_lvd(TEMPLATE_SELFTEST[1], names)
+    same = a == b
+    print(f'templates: {"IDENTICAL" if same else "DIFF"} ({len(a)} vs {len(b)} bytes)')
+    return same
+
+
 # --------------------------------------------------------------- compiler --
 class Lowerer:
     def __init__(self, names):
@@ -1437,7 +1654,8 @@ class Lowerer:
     def expand_idiom(self, raw):
         """a level-C idiom line -> the low statements it stands for (label
         lines as 'NAME:'), or None when the line is not an idiom."""
-        for f in (expand_gate, lambda r: expand_bits(r, self.N), lambda r: expand_facing(r, self.N), lambda r: expand_hurt(r, self.N)):
+        for f in (expand_gate, lambda r: expand_bits(r, self.N), lambda r: expand_facing(r, self.N), lambda r: expand_hurt(r, self.N),
+                  lambda r: expand_bits_value(r, self.N), expand_anim_goto):
             ex = f(raw)
             if ex is not None: return ex
         m = ABV_LINE_RX.match(raw)
@@ -1449,6 +1667,7 @@ class Lowerer:
         return None
 
     def lower(self, text):
+        text = expand_templates(text)      # tier 2: author templates, before anything reads the text
         self.check_funcs(text)
         out = []; self._abv = 0
         block = None            # ('switch'|'select', value) while inside a case block
@@ -1466,10 +1685,16 @@ class Lowerer:
             if not raw: continue
             try:
                 p = raw.split()
-                if block and code.startswith('        '):               # a case line: `N -> L`
+                if block and code.startswith('        '):               # a case line: `N -> L` (bits: `M -> L` / `!M -> L`)
+                    kw, val = block
+                    if kw == 'bits':
+                        mc = re.match(r'^(!?)(0x[0-9A-Fa-f]+(?:#[0-9A-Fa-f]{2})?) -> ([A-Za-z_][A-Za-z0-9_]*|=[0-9A-Fa-f]{4})$', raw)
+                        if not mc: raise ValueError(f'bad bits case line {raw!r}')
+                        for s in expand_bits_value(f'if bit({val} & {mc.group(2)}) {"!=" if mc.group(1) else "=="} bit(1) goto {mc.group(3)}', self.N):
+                            out.extend(self.statement(s))
+                        continue
                     mc = re.match(r'^(0x[0-9A-Fa-f]+|\d+) -> ([A-Za-z_][A-Za-z0-9_]*|=[0-9A-Fa-f]{4})$', raw)
                     if not mc: raise ValueError(f'bad case line {raw!r}')
-                    kw, val = block
                     stmt = f'if {val} == {mc.group(1)} goto {mc.group(2)}' if kw == 'switch' else f'if {mc.group(1)} == {val} goto {mc.group(2)}'
                     out.extend(self.statement(stmt)); continue
                 block = None
@@ -1487,7 +1712,7 @@ class Lowerer:
                 if (code.startswith('    ') or code.startswith('\t')) and mode is None:
                     raise ValueError(f'statement outside a state/func/anim: {raw!r}')
                 if code.startswith('    ') or code.startswith('\t'):   # indented = a statement (checked first:
-                    mb = re.match(r'^(switch|select) (\S+):$', raw)     # `x = y` statements look like aliases)
+                    mb = re.match(r'^(switch|select|bits) (\S+):$', raw)     # `x = y` statements look like aliases)
                     if mb:
                         block = (mb.group(1), mb.group(2)); continue
                     if raw.startswith('say '):
@@ -1524,6 +1749,16 @@ class Lowerer:
                 elif p[0] in ('state', 'func', 'loop') and raw.endswith(':'):
                     out.append(self.label(p[1][:-1]) + ':'); mode = 'code'
                     if p[0] == 'loop': loop = p[1][:-1]
+                elif WAIT_ANIM_HDR_RX.match(raw):                       # tier 2: a one-line loop state
+                    mw = WAIT_ANIM_HDR_RX.match(raw); name = mw.group(1)
+                    out.append(self.label(name) + ':'); mode = 'code'
+                    for st in (['flags_set 0x2000'] if mw.group(2) else []) + ['anim_step', 'yield', 'nop', f'if anim_timer_zero goto {mw.group(3)}', f'goto {name}']:
+                        out.extend(self.statement(st))
+                elif WATCH_HDR_RX.match(raw):
+                    mw = WATCH_HDR_RX.match(raw); name = mw.group(1)
+                    out.append(self.label(name) + ':'); mode = 'code'
+                    for st in ['yield', 'nop', mw.group(2), f'goto {name}']:
+                        out.extend(self.statement(st))
                 elif p[0] == 'anim' and len(p) == 2 and raw.endswith(':'):
                     out.append(self.alabel(p[1][:-1]) + ':'); mode = 'anim'
                 elif p[0] == 'palette' and len(p) == 2 and raw.endswith(':'):
@@ -1595,6 +1830,7 @@ def check(cids):
     if os.path.exists(REF_PATH):
         fresh = open(REF_PATH, encoding='utf-8').read() == reference_md()
         print('LVD_REFERENCE.md ' + ('up to date' if fresh else 'STALE — run lvsd.py ref')); ok &= fresh
+    ok &= selftest(names)
     return ok
 
 
@@ -1847,6 +2083,7 @@ def main():
     if cmd == 'check':
         cids = [int(x, 16) for x in a[1:]] or list(range(0x1C1, 0x1C7))
         return 0 if check(cids) else 1
+    if cmd == 'selftest': return 0 if selftest(Names()) else 1
     names = Names()
     if cmd == 'decompile':
         cid = int(a[1], 16); text, stats = decompile_text(cid, canonical_text(cid), names)
