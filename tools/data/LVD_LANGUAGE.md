@@ -234,7 +234,10 @@ three bytes per line, a remainder as `blob`.
 * Fields: the `OBJ_*` names of `src/sdl/v2_ds_layout.h`, lower-case (`world_x`,
   `timer`, `state_187d`). The byte in the instruction is a field INDEX; when a
   name is reached by several indices the token carries it: `flags#08`.
-* Globals: `[name]` with the layout names (`[level]`) or `[HHHH]`.
+* Globals: `[name]` with the layout names (`[level]`), the dictionary names
+  of `mem` in lvs_names.json (`[switches]`, `[tmp_a]`, `[crane_ctl_0]` — they
+  override the layout name of that word) or `[HHHH]`. A name must map to one
+  address; an ambiguous one falls back to `[HHHH]`.
 * Bit masks: `0xMASK`, with `#idx` when several mask indices share the value
   (`0x8000#1E`).
 * Literals: decimal or `0x…`; signed compares take negative literals.
@@ -244,7 +247,12 @@ three bytes per line, a remainder as `blob`.
 
 `tools/data/lvs_names.json` — `states` (`"1C1:3853": "baleog_spawn"`),
 `classes` (`"*:01": "erik"`, or per script `"1C1:10"`), `anims`
-(`"1C1:2618": "erik_walk"`), `sfx`.
+(`"1C1:2618": "erik_a_walk"`), `pals` (`"1C6:3BF6": "pal_trex_blue"`),
+`mem` (`"023C": "crane_ctl_0"` — DS words, global to the six scripts), `sfx`.
+Anim names come from the states that set the stream (`scorpion_a_attack` from
+`scorpion_attack`), `_cont` for a continuation reached only from another
+stream, `_sub` for a called sub-stream, `<class>_a_default` for a stream no
+code sets (the record's own).
 `lvsd.py seed` fills the record entries (`<class>_anim` / `<class>_spawn`);
 everything else is named by hand as the scripts get understood. A name is a
 view: renaming a state changes no byte. Class names are global (`*:XX`) —

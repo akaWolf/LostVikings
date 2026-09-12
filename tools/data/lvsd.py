@@ -82,11 +82,13 @@ class Names:
         self.idx_of_mask = {}
         for idx, m in self.mask_of.items():
             if m is not None: self.idx_of_mask.setdefault(m, []).append(idx)
-        self.addr_of_mem = {}
-        for a, n in self.lay.items(): self.addr_of_mem.setdefault(n, []).append(a)
-        self.d = {'states': {}, 'classes': {}, 'anims': {}, 'sfx': {}}
+        self.d = {'states': {}, 'classes': {}, 'anims': {}, 'sfx': {}, 'mem': {}, 'pals': {}}
         if os.path.exists(dict_path):
             self.d.update(json.load(open(dict_path, encoding='utf-8')))
+        for k, n in self.d.get('mem', {}).items():     # dictionary names of DS words ("HHHH": name) over the layout names
+            self.lay[int(k, 16)] = n
+        self.addr_of_mem = {}
+        for a, n in self.lay.items(): self.addr_of_mem.setdefault(n, []).append(a)
 
     # fields -------------------------------------------------------------
     def fld(self, idx):
@@ -178,10 +180,13 @@ class Names:
         if n: return n
         return self.auto_anim_names(cid).get(int(lbl[2:], 16), lbl)
 
-    def pal(self, lbl):
-        """P_xxxx stays P_xxxx (no owner to name it after); a label the author
-        named (P_gold from `palette gold:`) shows as `gold`."""
-        return lbl if re.fullmatch(r'P_[0-9A-Fa-f]{4}', lbl) else (lbl[2:] if lbl.startswith('P_') else lbl)
+    def pal(self, cid, lbl):
+        """P_xxxx -> dictionary name ('pals': "CID:xxxx"), else P_xxxx (no
+        owner to name it after); a label the author named (P_gold from
+        `palette gold:`) shows as `gold`."""
+        if re.fullmatch(r'P_[0-9A-Fa-f]{4}', lbl):
+            return self.d.get('pals', {}).get(f'{cid:X}:{lbl[2:]}', lbl)
+        return lbl[2:] if lbl.startswith('P_') else lbl
 
     _aauto = {}
     def auto_anim_names(self, cid):
@@ -780,7 +785,7 @@ def decompile_text(cid, text, names):
                 out.append(f'anim {nm}:' + (f'   ; @{a:04X}' if a is not None else '')); dmode = 'anim'
             elif lbl.startswith('P_'):
                 a = addr_after.get(lineno)
-                out.append(f'palette {names.pal(lbl)}:' + (f'   ; @{a:04X}' if a is not None else '')); dmode = 'pal'; stats['pal'] += 1
+                out.append(f'palette {names.pal(cid, lbl)}:' + (f'   ; @{a:04X}' if a is not None else '')); dmode = 'pal'; stats['pal'] += 1
             else:
                 out.append(raw); dmode = None
             continue
@@ -820,7 +825,7 @@ def decompile_text(cid, text, names):
             flush(); out.append(f'    anim {anim_name(sym[0])}'); continue
         if op == 0x13:
             flush()
-            if sym and sym[0] == 'd9': out.append(f'    palette {names.pal(sym[1])}')
+            if sym and sym[0] == 'd9': out.append(f'    palette {names.pal(cid, sym[1])}')
             elif len(body) == 3 and body[0] in OP13: out.append(f'    {OP13[body[0]]} pad {imm(body[1])},{imm(body[2])}')
             else: out.append(f'    op13 {body.hex()}')
             continue
