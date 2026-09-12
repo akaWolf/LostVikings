@@ -126,11 +126,43 @@ class Names:
         return c[0]
     # states / classes / anims -------------------------------------------
     def state(self, cid, lbl):
-        """S_xxxx -> dictionary name, or S_xxxx; a label the author named
-        (S_walk, written by the lowerer from `state walk:`) shows as `walk`."""
+        """S_xxxx -> dictionary name, else the automatic owner name
+        (`<class>_<k>`: the k-th state of the class that owns the code, by
+        address; `shared_<t1>_<t2>_<k>` when several classes share it), else
+        S_xxxx; a label the author named (S_walk, written by the lowerer from
+        `state walk:`) shows as `walk`."""
         if not re.fullmatch(r'S_[0-9A-Fa-f]{4}', lbl):
             return lbl[2:] if lbl.startswith('S_') else lbl
-        return self.d['states'].get(f'{cid:X}:{lbl[2:]}', lbl)
+        n = self.d['states'].get(f'{cid:X}:{lbl[2:]}')
+        if n: return n
+        return self.auto_names(cid).get(int(lbl[2:], 16), lbl)
+
+    _auto = {}
+    def auto_names(self, cid):
+        """{label addr: name} for the labels of chunk cid, from the ownership
+        propagation of lvs_struct (record P/P+3 roots over the code graph)."""
+        if cid in self._auto: return self._auto[cid]
+        ls = mod('lvs_struct'); lf = mod('lvs_full')
+        cwd = os.getcwd(); os.chdir(ROOT)
+        try:
+            own = ls.owners_of_states(cid)
+            text = canonical_text(cid)
+        finally: os.chdir(cwd)
+        labels = sorted(int(m.group(1), 16) for m in re.finditer(r'^S_([0-9A-F]{4}):', text, re.M))
+        groups = {}
+        for a in labels:
+            os_ = frozenset(own.get(a, ()))
+            groups.setdefault(os_, []).append(a)
+        names = {}
+        for os_, addrs in groups.items():
+            if not os_: continue
+            base = self.cls(cid, min(os_)) if len(os_) == 1 else 'shared_' + '_'.join(f'{t:02X}' for t in sorted(os_))
+            k = 0
+            for a in sorted(addrs):
+                if f'{cid:X}:{a:04X}' in self.d['states']: continue    # a dictionary name keeps its own
+                k += 1; names[a] = f'{base}_{k}'
+        self._auto[cid] = names
+        return names
     def cls(self, cid, t):
         return self.d['classes'].get(f'{cid:X}:{t:02X}', self.d['classes'].get(f'*:{t:02X}', f't{t:02X}'))
 
@@ -153,7 +185,7 @@ OPS = {
     0x17: ('vv', 'vel {0},{1} anim_tbl=0'), 0x18: ('vv', 'vel {0},{1} anim_tbl=partner'),
     0x1B: ('vv', 'obj0.vel {0},{1} obj0.anim_tbl=self'),
     0x1A: ('b', 'if coll_155d6_vik(f={0})', 'C'), 0x1D: ('w', 'if coll_156c0_vik(class={0})', 'C'),
-    0x1C: ('', 'if self.anim_timer == 0', 'T'),
+    0x1C: ('', 'if anim_timer_zero', 'T'),      # its own op (the generic `if self.anim_timer == 0` is 52+72)
     0x1E: ('b', 'if probe_up0({0})', 'T'), 0x1F: ('b', 'if probe_down({0})', 'T'),
     0x20: ('b', 'if probe_lr({0})', 'T'), 0x21: ('b', 'if probe_rl({0})', 'T'),
     0x22: ('b', 'if probe_up({0})', 'T'), 0x23: ('b', 'if probe_down2({0})', 'T'),
@@ -170,7 +202,7 @@ OPS = {
     0x3F: ('', 'subsprites_on'), 0x40: ('', 'subsprites_off'),
     0x42: ('', 'cmdq_push(2)'), 0x43: ('', 'cmdq_push(4)'), 0xCB: ('', 'cmdq_push(4) #CB'),
     0x46: ('w', 'cmdq_push(6, {0})'), 0x47: ('', 'nop47'),
-    0x4B: ('', 'self.flags |= 0x2000'), 0x4C: ('rrr', 'pal_shade2({0},{1},{2})'), 0x4D: ('', 'pal_shade2_off'),
+    0x4B: ('', 'flags_set 0x2000'),           # its own op (the generic `self.flags |= 0x2000` is 51+62) 0x4C: ('rrr', 'pal_shade2({0},{1},{2})'), 0x4D: ('', 'pal_shade2_off'),
     0x4E: ('', 'if !platform0', 'T'), 0x4F: ('', 'if !platform', 'T'),
     0x51: ('w', 'acc = {0}'), 0x52: ('f', 'acc = self.{0}'), 0x53: ('g', 'acc = [{0}]'),
     0x54: ('p', 'acc = partner.{0}'), 0x55: ('', 'acc = random()'),
@@ -237,7 +269,8 @@ CHANNEL_OPS = {0x14, 0x15, 0x16, 0x34, 0x26, 0x27, 0x28, 0x29, 0x2A, 0x2B, 0x50,
 CONTROL = {0x00: 'yield', 0x01: 'nop', 0x06: 'return', 0x0F: 'exit', 0x10: 'despawn'}
 # consumer ops that take `acc` as their single right-hand value: sugar
 SUGAR_CONSUMERS = ({0x56, 0x57, 0x58, 0x59, 0x5A, 0x5B, 0x5C, 0x5D, 0x5E, 0x5F, 0x60, 0x61, 0x62, 0x63,
-                    0x64, 0x65, 0x66, 0x67, 0x96, 0xC7, 0xC8, 0xCA}
+                    0x64, 0x65, 0x66, 0x67, 0x96, 0xC7, 0xC8, 0xCA,
+                    0x9C, 0x9D, 0x9E, 0xA0, 0xA3, 0xA4, 0xA5, 0xA7, 0xBC, 0xBD, 0xBE}   # setbit / mask-merge / <<8 stores
                    | set(range(0x68, 0x90)))
 LOAD_OPS = {0x51, 0x52, 0x53, 0x54, 0x55, 0x97, 0x98, 0x99, 0x9A}
 
@@ -521,7 +554,20 @@ def decompile_text(cid, text, names):
     out = [f'; .lvd v0 — chunk {cid:04X} (level C of the logic editor; lvsd.py)',
            f'; statements are a 1:1 layer over the free-form .lvsf: compile == the v1.5 bytes']
     lines = text.splitlines()
-    # labels that are jump targets / entries: a statement at a label must not be folded into the previous one
+    # the address of every label = the address of the code line that follows it,
+    # from the assembler's own layout of this very text (so an edited text shows
+    # its new addresses and an unedited one the original ones)
+    lf = mod('lvs_full'); line_map = []
+    cwd = os.getcwd(); os.chdir(ROOT)
+    try: lf.compile_free(text, line_map)
+    except Exception: line_map = []
+    finally: os.chdir(cwd)
+    addr_after = {}
+    for ln, a in reversed(line_map): addr_after[ln] = a
+    nxt = None
+    for ln in range(len(lines), 0, -1):
+        if ln in addr_after: nxt = addr_after[ln]
+        addr_after[ln] = nxt
     stats = {'stmt': 0, 'sugar': 0, 'states': 0, 'named': 0}
     def tgt_name(tok):
         if tok.startswith('='): return tok
@@ -550,7 +596,8 @@ def decompile_text(cid, text, names):
             lbl = p[0][:-1]
             if lbl.startswith('S_'):
                 nm = names.state(cid, lbl); stats['states'] += 1; stats['named'] += (nm != lbl)
-                out.append(f'state {nm}:' + (f'   ; @{lbl[2:]}' if nm != lbl else ''))
+                a = addr_after.get(lineno)
+                out.append(f'state {nm}:' + (f'   ; @{a:04X}' if a is not None else ''))
             else:
                 out.append(raw)
             continue
@@ -599,8 +646,47 @@ def decompile_text(cid, text, names):
             continue
         flush(); out.append('    ' + stext)
     flush()
-    out.append(f'; stats: {stats["stmt"]} statements, {stats["sugar"]} folded loads, {stats["states"]} states ({stats["named"]} named)')
+    out, nsw = fold_switches(out)
+    stats['switch'] = nsw
+    out.append(f'; stats: {stats["stmt"]} statements, {stats["sugar"]} folded loads, {nsw} switch blocks, {stats["states"]} states ({stats["named"]} named)')
     return '\n'.join(out) + '\n', stats
+
+
+# switch / select: a run of two or more consecutive `if` statements that compare
+# the SAME value with literals and branch — the field-loaded form
+#   acc = X; if acc == N goto L      (52/53/54 + 72)      ->  switch X:
+# and the literal-loaded form
+#   acc = N; if acc == X goto L      (51 + 73/74/75)      ->  select X:
+# Both are the same test; the two keywords keep the two opcode sequences apart
+# so the fold is exact. Cases are `N -> L` lines indented by eight spaces.
+VAL_RX = r'(self\.[A-Za-z_][A-Za-z0-9_?]*(?:#[0-9A-Fa-f]{2})?|partner\.[A-Za-z_][A-Za-z0-9_?]*(?:#[0-9A-Fa-f]{2})?|\[(?:[A-Za-z_][A-Za-z0-9_]*|[0-9A-Fa-f]{4})\])'
+LIT_RX = r'(0x[0-9A-Fa-f]+|\d+)'
+SW_RX = re.compile(rf'^    if {VAL_RX} == {LIT_RX} goto ([A-Za-z_][A-Za-z0-9_]*|=[0-9A-Fa-f]{{4}})$')
+SEL_RX = re.compile(rf'^    if {LIT_RX} == {VAL_RX} goto ([A-Za-z_][A-Za-z0-9_]*|=[0-9A-Fa-f]{{4}})$')
+
+
+def fold_switches(lines):
+    out = []; i = 0; n = 0
+    while i < len(lines):
+        m = SW_RX.match(lines[i]); kw = 'switch'
+        if not m:
+            m = SEL_RX.match(lines[i]); kw = 'select'
+        if not m:
+            out.append(lines[i]); i += 1; continue
+        val = m.group(1) if kw == 'switch' else m.group(2)
+        j = i; cases = []
+        while j < len(lines):
+            mm = (SW_RX if kw == 'switch' else SEL_RX).match(lines[j])
+            if not mm: break
+            v = mm.group(1) if kw == 'switch' else mm.group(2)
+            if v != val: break
+            cases.append((mm.group(2) if kw == 'switch' else mm.group(1), mm.group(3))); j += 1
+        if len(cases) < 2:
+            out.append(lines[i]); i += 1; continue
+        out.append(f'    {kw} {val}:')
+        for lit, tgt in cases: out.append(f'        {lit} -> {tgt}')
+        n += 1; i = j
+    return out, n
 
 
 # --------------------------------------------------------------- compiler --
@@ -670,7 +756,7 @@ class Lowerer:
             if sugar:
                 # the acc-expression sits where `acc` is in the template: its group index = number of slots before it
                 tpl = ent[1]; pos = tpl.index('acc')
-                nb = tpl[:pos].count('{')
+                nb = len({int(k) for k in re.findall(r'\{(\d+)\}', tpl[:pos])})   # distinct slots before `acc` = groups before it (a repeat is a backreference)
                 x = g.pop(nb)
                 lop, lbody = self.acc_load(x)
                 lines.append('o %02X%s' % (lop, (' ' + lbody.hex()) if lbody else ''))
@@ -684,14 +770,25 @@ class Lowerer:
 
     def lower(self, text):
         out = []
+        block = None            # ('switch'|'select', value) while inside a case block
         for lineno, line in enumerate(text.splitlines(), 1):
             code = line.partition(';')[0].rstrip()
             raw = code.strip()
             if not raw: continue
             try:
                 p = raw.split()
+                if block and code.startswith('        '):               # a case line: `N -> L`
+                    mc = re.match(r'^(0x[0-9A-Fa-f]+|\d+) -> ([A-Za-z_][A-Za-z0-9_]*|=[0-9A-Fa-f]{4})$', raw)
+                    if not mc: raise ValueError(f'bad case line {raw!r}')
+                    kw, val = block
+                    stmt = f'if {val} == {mc.group(1)} goto {mc.group(2)}' if kw == 'switch' else f'if {mc.group(1)} == {val} goto {mc.group(2)}'
+                    out.extend(self.statement(stmt)); continue
+                block = None
                 if code.startswith('    ') or code.startswith('\t'):   # indented = a statement (checked first:
-                    out.extend(self.statement(raw)); continue         # `x = y` statements look like aliases)
+                    mb = re.match(r'^(switch|select) (\S+):$', raw)     # `x = y` statements look like aliases)
+                    if mb:
+                        block = (mb.group(1), mb.group(2)); continue
+                    out.extend(self.statement(raw)); continue
                 if p[0] == 'chunk': out.append(raw)
                 elif p[0] == 'class':
                     kv = dict(x.split('=', 1) for x in p[2:])
@@ -757,7 +854,12 @@ def check(cids):
 def seed_names():
     """Initial dictionary: record entries -> <class>_anim / <class>_spawn."""
     dz = mod('disasm')
-    d = {'classes': {'*:00': 'baleog', '*:01': 'erik', '*:02': 'olaf'}, 'states': {}, 'anims': {}, 'sfx': {}}
+    d = {'classes': {'*:00': 'baleog', '*:01': 'erik', '*:02': 'olaf',
+                     # from the scene / game-over work (docs2/SCENE_PORT_ENGINE_FACTS, GENESIS_ROM_INTERNALS)
+                     '*:48': 'scene_ctl', '*:4A': 'geyser', '*:4E': 'crowd', '*:61': 'water_bubble',
+                     '*:89': 'ship_pod', '*:D2': 'gameover_ctl', '*:D8': 'cutscene_ctl', '*:DA': 'bubble_track',
+                     '*:E0': 'banner_letter', '*:E1': 'talk_spot'},
+         'states': {}, 'anims': {}, 'sfx': {}}
     if os.path.exists(NAMES_PATH):
         d.update(json.load(open(NAMES_PATH, encoding='utf-8')))
     json.dump(d, open(NAMES_PATH, 'w', encoding='utf-8'), indent=1, ensure_ascii=False)   # the class names first: the state names derive from them

@@ -38,9 +38,14 @@ blob <hex>                         ; data with no reference from the code (dead)
 
 * `;` starts a comment. Statements are indented by four spaces; everything else
   starts at column 0.
-* `state NAME:` names a code label. NAME is a dictionary name, a machine label
-  `S_xxxx`, or a name you write yourself (letters, digits, `_`; not four hex
-  digits). Targets of `goto` / `call` / `entry=` use the same names.
+* `state NAME:` names a code label. NAME is a dictionary name, an automatic
+  owner name, or a name you write yourself (letters, digits, `_`; not four hex
+  digits). Targets of `goto` / `call` / `entry=` use the same names. The
+  automatic names come from the class that owns the code: `erik_12` is the
+  12th state (by address) of the class named `erik`, `t84_3` the 3rd of the
+  unnamed record 0x84, `shared_67_79_84_1` code reached from three classes.
+  Rename a class in `lvs_names.json` and all its automatic names follow; a
+  hand-written name in the dictionary or in the text always wins.
 * `class NAME record=T sprite=W flags=B entry=STATE rest=<hex>` is one record
   of the class table (the 0x15-byte template record). The name comes from
   `lvs_names.json` (`t10` when unnamed).
@@ -83,7 +88,24 @@ if 0 != self.state_18a5 call S_197F   ;  acc = 0  +  if acc != self.state_18a5 c
 The left operand is always the accumulator load; the compiler expands the
 folded form back into the two instructions (which load it is follows from the
 shape of the value). Write `acc = X` on its own line when the next statement
-must stay a jump target or uses `acc` twice.
+must stay a jump target or uses `acc` twice. The bit stores fold too:
+`self.f = setbit(self.f, 0x40, bit(0x40 & 0x40))`, `[g] |= (bit(...) ? M : 0)`.
+
+Switch blocks: two or more consecutive compare-and-branch statements on the
+same value fold into a block, one case per line, indented by eight spaces:
+
+```
+    switch self.state_18f5:        ;  acc = self.state_18f5; if acc == 1 goto …  (per case)
+        1 -> t67_23
+        2 -> t67_24
+    select self.state_18f5:        ;  acc = 1; if acc == self.state_18f5 goto …  (per case)
+        1 -> t67_23
+```
+
+`switch` loads the value and compares it with each literal (the field-loaded
+opcodes), `select` loads each literal and compares it with the value (the
+literal-loaded opcodes). Both test the same thing; the two keywords keep the
+two opcode sequences apart, so the fold is exact. A case line is `N -> label`.
 
 Channel forms (opcodes whose operands are typed channels): `spawn(t=10, x=…,
 y=…, pool=…, fl=…)`, `tile[x,y] = v`, `a, b = delta(nearest_vik)`,
