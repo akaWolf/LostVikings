@@ -57,6 +57,23 @@ const KeyMapEntry kBuiltinDefaults[] = {
     {"2",      SDLK_2,      0,      0x916F},
     {"3",      SDLK_3,      0,      0x9170},
     {"F12",    SDLK_F12,    0,      0},
+    // Co-op key sets (v2_coop.h). Player 2 = the numeric keypad, player 3 =
+    // letters no DOS hotkey uses (the DOS letter hotkeys are S/M/X/Q/R/Y/A/N).
+    // key= bits as for player 1: 0x200/0x100/0x800/0x400 move, 0x8000 action,
+    // 0x4000 second button, 0x80 use/talk, 0x40 item, 0x20 previous viking,
+    // 0x10 next viking, 0x2000 switch (TAB).
+    {"P2:LEFT",    SDLK_KP_4,        0x200,  0, 1}, {"P2:RIGHT",  SDLK_KP_6,     0x100,  0, 1},
+    {"P2:UP",      SDLK_KP_8,        0x800,  0, 1}, {"P2:DOWN",   SDLK_KP_2,     0x400,  0, 1},
+    {"P2:ACTION",  SDLK_KP_0,        0x8000, 0, 1}, {"P2:ACTION2",SDLK_KP_ENTER, 0x4000, 0, 1},
+    {"P2:USE",     SDLK_KP_PLUS,     0x80,   0, 1}, {"P2:ITEM",   SDLK_KP_MINUS, 0x40,   0, 1},
+    {"P2:PREV",    SDLK_KP_DIVIDE,   0x20,   0, 1}, {"P2:NEXT",   SDLK_KP_MULTIPLY, 0x10, 0, 1},
+    {"P2:SWITCH",  SDLK_KP_PERIOD,   0x2000, 0, 1},
+    {"P3:LEFT",    SDLK_j,           0x200,  0, 2}, {"P3:RIGHT",  SDLK_l,        0x100,  0, 2},
+    {"P3:UP",      SDLK_i,           0x800,  0, 2}, {"P3:DOWN",   SDLK_k,        0x400,  0, 2},
+    {"P3:ACTION",  SDLK_u,           0x8000, 0, 2}, {"P3:ACTION2",SDLK_o,        0x4000, 0, 2},
+    {"P3:USE",     SDLK_p,           0x80,   0, 2}, {"P3:ITEM",   SDLK_h,        0x40,   0, 2},
+    {"P3:PREV",    SDLK_v,           0x20,   0, 2}, {"P3:NEXT",   SDLK_b,        0x10,   0, 2},
+    {"P3:SWITCH",  SDLK_g,           0x2000, 0, 2},
 };
 
 void load_defaults() {
@@ -82,6 +99,12 @@ const NamedKey kNamedKeys[] = {
     {"F1",     SDLK_F1},     {"F2",    SDLK_F2},   {"F3",   SDLK_F3},   {"F4",   SDLK_F4},
     {"F5",     SDLK_F5},     {"F6",    SDLK_F6},   {"F7",   SDLK_F7},   {"F8",   SDLK_F8},
     {"F9",     SDLK_F9},     {"F10",   SDLK_F10},  {"F11",  SDLK_F11},  {"F12",  SDLK_F12},
+    // the numeric keypad (the player-2 co-op set)
+    {"KP_0", SDLK_KP_0}, {"KP_1", SDLK_KP_1}, {"KP_2", SDLK_KP_2}, {"KP_3", SDLK_KP_3}, {"KP_4", SDLK_KP_4},
+    {"KP_5", SDLK_KP_5}, {"KP_6", SDLK_KP_6}, {"KP_7", SDLK_KP_7}, {"KP_8", SDLK_KP_8}, {"KP_9", SDLK_KP_9},
+    {"KP_ENTER", SDLK_KP_ENTER}, {"KP_PLUS", SDLK_KP_PLUS}, {"KP_MINUS", SDLK_KP_MINUS},
+    {"KP_MULTIPLY", SDLK_KP_MULTIPLY}, {"KP_DIVIDE", SDLK_KP_DIVIDE}, {"KP_PERIOD", SDLK_KP_PERIOD},
+    {"HOME", SDLK_HOME}, {"END", SDLK_END}, {"PGUP", SDLK_PAGEUP}, {"PGDN", SDLK_PAGEDOWN}, {"INSERT", SDLK_INSERT},
 };
 
 SDL_Keycode parse_sdl_key(const char* tok) {
@@ -138,6 +161,9 @@ bool parse_line(const char* line_in, KeyMapEntry* out, std::string* action_str) 
     out->sdl_key = parse_sdl_key(toks[1].c_str());
     out->key_val = 0;
     out->spec_off = 0;
+    out->player = 0;
+    if (toks[0].size() > 3 && toks[0][0] == 'P' && toks[0][2] == ':' && (toks[0][1] == '2' || toks[0][1] == '3'))
+        out->player = (uint8_t)(toks[0][1] - '1');    // P2:… / P3:… = the co-op key sets
 
     if (out->sdl_key == SDLK_UNKNOWN) {
         fprintf(stderr, "v2_keymap: unknown SDL key '%s' for action '%s' — skipped\n",
@@ -230,9 +256,10 @@ bool v2_keymap_lookup_sdl(SDL_Keycode key, uint16_t* out_key_val, uint16_t* out_
     uint16_t kv = 0, so = 0;
     // Aggregate across all entries for this physical key — supports the rare
     // case where one key contributes to both key_val and spec_off (CTRL/S do
-    // this in defaults, but also lets a single .cfg row be split).
+    // this in defaults, but also lets a single .cfg row be split). Player-1
+    // bindings only: the co-op sets never reach the DOS words through here.
     for (const auto& e : g_map) {
-        if (e.sdl_key == key) {
+        if (e.sdl_key == key && e.player == 0) {
             if (!found) { kv = e.key_val; so = e.spec_off; found = true; }
             else {
                 if (e.key_val)  kv = e.key_val;
@@ -243,6 +270,22 @@ bool v2_keymap_lookup_sdl(SDL_Keycode key, uint16_t* out_key_val, uint16_t* out_
     if (out_key_val)  *out_key_val  = kv;
     if (out_spec_off) *out_spec_off = so;
     return found;
+}
+
+bool v2_keymap_lookup_sdl_player(SDL_Keycode key, uint16_t* out_key_val, uint16_t* out_spec_off, int* out_player) {
+    if (g_map.empty()) load_defaults();
+    int player = -1; uint16_t kv = 0, so = 0;
+    for (const auto& e : g_map) {
+        if (e.sdl_key != key) continue;
+        if (player < 0) { player = e.player; kv = e.key_val; so = e.spec_off; continue; }
+        if (e.player != player) continue;             // another player's binding of the same key: the first player keeps it
+        if (e.key_val)  kv = e.key_val;
+        if (e.spec_off) so = e.spec_off;
+    }
+    if (out_key_val)  *out_key_val  = kv;
+    if (out_spec_off) *out_spec_off = so;
+    if (out_player)   *out_player   = player < 0 ? 0 : player;
+    return player >= 0;
 }
 
 const char* v2_keymap_sdl_to_action(SDL_Keycode key) {

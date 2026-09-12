@@ -10,6 +10,7 @@
 
 #include "v2_input_recorder.h"
 #include "v2_keymap.h"
+#include "v2_coop.h"          // UX stage 8: `# coop N` headers, the P2:/P3: key sets
 #include <cstdio>
 #include <cstdint>
 #include <cstdlib>
@@ -89,7 +90,13 @@ void parse_replay_file(const char* path) {
     char line[128];
     int parsed = 0, skipped = 0;
     while (fgets(line, sizeof(line), f)) {
-        if (line[0] == '#' || line[0] == '\n' || line[0] == '\0') continue;
+        if (line[0] == '#') {
+            // `# coop N`: the recording is a 2- or 3-player game (v2_coop.h)
+            int np = 0;
+            if (sscanf(line, "# coop %d", &np) == 1) v2_coop_set_players(np);
+            continue;
+        }
+        if (line[0] == '\n' || line[0] == '\0') continue;
         int frame;
         char k[4], action[32];
         long seq = -1;
@@ -203,8 +210,18 @@ bool dequeue_due_replay(SDL_Event* out) {
 // every sdl_spec_snapshot_take(), applying them synchronously; the poll
 // wrapper no longer hands KD/KU to the render loops (see below).
 void apply_replay_event(const SDL_Event& e, const char* via) {
-    uint16_t key_val = 0, spec_off = 0;
-    v2_keymap_lookup_sdl(e.key.keysym.sym, &key_val, &spec_off);
+    uint16_t key_val = 0, spec_off = 0; int player = 0;
+    v2_keymap_lookup_sdl_player(e.key.keysym.sym, &key_val, &spec_off, &player);
+    if (player > 0) {
+        // A co-op key set (P2: / P3:): the action bits go to that player's
+        // accumulators, never to the DOS words — but the INT9 letter channel
+        // ([28C] = LUT[scancode], #62) notes EVERY keydown as the DOS handler
+        // does: player 3's letters are also the letters of the password screen
+        // (the canon pw_* replays type them; skipping the note broke them).
+        if (e.type == SDL_KEYDOWN) sdl_int9_note_keydown(SDL_GetScancodeFromKey(e.key.keysym.sym));
+        if (g_v2_coop_players > 1) v2_coop_key(player, key_val, e.type == SDL_KEYDOWN, e.key.repeat != 0);
+        return;
+    }
     if (getenv("V2_DRAIN_LOG")) {
         fprintf(stderr, "DRAIN-%s[f%d]: %s sym=%d key=%04X spec=%04X ik=%04X\n",
                 via, v2_dbg_pre_vm_iter, e.type == SDL_KEYDOWN ? "KD" : "KU",

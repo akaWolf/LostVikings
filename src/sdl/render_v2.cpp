@@ -9,6 +9,7 @@ extern "C" void sdl_int9_note_keydown(int sdl_scancode);  // render.cpp (#62)
 #include <cstdio>
 #include "v2_input_recorder.h"
 #include "v2_keymap.h"
+#include "v2_coop.h"          // UX stage 8: co-op key sets and game controllers
 #include <unistd.h>  // _exit
 
 // ============================================================================
@@ -313,6 +314,13 @@ void render_thread_proc_v2(void* _state)
     myTexture_v2 = nullptr;
     myFormat_v2 = SDL_AllocFormat(SDL_PIXELFORMAT_RGBA8888);
 
+#ifdef V2_ONLY
+    // UX stage 8: game controllers (a failure only means no pads — the
+    // headless/CI boxes have none). Already-plugged pads arrive as
+    // SDL_CONTROLLERDEVICEADDED events on the first polls.
+    if (SDL_InitSubSystem(SDL_INIT_GAMECONTROLLER) != 0)
+        printf("render_v2: no game controller support (%s)\n", SDL_GetError());
+#endif
     printf("render_v2: Entering main loop...\n");
 
     int loop_counter = 0;
@@ -350,7 +358,18 @@ void render_thread_proc_v2(void* _state)
               }
               uint16_t key_val = 0;
               uint16_t spec_off = 0;
-              v2_keymap_lookup_sdl(event.key.keysym.sym, &key_val, &spec_off);
+              int key_player = 0;
+              v2_keymap_lookup_sdl_player(event.key.keysym.sym, &key_val, &spec_off, &key_player);
+              if (key_player > 0) {
+                  // UX stage 8: a co-op key set (P2: / P3:) feeds that player's
+                  // accumulators — no DOS words, no spec latch. The INT9 letter
+                  // channel still notes the keydown (#62: [28C] = LUT[scancode]
+                  // for EVERY key, as the DOS handler does — player 3's letters
+                  // are the password screen's letters too).
+                  if (event.type == SDL_KEYDOWN) sdl_int9_note_keydown(event.key.keysym.scancode);
+                  if (g_v2_coop_players > 1) v2_coop_key(key_player, key_val, event.type == SDL_KEYDOWN, event.key.repeat != 0);
+                  break;
+              }
               if (event.type == SDL_KEYDOWN) {
                   // #62: the INT9 letter channel ([28C] = LUT[scancode]) was
                   // fed ONLY by the default-window handler — in V2_ONLY the
@@ -381,6 +400,29 @@ void render_thread_proc_v2(void* _state)
                       sdl_spec_press_latch[spec_off & 0xFF].store(1, std::memory_order_relaxed);
                   } else if (event.type == SDL_KEYUP) {
                       sdl_spec_state[spec_off & 0xFF].store(0, std::memory_order_relaxed);
+                  }
+              }
+              break;
+          }
+          // UX stage 8: game controllers — controller i is player i+1 (the first
+          // one doubles the keyboard of player 1); buttons/sticks map to the
+          // DOS action bits (v2_coop_pad_events). Player 1's bits take the
+          // keyboard path above (tap accumulator + held words), the others go
+          // to their player's accumulators.
+          case SDL_CONTROLLERDEVICEADDED:   v2_coop_pad_added(event.cdevice.which); break;
+          case SDL_CONTROLLERDEVICEREMOVED: v2_coop_pad_removed(event.cdevice.which); break;
+          case SDL_CONTROLLERBUTTONDOWN:
+          case SDL_CONTROLLERBUTTONUP:
+          case SDL_CONTROLLERAXISMOTION: {
+              V2CoopPadEv ev[4]; int n = v2_coop_pad_events(&event, ev, 4);
+              for (int i = 0; i < n; i++) {
+                  if (ev[i].player > 0) { v2_coop_key(ev[i].player, ev[i].bits, ev[i].down, false); continue; }
+                  if (ev[i].down) {
+                      extern std::atomic<uint16_t> sdl_input_press_edges;
+                      sdl_input_press_edges.fetch_or(ev[i].bits, std::memory_order_relaxed);
+                      input_keys |= ev[i].bits; input_keys_v2 |= ev[i].bits;
+                  } else {
+                      input_keys &= (uint16_t)~ev[i].bits; input_keys_v2 &= (uint16_t)~ev[i].bits;
                   }
               }
               break;

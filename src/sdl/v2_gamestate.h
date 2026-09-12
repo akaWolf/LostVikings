@@ -969,12 +969,22 @@ extern "C" void v2_gs_bounds_note(uint32_t base, uint32_t len, uint32_t off);
 #define V2_GS_BCHK(off, len, o)
 #endif
 
+// Co-op (v2_coop.h): the three words the VM sees per player. The condition on
+// the constant `off` folds away for every other field; with one player the
+// hook is a single global compare on these three getters. All three are
+// evacuated fields (V2_GS_FIELDS_EVAC), so the hook sits in the V2_GS_AE1
+// getters of both views (and in V2_GS_A1 for the day they leave the list).
+extern int g_v2_coop_players;
+uint16_t v2_coop_view(uint16_t off, uint16_t real, const uint8_t* ds);
+#define V2_COOP_VIRT(off) ((off) == DS_INPUT_KEYS || (off) == DS_INPUT_EDGES || (off) == DS_ACTIVE_VIKING)
+
 struct V2StateView {
     uint8_t* ds;
     explicit V2StateView(uint8_t* ds_) : ds(ds_) {}
 
 #define V2_GS_A1(name, off) \
-    uint16_t name() const              { return *(const uint16_t*)(ds + (off)); } \
+    uint16_t name() const              { uint16_t _v = *(const uint16_t*)(ds + (off)); \
+                                         if (V2_COOP_VIRT(off) && g_v2_coop_players > 1) _v = v2_coop_view((off), _v, ds); return _v; } \
     void     name(uint16_t v)          { *(uint16_t*)(ds + (off)) = v; } \
     uint16_t& name##_ref()             { return *(uint16_t*)(ds + (off)); }
 #define V2_GS_AN(name, off, n) \
@@ -989,10 +999,12 @@ struct V2StateView {
 // bypass map stayed empty across the full corpus before this flip; the
 // per-frame check still guards the mirror.
 #define V2_GS_AE1(name, off) \
-    uint16_t name() const              { if (v2_gs_evac_on(ds)) { \
+    uint16_t name() const              { uint16_t _v; if (v2_gs_evac_on(ds)) { \
         uint16_t _img = *(const uint16_t*)(ds + (off)); \
         if (g_gs_evac.name != _img) v2_gs_evac_read_desync(#name, (off), g_gs_evac.name, _img); \
-        return g_gs_evac.name; } return *(const uint16_t*)(ds + (off)); } \
+        _v = g_gs_evac.name; } else _v = *(const uint16_t*)(ds + (off)); \
+        /* co-op: input_keys / input_edges / active_viking are evacuated fields — the hook lives here too */ \
+        if (V2_COOP_VIRT(off) && g_v2_coop_players > 1) _v = v2_coop_view((off), _v, ds); return _v; } \
     void     name(uint16_t v)          { if (v2_gs_evac_on(ds)) g_gs_evac.name = v; *(uint16_t*)(ds + (off)) = v; }
 #define V2_GS_AEN(name, off, n) \
     uint16_t name(uint32_t i) const    { V2_GS_BCHK(off, 2u*(n), 2u*i) if (v2_gs_evac_on(ds)) return g_gs_evac.name[i]; return *(const uint16_t*)(ds + (off) + 2u * i); } \
@@ -1119,13 +1131,15 @@ struct V2StateViewC {
     const uint8_t* ds;
     explicit V2StateViewC(const uint8_t* ds_) : ds(ds_) {}
 #define V2_GS_A1(name, off) \
-    uint16_t name() const              { return *(const uint16_t*)(ds + (off)); }
+    uint16_t name() const              { uint16_t _v = *(const uint16_t*)(ds + (off)); \
+                                         if (V2_COOP_VIRT(off) && g_v2_coop_players > 1) _v = v2_coop_view((off), _v, ds); return _v; }
 #define V2_GS_AN(name, off, n) \
     uint16_t name(uint32_t i) const    { return *(const uint16_t*)(ds + (off) + 2u * i); }
 #define V2_GS_AR(name, off, n, rec, fld) V2_GS_AN(name, off, n)
     V2_GS_FIELDS_W_NOEVAC(V2_GS_A1, V2_GS_AN, V2_GS_AR)
 #define V2_GS_AE1(name, off) \
-    uint16_t name() const              { return *(const uint16_t*)(ds + (off)); }
+    uint16_t name() const              { uint16_t _v = *(const uint16_t*)(ds + (off)); \
+                                         if (V2_COOP_VIRT(off) && g_v2_coop_players > 1) _v = v2_coop_view((off), _v, ds); return _v; }
 #define V2_GS_AEN(name, off, n) \
     uint16_t name(uint32_t i) const    { return *(const uint16_t*)(ds + (off) + 2u * i); }
 #define V2_GS_AER(name, off, n, rec, fld) V2_GS_AEN(name, off, n)

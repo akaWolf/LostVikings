@@ -124,8 +124,12 @@ struct V2VM {
 
     // DS read: use shadow if within range, otherwise real DS
     uint16_t ds_read(uint16_t addr) {
-        if (addr < V2_VM_SHADOW_SIZE - 1)
-            return *(uint16_t*)(shadow + addr);
+        if (addr < V2_VM_SHADOW_SIZE - 1) {
+            uint16_t v = *(uint16_t*)(shadow + addr);
+            // co-op (v2_coop.h): the executing object's view of the input / active-viking words
+            if (g_v2_coop_players > 1 && V2_COOP_VIRT(addr)) v = v2_coop_view(addr, v, shadow);
+            return v;
+        }
         return *(uint16_t*)(ds + addr);
     }
 

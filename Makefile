@@ -233,6 +233,7 @@ CXX_SRCS := \
   src/sdl/v2_gamestate.cpp \
   src/sdl/v2_assets.cpp \
   src/sdl/v2_keymap.cpp \
+  src/sdl/v2_coop.cpp \
   src/sdl/v2_ui.cpp \
   src/sdl/v2_snes_sound.cpp \
   src/sdl/third_party/snes_spc/Snes_Spc.cpp \
@@ -269,6 +270,7 @@ CXX_SRCS := \
   src/sdl/v2_hash_hot.cpp \
   src/sdl/v2_input_recorder.cpp \
   src/sdl/v2_keymap.cpp \
+  src/sdl/v2_coop.cpp \
   src/sdl/v2_ui.cpp \
   src/sdl/v2_fn_test.cpp \
   src/sdl/v2_native_opl.cpp \
@@ -325,6 +327,7 @@ all: $(EXE_NAME)
 KEYMAP_EDITOR_OBJDIR := .obj-keymap-editor
 KEYMAP_EDITOR_SRCS := \
   src/sdl/v2_keymap.cpp \
+  src/sdl/v2_coop.cpp \
   src/sdl/keymap_editor/editor.cpp
 KEYMAP_EDITOR_OBJS := $(patsubst %.cpp, $(KEYMAP_EDITOR_OBJDIR)/%.o, $(KEYMAP_EDITOR_SRCS))
 

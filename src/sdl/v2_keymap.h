@@ -12,10 +12,11 @@
 #include <cstdint>
 
 struct KeyMapEntry {
-    const char* action;     // stable name written/read in .inp replays
+    const char* action;     // stable name written/read in .inp replays ("P2:LEFT" for a player-2 key)
     SDL_Keycode sdl_key;    // physical key
     uint16_t    key_val;    // OR-mask into input_keys; 0 = none
     uint16_t    spec_off;   // DS offset for sdl_spec_state[]; 0 = none
+    uint8_t     player;     // 0 = player 1 (the DOS keys), 1 / 2 = the co-op key sets (action prefix P2: / P3:)
 };
 
 // Initialize keymap. If path == NULL or file missing, built-in defaults used.
@@ -29,6 +30,11 @@ void v2_keymap_load_defaults(void);
 // Look up by physical key. Returns true if mapped; out args set to bitmask /
 // spec offset (either may be 0). Multiple bindings for same SDLK use first.
 bool v2_keymap_lookup_sdl(SDL_Keycode key, uint16_t* out_key_val, uint16_t* out_spec_off);
+
+// Co-op: the same lookup over every player's bindings — the first player that
+// binds the key wins; *out_player = 0 for a player-1 key, 1 / 2 for the P2: /
+// P3: sets (v2_coop.h). Returns false when no player binds the key.
+bool v2_keymap_lookup_sdl_player(SDL_Keycode key, uint16_t* out_key_val, uint16_t* out_spec_off, int* out_player);
 
 // SDLK → action name. NULL if unmapped (recorder will skip such events).
 const char* v2_keymap_sdl_to_action(SDL_Keycode key);

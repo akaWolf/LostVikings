@@ -13,6 +13,7 @@
 #include <cstring>
 #include "v2_input_recorder.h"
 #include "v2_keymap.h"
+#include "v2_coop.h"          // UX stage 8: --coop=N
 #include "v2_gamestate.h"   // stage 4 II.c: evac refresh after teleport load
 #include "render_v2.h"   // V2_EXE_STATIC_SIZE
 #include <csignal>
@@ -110,6 +111,10 @@ int main(int argc, char* argv[]) {
             strict_replay = true;
         } else if (strncmp(argv[i], "--keymap=", 9) == 0) {
             keymap_path = argv[i] + 9;
+        } else if (strncmp(argv[i], "--coop=", 7) == 0) {
+            // UX stage 8: 2 or 3 players in one game (v2_coop.h); 1 = the original
+            v2_coop_set_players(atoi(argv[i] + 7));
+            fprintf(stderr, "[v2_main] --coop: %d players\n", atoi(argv[i] + 7));
         }
         else if (strncmp(argv[i], "--max-frames=", 13) == 0) {
             // №59: parsed in ALL V2_ONLY builds (used to be HEADLESS-only —

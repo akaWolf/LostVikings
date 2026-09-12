@@ -41,6 +41,7 @@ extern uint8_t v2_vga[65536 * 4];
 #include "v2_timing.h"
 #include "v2_gamestate.h"
 #include "v2_obj_view.h"
+#include "v2_coop.h"        // UX stage 8: per-player input words / active vikings (inert with one player)
 #include "v2_vm_gen.h"      // V2VM + everything the generated executors (src/sdl/gen/exec_01cN.cpp) share with this file
 
 // Access to emulated memory
@@ -3483,6 +3484,176 @@ static void v2_viking_cycle_12e79(uint8_t* s) {
     if (v2gs(s).active_vk_sel_b() != 0) v2_viking_cycle_12e84(s);
 }
 
+// ===================================================================== co-op
+// UX stage 8 (v2_coop.h). Player 1 is the DOS game; players 2 and 3 get the
+// same three words per player and the same rules — the mirrors above are the
+// reference for every rule repeated here (sub_12352's edge, sub_10813's
+// off-screen gate, sub_12e84's cycling, sub_12e16's death scan).
+
+// The DS words themselves, past the view hook: the co-op bookkeeping below
+// may run inside an object's execution (the dialog wait loop re-reads the
+// input from a viking's op 41), where the getters would hand it that
+// player's view. The image is the write-through twin of the evacuated
+// members (V2_GS_AE1 checks them equal on every read).
+static inline uint16_t coop_ds_u16(const uint8_t* s, uint16_t off) { return *(const uint16_t*)(s + off); }
+
+// The view of ds:3B6 / 3B8 / 3C2 the VM sees while it executes an object: the
+// words of the player whose active viking that object is. Player 1's viking
+// and every other object read the DS words.
+uint16_t v2_coop_view(uint16_t off, uint16_t real, const uint8_t*) {
+    int k = v2_coop_owner(g_v2_exec_obj);
+    if (k <= 0) return real;
+    const V2CoopPlayer& p = g_coop.p[k];
+    uint16_t v = (off == DS_INPUT_KEYS) ? p.keys : (off == DS_INPUT_EDGES) ? p.edges
+               : g_v2_exec_obj;         // DS_ACTIVE_VIKING: the object IS its player's active viking
+    // V2_COOP_TRACE=1: the first reads served per player and word
+    static int s_trace = -1;
+    if (s_trace < 0) s_trace = getenv("V2_COOP_TRACE") ? 1 : 0;
+    if (s_trace) {
+        static int seen[V2_COOP_MAX][3] = {};
+        int w = (off == DS_INPUT_KEYS) ? 0 : (off == DS_INPUT_EDGES) ? 1 : 2;
+        if (seen[k][w] < 3 || (w == 0 && v != 0 && seen[k][w] < 6)) {
+            seen[k][w]++;
+            fprintf(stderr, "V2-COOP-VIEW[f%d] P%d obj=%04X off=%04X real=%04X -> %04X\n",
+                    v2_dbg_pre_vm_iter, k + 1, g_v2_exec_obj, off, real, v);
+        }
+    }
+    return v;
+}
+
+static bool v2_coop_alive(const uint8_t* s, uint16_t vk) {
+    return vk < 6 && (int16_t)*(const uint16_t*)(s + vk + OBJ_ANIM_IDX) >= 0;
+}
+// no other player holds viking vk (`me` = the asking player)
+static bool v2_coop_free(uint16_t vk, int me) {
+    for (int k = 0; k < g_v2_coop_players; k++)
+        if (k != me && g_coop.p[k].active == vk) return false;
+    return true;
+}
+// a gameplay level (0..0x24) outside the attract/demo drive
+static bool v2_coop_playing(const uint8_t* s) {
+    return v2gs(s).level() < 0x25 && v2gs(s).game_mode_ac() != 0x8000;
+}
+// The ownership bookkeeping once per input read: a new level drops the
+// assignments; in a gameplay level every player without a viking takes the
+// first alive one nobody holds (player k prefers viking k: Erik / Baleog /
+// Olaf); player 1 owns the DS active viking unless another player holds it
+// (then he is a spectator: p[0].active = none, the DS word keeps the camera).
+static void v2_coop_sync(uint8_t* s) {
+    static uint16_t s_level = 0xFFFF;
+    uint16_t level = v2gs(s).level();
+    if (level != s_level) {
+        s_level = level;
+        for (int k = 1; k < V2_COOP_MAX; k++) g_coop.p[k] = V2CoopPlayer{};
+    }
+    uint16_t a1 = coop_ds_u16(s, DS_ACTIVE_VIKING);
+    g_coop.p[0].active = (a1 < 6 && v2_coop_free(a1, 0)) ? a1 : 0xFFFF;
+    if (!v2_coop_playing(s)) return;
+    for (int k = 1; k < g_v2_coop_players; k++) {
+        V2CoopPlayer& p = g_coop.p[k];
+        if (p.active < 6 && v2_coop_alive(s, p.active) && v2_coop_free(p.active, k)) continue;
+        p.active = 0xFFFF;
+        const uint16_t order[3] = {(uint16_t)(k * 2), (uint16_t)((k * 2 + 2) % 6), (uint16_t)((k * 2 + 4) % 6)};
+        for (uint16_t vk : order)
+            if (v2_coop_alive(s, vk) && v2_coop_free(vk, k)) { p.active = vk; break; }
+    }
+}
+// After sub_12352 wrote player 1's words: the words of players 2..3 for this
+// read — held bits OR the taps since the last read, the edge against the
+// previous read (the tap forces its bit low in prev so the edge fires now,
+// as #81 does for player 1). No viking, no gameplay level, attract mode: zero
+// words. sub_10813's off-screen gate does not apply in co-op (each player
+// watches his own viking — see v2_viking_blink_10813).
+// V2_COOP_TRACE=1: one line per input read whose player words changed.
+void v2_coop_read_inputs(uint8_t* s) {
+    if (g_v2_coop_players <= 1) return;
+    v2_coop_sync(s);
+    bool play = v2_coop_playing(s);
+    for (int k = 1; k < g_v2_coop_players; k++) {
+        V2CoopPlayer& p = g_coop.p[k];
+        uint16_t new_kd = v2_coop_press[k].exchange(0, std::memory_order_relaxed);
+        uint16_t ax = (uint16_t)(v2_coop_held[k] | new_kd);
+        if (new_kd) p.prev &= (uint16_t)~new_kd;
+        p.keys = ax;
+        p.edges = (uint16_t)((ax ^ p.prev) & ax);
+        p.prev = ax;
+        if (!play || p.active >= 6) { p.keys = 0; p.edges = 0; }
+    }
+    static int s_trace = -1;
+    if (s_trace < 0) s_trace = getenv("V2_COOP_TRACE") ? 1 : 0;
+    if (s_trace) {
+        static V2CoopPlayer last[V2_COOP_MAX]; static uint16_t last_a1 = 0xFFFE; static int lines = 0;
+        uint16_t a1 = coop_ds_u16(s, DS_ACTIVE_VIKING);
+        bool changed = a1 != last_a1;
+        for (int k = 0; k < g_v2_coop_players && !changed; k++) {
+            const V2CoopPlayer& p = g_coop.p[k];
+            uint16_t keys = (k == 0) ? coop_ds_u16(s, DS_INPUT_KEYS) : p.keys, edges = (k == 0) ? coop_ds_u16(s, DS_INPUT_EDGES) : p.edges;
+            changed = p.active != last[k].active || keys != last[k].keys || edges != last[k].edges;
+        }
+        if (changed && lines < 2000) {
+            lines++;
+            fprintf(stderr, "V2-COOP[f%d] lv=%04X play=%d 3C2=%04X", v2_dbg_pre_vm_iter, v2gs(s).level(), play ? 1 : 0, a1);
+            for (int k = 0; k < g_v2_coop_players; k++) {
+                const V2CoopPlayer& p = g_coop.p[k];
+                uint16_t keys = (k == 0) ? coop_ds_u16(s, DS_INPUT_KEYS) : p.keys, edges = (k == 0) ? coop_ds_u16(s, DS_INPUT_EDGES) : p.edges;
+                fprintf(stderr, " | P%d act=%04X keys=%04X edges=%04X x=%04X", k + 1, p.active, keys, edges,
+                        p.active < 6 ? *(const uint16_t*)(s + p.active + OBJ_WORLD_X) : 0xFFFF);
+                last[k] = p; last[k].keys = keys; last[k].edges = edges;
+            }
+            fputc('\n', stderr);
+            last_a1 = a1;
+        }
+    }
+}
+// sub_12e84 per player: 0x20 = previous viking, 0x10 (or the TAB bit 0x2000 for
+// players 2..3) = next; a viking with no portrait word or held by another
+// player is skipped; the search gives up when it comes back to the start.
+// Player 1 keeps the DOS side effects (the sprite flag, the redraw mode, the
+// scroll deltas); the other players only move their ownership.
+void v2_coop_cycle(uint8_t* s) {
+    if (v2gs(s).active_vk_sel_b() == 0) return;     // sub_12e79's gate
+    for (int k = 0; k < g_v2_coop_players; k++) {
+        uint16_t edges = (k == 0) ? coop_ds_u16(s, DS_INPUT_EDGES) : g_coop.p[k].edges;
+        bool prev = (edges & 0x20) != 0, next = (edges & 0x10) != 0 || (k > 0 && (edges & 0x2000) != 0);
+        if (!prev && !next) continue;
+        uint16_t cur = (k == 0) ? coop_ds_u16(s, DS_ACTIVE_VIKING) : g_coop.p[k].active;
+        if (k == 0 && !v2_coop_free(cur, 0)) continue;   // player 1 is a spectator: nothing to cycle from
+        int16_t si = (cur < 6) ? (int16_t)cur : (int16_t)(prev ? 0 : 4);
+        int found = -1;
+        for (int step = 0; step < 3; step++) {
+            if (prev) { si -= 2; if (si < 0) si = 4; } else { si += 2; if (si >= 6) si = 0; }
+            if ((uint16_t)si == cur) break;
+            if (*(uint16_t*)(s + (uint16_t)si + VIK_PORTRAIT) != 0 && v2_coop_free((uint16_t)si, k)) { found = si; break; }
+        }
+        if (found < 0) continue;
+        if (k == 0) {
+            uint16_t di_v = ObjMem{s, (uint16_t)found}.sub_slot();
+            ObjMem{s, di_v}.w16(OBJ_SPRITE_FLAGS, (uint16_t)(ObjMem{s, di_v}.u16(OBJ_SPRITE_FLAGS) & 0xDFFF));
+            v2_objmem_w8(s, (uint16_t)(di_v + OBJ_DIRTY_MODE), (uint8_t)2);
+            v2gs(s).active_viking((uint16_t)found);
+            v2gs(s).scroll_delta_x(5);
+            v2gs(s).scroll_delta_y(5);
+            g_coop.p[0].active = (uint16_t)found;
+        } else {
+            g_coop.p[k].active = (uint16_t)found;
+        }
+    }
+}
+// After sub_12e16 (player 1's death scan wrote ds:3C2, or the game-over flag
+// when nobody is alive): players 2..3 whose viking died take the next alive
+// free one (v2_coop_sync); when the DOS scan handed player 1 a viking another
+// player holds, player 1 takes a free alive one instead, or spectates with the
+// DS word left on the held viking (the camera stays with the game).
+void v2_coop_death(uint8_t* s) {
+    if (g_v2_coop_players <= 1) return;
+    uint16_t a1 = coop_ds_u16(s, DS_ACTIVE_VIKING);
+    if (a1 < 6 && !v2_coop_free(a1, 0)) {
+        for (uint16_t vk = 0; vk < 6; vk += 2)
+            if (v2_coop_alive(s, vk) && v2_coop_free(vk, 0)) { v2gs(s).active_viking(vk); break; }
+    }
+    v2_coop_sync(s);
+}
+
 static void v2_hud_health_120ff(uint8_t* s);
 static void v2_hud_item_sync_12199(uint8_t* s);
 static void v2_portrait_sync_11b0b(uint8_t* s);
@@ -6079,6 +6250,11 @@ static void v2_viking_blink_10813(uint8_t* shadow) {
         const V2LvxEntry* lx = v2_lvx_find(v2gs(shadow).level());
         if (lx && (lx->flags & LVX_NOGATE)) on_screen = true;
     }
+    // UX stage 8 (co-op, v2_coop.h): the gate assumes the one DOS camera. In
+    // co-op every player watches his own viking (the presenter camera of
+    // step 2), so no viking is out of its player's view — the keys stay for
+    // player 1 here and for players 2..3 in v2_coop_read_inputs.
+    if (!on_screen && g_v2_coop_players > 1) on_screen = true;
     if (!on_screen) {
         // loc_10862: viking out of viewport (or slot >= 6) -> clear keys, return
         v2gs(shadow).input_keys(0); // word_28896
@@ -9138,7 +9314,8 @@ static void v2_game_loop_pre_vm(uint8_t* shadow, uint16_t ds_val) {
 #endif
 
     // sub_12e79 → sub_12e84: viking cycling (extracted, wave B3c-II).
-    v2_viking_cycle_12e79(shadow);
+    if (g_v2_coop_players > 1) v2_coop_cycle(shadow);      // UX stage 8: cycling per player, held vikings skipped
+    else v2_viking_cycle_12e79(shadow);
 
     // sub_10813 -> loc_107A2: viking blink (extracted: v2_viking_blink_10813, K4).
     v2_viking_blink_10813(shadow);
@@ -18538,6 +18715,7 @@ void orig_coll_ring_dump(int target_frame, const char* tag) {
 
 static void v2_run_collision_vm(uint8_t* shadow, uint16_t obj_si) {
     v2gs(shadow).cur_obj(obj_si);
+    V2CoopExecGuard _coop_exec(obj_si);     // co-op (v2_coop.h): the collision handler runs as this object
     v2gs(shadow).coll_bit_idx(0);
     uint16_t code_seg = *(uint16_t*)(shadow + obj_si + OBJ_CODE_SEG);
     uint16_t pc = *(uint16_t*)(shadow + obj_si + OBJ_PC);
@@ -19001,6 +19179,7 @@ static void v2_vm_execute_object(uint8_t* shadow, uint16_t obj_idx) {
 
     // 2. Store current obj to ds:0x42
     v2gs(shadow).cur_obj(obj_idx);
+    V2CoopExecGuard _coop_exec(obj_idx);    // co-op (v2_coop.h): this object's view of the input words while its code runs
 
     // 3. Clear ds:0x38E
     v2gs(shadow).coll_bit_idx(0);
@@ -20038,6 +20217,7 @@ void v2_run_animation_vm(uint16_t ds_val) {
     {
         uint8_t* s = v2_vm_shadow_ds;
         v2_viking_death_next_12e16(s);
+        v2_coop_death(s);                   // UX stage 8: the other players' dead vikings (inert with one player)
 
         // sub_15530: collision detection pass 2 (ds:0x390 = 0xFFFF)
         v2_coll_sweep_15530(s);
@@ -21684,6 +21864,9 @@ static void v2_read_input_12352_iter(uint8_t* shadow) {
     uint16_t prev = v2gs(shadow).input_prev();
     v2gs(shadow).input_edges((ax ^ prev) & ax);
     v2gs(shadow).input_prev(ax);
+#ifdef V2_ONLY
+    v2_coop_read_inputs(shadow);        // UX stage 8: the words of players 2..3 for this read
+#endif
 }
 
 // V2_PHASE_VIKING_SWITCH_LOOP handler — one iteration of orig sub_10138 loc_10169.
