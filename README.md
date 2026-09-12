@@ -32,6 +32,8 @@ Every push to any branch produces a GitHub Release with four artifacts:
 | `vikings-windows-x86_64.zip`         | Windows x86_64 | default |
 | `vikings-linux-x86_64-v2only.tar.gz` | Linux x86_64   | V2_ONLY (standalone v2) |
 | `vikings-windows-x86_64-v2only.zip`  | Windows x86_64 | V2_ONLY |
+| `vikings-linux-arm64.tar.gz`         | Linux arm64 (aarch64) | default (orig + v2 mirror) |
+| `vikings-linux-arm64-v2only.tar.gz`  | Linux arm64 (aarch64) | V2_ONLY |
 
 All four bundles need `DATA.DAT` supplied separately (see below).
 

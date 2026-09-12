@@ -13,8 +13,14 @@ permissions:
 
 jobs:
   linux:
-    name: Linux x86_64 (release, static C++ runtime)
-    runs-on: ubuntu-latest
+    name: Linux ${{ matrix.arch }} (release, static C++ runtime)
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { arch: x86_64, runner: ubuntu-latest }
+          - { arch: arm64,  runner: ubuntu-24.04-arm }   # GitHub's hosted arm64 Linux runner (public repos)
     steps:
       - uses: actions/checkout@v4
         with:
@@ -110,18 +116,18 @@ jobs:
 
       - name: Package
         run: |
-          mkdir -p dist/vikings-linux-x86_64
-          cp vikings vikings_keymap_editor vikings_keymap.cfg dist/vikings-linux-x86_64/
+          mkdir -p dist/vikings-linux-${{ matrix.arch }}
+          cp vikings vikings_keymap_editor vikings_keymap.cfg dist/vikings-linux-${{ matrix.arch }}/
           # Static DS / EXE blobs needed at runtime by the v2 mirror.
-          cp ds_static.bin exe_static.bin dist/vikings-linux-x86_64/
-          [ -f README.md ] && cp README.md dist/vikings-linux-x86_64/
-          tar -czf vikings-linux-x86_64.tar.gz -C dist vikings-linux-x86_64
-          ls -lh vikings-linux-x86_64.tar.gz
+          cp ds_static.bin exe_static.bin dist/vikings-linux-${{ matrix.arch }}/
+          [ -f README.md ] && cp README.md dist/vikings-linux-${{ matrix.arch }}/
+          tar -czf vikings-linux-${{ matrix.arch }}.tar.gz -C dist vikings-linux-${{ matrix.arch }}
+          ls -lh vikings-linux-${{ matrix.arch }}.tar.gz
 
       - uses: actions/upload-artifact@v4
         with:
-          name: vikings-linux-x86_64
-          path: vikings-linux-x86_64.tar.gz
+          name: vikings-linux-${{ matrix.arch }}
+          path: vikings-linux-${{ matrix.arch }}.tar.gz
           retention-days: 30
 
   windows:
@@ -192,8 +198,14 @@ jobs:
           retention-days: 30
 
   linux-v2only:
-    name: Linux x86_64 V2_ONLY (release, static)
-    runs-on: ubuntu-latest
+    name: Linux ${{ matrix.arch }} V2_ONLY (release, static)
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { arch: x86_64, runner: ubuntu-latest }
+          - { arch: arm64,  runner: ubuntu-24.04-arm }   # GitHub's hosted arm64 Linux runner (public repos)
     steps:
       - uses: actions/checkout@v4
         with:
@@ -230,17 +242,17 @@ jobs:
         # image that default mode reconstructs from m2c initialisers).
         # DATA.DAT (game assets) is still required — user supplies it.
         run: |
-          mkdir -p dist/vikings-linux-x86_64-v2only
-          cp vikings vikings_keymap_editor vikings_keymap.cfg dist/vikings-linux-x86_64-v2only/
-          cp ds_static.bin exe_static.bin dist/vikings-linux-x86_64-v2only/
-          [ -f README.md ] && cp README.md dist/vikings-linux-x86_64-v2only/
-          tar -czf vikings-linux-x86_64-v2only.tar.gz -C dist vikings-linux-x86_64-v2only
-          ls -lh vikings-linux-x86_64-v2only.tar.gz
+          mkdir -p dist/vikings-linux-${{ matrix.arch }}-v2only
+          cp vikings vikings_keymap_editor vikings_keymap.cfg dist/vikings-linux-${{ matrix.arch }}-v2only/
+          cp ds_static.bin exe_static.bin dist/vikings-linux-${{ matrix.arch }}-v2only/
+          [ -f README.md ] && cp README.md dist/vikings-linux-${{ matrix.arch }}-v2only/
+          tar -czf vikings-linux-${{ matrix.arch }}-v2only.tar.gz -C dist vikings-linux-${{ matrix.arch }}-v2only
+          ls -lh vikings-linux-${{ matrix.arch }}-v2only.tar.gz
 
       - uses: actions/upload-artifact@v4
         with:
-          name: vikings-linux-x86_64-v2only
-          path: vikings-linux-x86_64-v2only.tar.gz
+          name: vikings-linux-${{ matrix.arch }}-v2only
+          path: vikings-linux-${{ matrix.arch }}-v2only.tar.gz
           retention-days: 30
 
   windows-v2only:
@@ -333,6 +345,16 @@ jobs:
         with:
           name: vikings-windows-x86_64-v2only
 
+      - name: Download Linux arm64 artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: vikings-linux-arm64
+
+      - name: Download Linux arm64 V2_ONLY artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: vikings-linux-arm64-v2only
+
       - name: Compute release metadata
         id: rel
         run: |
@@ -364,6 +386,8 @@ jobs:
             - `vikings-windows-x86_64.zip`         — Windows x86_64, default mode
             - `vikings-linux-x86_64-v2only.tar.gz` — Linux x86_64, **V2_ONLY** (standalone v2 build)
             - `vikings-windows-x86_64-v2only.zip`  — Windows x86_64, V2_ONLY
+            - `vikings-linux-arm64.tar.gz`         — Linux arm64 (aarch64), default mode
+            - `vikings-linux-arm64-v2only.tar.gz`  — Linux arm64 (aarch64), V2_ONLY
 
             All bundles contain `vikings`/`vikings.exe`, `vikings_keymap_editor`,
             `vikings_keymap.cfg`, `ds_static.bin` and `exe_static.bin`. SDL2 and
@@ -379,3 +403,5 @@ jobs:
             vikings-windows-x86_64.zip
             vikings-linux-x86_64-v2only.tar.gz
             vikings-windows-x86_64-v2only.zip
+            vikings-linux-arm64.tar.gz
+            vikings-linux-arm64-v2only.tar.gz
