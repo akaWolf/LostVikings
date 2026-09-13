@@ -322,6 +322,9 @@ static inline bool v2_ds_hash_skip(uint32_t i) {
     v2_ds_skip_ensure();
     return v2h_ds_skip(i);
 }
+// The verify skip set for the V2_DSHASH=2 diagnostic (v2_render_funcs.cpp): the same
+// byte-granular answers as every verify loop above.
+bool v2_ds_verify_skip(uint32_t i) { return v2_ds_hash_skip(i); }
 
 // Push event into ring + bump per-frame counter. Thread-safe (lock).
 // "Production" impl — no replay knowledge. v2 callers MUST go through
@@ -2800,10 +2803,12 @@ static void v2_load_chunk_10cd8(uint8_t* shadow, uint16_t ax, uint16_t di) {
     // seg000 eips 0xD50..0xD8A: OUT plane select + MOV A000:[di+i] ← chunk[p*ps+i]).
     {
         extern void v2_vga_glyph_px(uint32_t addr, uint32_t plane, uint8_t val);
+        v2_vga_bg_writer = true;   // the background VGA (render_v2.h): a picture chunk is background too
         for (uint32_t p = 0; p < 4; p++)
             for (uint32_t i = 0; i < plane_size; i++)
                 v2_vga_glyph_px((uint16_t)(di + i), p,
                                 v2_vm_shadow_chunk[(uint32_t)plane_size * p + i]);
+        v2_vga_bg_writer = false;
     }
 }
 
@@ -4280,6 +4285,7 @@ static void v2_vga_tile_1689E(uint8_t* s, uint16_t tile_word, uint16_t di_vga) {
     extern uint8_t* v2_resolve_segment(uint16_t seg, uint8_t* shadow_ds);
     uint8_t* tg = v2_resolve_segment(tg_seg, s);
     if (!tg) return;
+    v2_vga_bg_writer = true;   // the background VGA (render_v2.h): a tile paint reaches the background plane
     const uint8_t* tile = tg + (tile_word & 0xFFC0);
     bool hflip = (tile_word & 0x10) != 0;
     bool vflip = (tile_word & 0x20) != 0;
@@ -4298,6 +4304,7 @@ static void v2_vga_tile_1689E(uint8_t* s, uint16_t tile_word, uint16_t di_vga) {
             }
         }
     }
+    v2_vga_bg_writer = false;
 }
 // (#83) shadow-VGA mirror of seg003 sub_1C8F1's DRAW half. The orig scans
 // the visible 25x43 FS window; a word with bit0 (dirty request) gets bit0
@@ -4727,6 +4734,8 @@ static void v2_dirty_tile_scan_1C8F1(uint8_t* s, uint16_t ax_mask) {
                     uint16_t post = (uint16_t)(fs_val & ax_mask);
                     if (post & 8) {
                         v2_masked_tile_1C939(s, post, row, col);  // VGA flagged tile render
+                        // The page lists (render_v2.h): this repaint is a command of page [92F9]
+                        v2_page_list_fgtile(v2gs(s).page_shown(), (int16_t)((v2gs(s).scroll_col() + col) * 8), (int16_t)((v2gs(s).scroll_row() + row) * 8), post);
                     }
                 }
             }
@@ -22562,15 +22571,18 @@ static inline void v2_blocking_loop_tick() {
 }
 
 bool v2_run_viking_switch_loop(uint8_t* shadow) {
-    v2_blocking_loop_tick();
-    // Clear word_28814 bit 4 (idempotent — orig does AND ~4 once at loc_10164)
-    v2gs(shadow).frame_flags(v2gs(shadow).frame_flags() & (0xFFFB));
-
     // sub_12352 (input): test mode → INPUT_UPDATE signal already updated.
-    // V2_ONLY → drive ourselves.
+    // V2_ONLY → drive ourselves — BEFORE the tick: the orig reads (loc_10169 sub_12352)
+    // and only then signals V2_PHASE_VIKING_SWITCH_LOOP, whose mirror body ticks the
+    // frame counter and drains the frame-tagged replay; a tick before the read handed
+    // a replay press to this iteration's read, one iteration earlier than the orig's
+    // world (the replay-drain DS divergence between the builds, 2026-09-11).
 #ifdef V2_ONLY
     v2_read_input_12352_iter(shadow);
 #endif
+    v2_blocking_loop_tick();
+    // Clear word_28814 bit 4 (idempotent — orig does AND ~4 once at loc_10164)
+    v2gs(shadow).frame_flags(v2gs(shadow).frame_flags() & (0xFFFB));
 
     // test word_28898 (DS:0x03B8 = ds_seg + 0x28898 - 0x284E0 = 0x3B8) & 0xC0C0
     uint16_t edges_c0c0 = v2gs(shadow).input_edges();
@@ -23442,12 +23454,13 @@ void v2_run_pause_loop(uint8_t* shadow) {
     (void)v2_run_pause_loop_iter_exit(shadow);
 }
 bool v2_run_pause_loop_iter_exit(uint8_t* shadow) {
-    v2_blocking_loop_tick();  // #180: counter + HEADLESS max-frames (see v2_run_viking_switch_loop)
     // Input read: test mode → INPUT_UPDATE signal already updated.
-    // V2_ONLY → drive ourselves.
+    // V2_ONLY → drive ourselves — before the tick (the orig reads at loc_11c1f and signals
+    // V2_PHASE_PAUSE_LOOP after sub_12352; see v2_run_viking_switch_loop).
 #ifdef V2_ONLY
     v2_read_input_12352_iter(shadow);
 #endif
+    v2_blocking_loop_tick();  // #180: counter + HEADLESS max-frames (see v2_run_viking_switch_loop)
     // Per orig loc_11c1f iter (eip 0x1c1f..0x1c4c):
     //   sub_12352 → sub_11cbb → sub_11c52 → sub_11792 → sub_16775 → sub_10130
     //   → sub_108c8 → sub_12d72 (if word_288AC bit15 set).
@@ -23685,7 +23698,8 @@ static bool v2_pw_exit_check_105cb(uint8_t* shadow, uint16_t* out_ax) {
 static bool v2_pw_iter_body(uint8_t* shadow) {
     extern uint16_t v2_current_ds_val;
     extern void v2_swap_render_buf();
-    v2_blocking_loop_tick();  // #180: counter + HEADLESS max-frames (see v2_run_viking_switch_loop)
+    // (the frame-counter tick sits after this iteration's input read below: the orig
+    // signals V2_PHASE_TRANSITION_TEXT after its sub_12352 — see v2_run_viking_switch_loop)
     v2gs(shadow).vsync_count(1);            // word_3287C
     v2_vsync_wait_10130(shadow);
     // The orig loc_104c3 iteration draws nothing and flips nothing: sub_16775 ran once before
@@ -23706,6 +23720,11 @@ static bool v2_pw_iter_body(uint8_t* shadow) {
 #ifdef V2_ONLY
     v2_read_input_12352_iter(shadow);
 #endif
+    // The frame-counter tick (counter, frame-tagged replay drain, headless max-frames) after
+    // this iteration's read — the orig signals V2_PHASE_TRANSITION_TEXT after its sub_12352,
+    // so the test-mode mirror body (this function) always ran after the read; V2_ONLY now
+    // reads first too (see v2_run_viking_switch_loop).
+    v2_blocking_loop_tick();  // #180: counter + HEADLESS max-frames (see v2_run_viking_switch_loop)
     // sub_10555: password blink (extracted).
     v2_pw_blink_10555(shadow);
     // sub_105CB: password exit check (extracted).

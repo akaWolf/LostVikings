@@ -38,7 +38,10 @@ thread_local const uint32_t* v2_tls_par_acc = nullptr;
 thread_local bool            v2_tls_presenter = false;
 thread_local const uint16_t* v2_tls_tile_ovr = nullptr;        // render_v2.h: the snapshot's page tile words (presenter)
 thread_local bool            v2_tls_ui_cells_from_page = false; // render_v2.h: text cells are page commands
+thread_local bool            v2_tls_fg_from_page = false;       // render_v2.h: flagged tiles are page commands
 const uint16_t*              v2_tile_override = nullptr;        // render_v2.h: the composed page's tile words (game thread)
+static void v2_vga_bg_readout(uint8_t* buf, int fbw, int rows, const uint8_t* bg, uint32_t crtc, uint8_t pan, bool par_on);   // below (the background VGA)
+static void v2_render_tile_masked(uint8_t* buf, const uint8_t* tgfx_base, const uint8_t* gs_base, uint16_t tile_entry, int screen_x, int screen_y);   // below (the masked tile engine; used by the display list's V2_CMD_FGTILE)
 bool v2_last_frame_tiles = false;   // the last v2_draw_tiles took the tile path (not a chunk screen)
 
 static inline uint8_t* v2_get_ds_base(uint16_t ds_val) {
@@ -122,6 +125,7 @@ static inline void v2_vga_w(uint32_t addr, uint32_t plane, uint8_t val) {
     }
     v2_vga[lin] = val;
     v2_vga_cov[lin] = 1;
+    if (v2_vga_bg_writer) v2_vga_bg[lin] = val;   // the background VGA (render_v2.h): tiles and picture chunks only
 }
 // non-static entry for writers living in other TUs (v2_vm.cpp glyph mirror)
 void v2_vga_glyph_px(uint32_t addr, uint32_t plane, uint8_t val) {
@@ -239,6 +243,17 @@ void v2_vga_sprite8(const uint8_t* src72, uint16_t di, int pan, int hflip,
 // VGA span of n bytes is one contiguous 4n linear range — memcpy/memmove-able
 // unless it wraps the 64K address space (then fall back to the per-byte loop).
 void v2_vga_copy_span(uint16_t dst, uint16_t src, uint16_t nbytes) {
+    // the background VGA (render_v2.h): the same span, the same REP MOVSB semantics as below
+    {
+        const uint32_t de = (uint32_t)dst + nbytes, se = (uint32_t)src + nbytes;
+        const bool fo = dst > src && (uint32_t)dst < se;
+        if (!fo && de <= 0x10000u && se <= 0x10000u)
+            memmove(v2_vga_bg + (uint32_t)dst * 4u, v2_vga_bg + (uint32_t)src * 4u, (size_t)nbytes * 4u);
+        else
+            for (uint16_t i = 0; i < nbytes; i++)
+                for (uint32_t p = 0; p < 4; p++)
+                    v2_vga_bg[(uint32_t)(uint16_t)(dst + i) * 4u + p] = v2_vga_bg[(uint32_t)(uint16_t)(src + i) * 4u + p];
+    }
     {
         static long _t = -2;
         if (_t == -2) { const char* e = getenv("V2_VGAW_TRAP"); _t = e ? strtol(e, 0, 0) : -1; }
@@ -278,6 +293,7 @@ void v2_vga_copy_span(uint16_t dst, uint16_t src, uint16_t nbytes) {
 }
 // Zero-fill span (orig REP STOSB class: op13 wipe) — covered.
 void v2_vga_fill_span(uint16_t dst, uint32_t nbytes, uint8_t val) {
+    for (uint32_t i = 0; i < nbytes; i++) memset(v2_vga_bg + (uint32_t)(uint16_t)(dst + i) * 4u, val, 4);   // the background VGA (render_v2.h): the same fill
     uint32_t end = (uint32_t)dst + nbytes;
     if (end > 0x10000u) { uint32_t n1 = 0x10000u - dst;
         memset(v2_vga + (uint32_t)dst * 4u, val, (size_t)n1 * 4u);
@@ -384,6 +400,69 @@ void v2_swap_render_buf() {
 #ifdef V2_RENDER_FROM_SHADOW
     if (!v2_vm_in_frame) return;
 #endif
+    // debug: V2_DSHASH=1 — one line per publish in EITHER build: the game frame, a running
+    // publish counter and the FNV-1a hash of the whole shadow DS. The two builds' sequences
+    // of one replay must be identical line for line (the DS timelines agree).
+    {
+        static int on = -1; static long n = 0;
+        if (on < 0) { const char* e = getenv("V2_DSHASH"); on = e ? ((*e == '2') ? 2 : 1) : 0; }
+        if (on >= 1) {
+            extern uint8_t* v2_vm_get_shadow_ds(); const uint8_t* sh = v2_vm_get_shadow_ds();
+            uint32_t h = 2166136261u;
+            if (sh && on == 1) for (uint32_t i = 0; i < 0x10000u; i++) { h ^= sh[i]; h *= 16777619u; }
+            // V2_DSHASH=2: the hash leaves out what legitimately differs between the test build
+            // (segments and sound handles from the DOS world) and the game build (its own): the
+            // verify skip set (v2_vm.cpp v2_ds_skip_ranges: input words, VGA mode byte, AIL driver
+            // state 98E4..9950, vsync counter, sound segment pointers) plus the DosMemAlloc segment
+            // values wherever they are stored — the registry 2E5D..2E7C, the sound base 992C, the
+            // anim chunk far-pointer segments 128D (11 words), the object columns OBJ_SPRITE_SEG
+            // 094D..0A4C, OBJ_SUB_SRC_SEG 0B4D..0C4C and OBJ_CODE_SEG 1355..137C — the AIL
+            // sequence state table 9950..9C90 (the driver's own records behind the handles), and
+            // the whole BIOS checksum word 86D0..86D1 (the skip set names its low byte only; the
+            // high byte differs between the two builds' host memories as well).
+            if (sh && on == 2) {
+                extern bool v2_ds_verify_skip(uint32_t i);
+                // V2_DSHASH_MASK=a-b,c-d (hex) adds ranges to leave out without a rebuild.
+                static uint8_t* mask = nullptr;
+                if (!mask) {
+                    mask = (uint8_t*)calloc(0x10000u, 1);
+                    static const uint16_t rng[][2] = { {0x094D, 0x0A4C}, {0x0B4D, 0x0C4C}, {0x128D, 0x12A2}, {0x1355, 0x137C},
+                                                       {0x2E5D, 0x2E7C}, {0x86D0, 0x86D1}, {0x992C, 0x992D}, {0x9950, 0x9C90} };
+                    for (uint32_t i = 0; i < 0x10000u; i++) if (v2_ds_verify_skip(i)) mask[i] = 1;
+                    for (const auto& r : rng) for (uint32_t i = r[0]; i <= r[1]; i++) mask[i] = 1;
+                    if (const char* ml = getenv("V2_DSHASH_MASK")) {
+                        for (const char* p = ml; *p; ) {
+                            char* e; long a = strtol(p, &e, 16); if (e == p) break; long b = a;
+                            if (*e == '-') { p = e + 1; b = strtol(p, &e, 16); }
+                            for (long i = a; i <= b && i < 0x10000; i++) if (i >= 0) mask[i] = 1;
+                            p = (*e == ',') ? e + 1 : e;
+                        }
+                    }
+                }
+                for (uint32_t i = 0; i < 0x10000u; i++) { if (mask[i]) continue; h ^= sh[i]; h *= 16777619u; }
+            }
+            fprintf(stderr, "V2-DSHASH f%d n=%ld %08X\n", v2_dbg_pre_vm_iter, n, h);
+            // V2_DSHASH_DUMP=<dir>: the whole shadow DS as <dir>/ds_f<frame>_n<publish>.bin at the
+            // first publish and at every publish of the frames listed in V2_DSHASH_FRAMES=a,b-c,d
+            static const char* dd = getenv("V2_DSHASH_DUMP");
+            if (dd && sh) {
+                bool want = (n == 0);
+                if (const char* fl = getenv("V2_DSHASH_FRAMES")) {
+                    for (const char* p = fl; *p; ) {
+                        char* e; long f0 = strtol(p, &e, 10); if (e == p) break; long f1 = f0;
+                        if (*e == '-') { p = e + 1; f1 = strtol(p, &e, 10); }
+                        if (v2_dbg_pre_vm_iter >= f0 && v2_dbg_pre_vm_iter <= f1) want = true;
+                        p = (*e == ',') ? e + 1 : e;
+                    }
+                }
+                if (want) {
+                    char path[512]; snprintf(path, sizeof path, "%s/ds_f%d_n%ld.bin", dd, v2_dbg_pre_vm_iter, n);
+                    if (FILE* f = fopen(path, "wb")) { fwrite(sh, 1, 0x10000u, f); fclose(f); }
+                }
+            }
+            n++;
+        }
+    }
     // Atomic snapshot of pixels + HUD + palette under same lock. All 3 must be
     // captured together — otherwise level-transition updates one before render
     // thread reads the others → mismatched colors (main artifact: viewport,
@@ -977,6 +1056,18 @@ void v2_draw_tiles(uint16_t ds_val) {
             }
         }
     }
+    // The background VGA (render_v2.h): the 320 centre columns come from the VGA bytes the CRTC
+    // window reads — the page's ring, its fill state, its first-flip gaps, the stale memory
+    // beyond the port's half wipe — over the map-based pass above (which stays for the wings
+    // of a wide frame).
+    {
+        const uint8_t* bg = v2_tls_presenter ? v2_tls_vga_bg : v2_vga_bg;
+        if (bg) {
+            uint32_t crtc = v2_vga_crtc; uint8_t pan = v2_vga_pan;
+            if (v2_tls_presenter) v2_crtc_for_camera(ds_base, &crtc, &pan);   // the interpolated camera's start
+            v2_vga_bg_readout(buf, v2_fbw, v2_view_rows(), bg, crtc, pan, par_on);
+        }
+    }
 }
 
 // ============================================================================
@@ -1350,13 +1441,35 @@ void v2_draw_list(const V2DrawList& L, const int16_t* pos_x, const int16_t* pos_
     uint8_t* buf = v2_tls_out ? v2_tls_out : v2_render_buf;
     V2Camera cam = v2_effective_camera(ds_base);
     const int viewport_x = (int)(int16_t)cam.x_eff, viewport_y = (int)(int16_t)cam.y_eff;
+    // the flagged-tile repaints (V2_CMD_FGTILE) read the level's tile graphics and mask table
+    // as v2_draw_flagged_tiles does, resolved once per list
+    const uint8_t* fg_tgfx = nullptr; const uint8_t* fg_gs = nullptr; bool fg_resolved = false;
     for (int i = 0; i < L.n; i++) {
         const V2DrawCmd& c = L.cmd[i];
-        const bool glyph = (c.type == V2_CMD_GLYPH);
-        if (which == 0 && glyph) continue;
-        if (which == 1 && !glyph) continue;
+        const bool glyph = (c.type == V2_CMD_GLYPH), fgtile = (c.type == V2_CMD_FGTILE);
+        if (which == 0 && (glyph || fgtile)) continue;    // the sprites only
+        if (which == 1 && !(glyph || fgtile)) continue;   // the repaints and glyphs only
         const int x = pos_x ? pos_x[i] : c.x, y = pos_y ? pos_y[i] : c.y;
         const uint8_t* rec = c.data_len ? L.arena + c.data_off : nullptr;   // the record's own strip bytes
+        if (fgtile) {
+            if (c.dead[0] & 1u) continue;   // its one cell restored since the repaint
+            if (!fg_resolved) {
+                fg_resolved = true;
+                V2StateViewC stv(ds_base);
+                const uint16_t tgfx_seg = stv.seg_tilegfx(), gs_seg = stv.seg_gs();
+                if (tgfx_seg && gs_seg && v2_m2c_base) {   // the guards of v2_draw_flagged_tiles
+#ifdef V2_RENDER_FROM_SHADOW
+                    fg_tgfx = v2_resolve_segment(tgfx_seg);
+                    fg_gs = v2_vm_is_gs_shadow_valid() ? v2_vm_get_shadow_gs() : v2_m2c_base + ((uint32_t)gs_seg << 4);
+#else
+                    fg_tgfx = v2_m2c_base + ((uint32_t)tgfx_seg << 4);
+                    fg_gs = v2_m2c_base + ((uint32_t)gs_seg << 4);
+#endif
+                }
+            }
+            if (fg_tgfx && fg_gs) v2_render_tile_masked(buf, fg_tgfx, fg_gs, c.off, x - viewport_x, y - viewport_y);
+            continue;
+        }
         if (glyph) { v2_raster_glyph(buf, ds_base, c.off, x - viewport_x, y - viewport_y, c.dead, c.x & 7, c.y & 7, rec); continue; }
         v2_raster_sprite(buf, c.type, c.flags, x - viewport_x, y - viewport_y, c.seg, c.off, (int)c.strips, c.slot, 0xFFFF,
                          c.dead, c.x & 7, c.y & 7, c.mand, c.clip_top, c.clip_bot, rec);
@@ -1450,14 +1563,61 @@ void v2_page_lists_black(void) {
 // the sprite's pixel extent (the rasteriser's rules: type 1 = 8x8, type 2 = 32 x strips, type 4 = 16x16, a glyph cell 8x8)
 static inline void v2_cmd_extent(const V2DrawCmd& c, int& w, int& h) {
     if (c.type == 2) { w = 32; h = (int)c.strips; }
-    else if (c.type == 1 || c.type == V2_CMD_GLYPH) { w = 8; h = 8; }
+    else if (c.type == 1 || c.type == V2_CMD_GLYPH || c.type == V2_CMD_FGTILE) { w = 8; h = 8; }
     else { w = 16; h = 16; }
+}
+// The background VGA (render_v2.h): the pixel plane of the shadow VGA that only the
+// background writers reach — v2_vga_w mirrors a write here while v2_vga_bg_writer is set,
+// v2_vga_copy_span / v2_vga_fill_span mirror their spans always.
+uint8_t v2_vga_bg[65536 * 4];
+bool    v2_vga_bg_writer = false;
+thread_local const uint8_t* v2_tls_vga_bg = nullptr;
+// sub_16775's CRTC start and pel pan for the camera the DS holds (the shadow-side formula
+// of v2_page_flip_16775, repeated here for the presenter's interpolated camera)
+void v2_crtc_for_camera(const uint8_t* s, uint32_t* crtc, uint8_t* pan) {
+    const uint16_t y_disp = v2gs(s).viewport_y(), y_some = v2gs(s).shake_y();
+    const uint16_t y_lvl  = v2gs(s).scroll_limit_y();
+    const uint16_t x_disp = v2gs(s).viewport_x(), x_some = v2gs(s).shake_x();
+    const uint16_t x_lvl  = v2gs(s).scroll_limit_x();
+    const uint16_t page   = v2gs(s).page_shown();
+    uint16_t y_off = (uint16_t)(y_disp + y_some);
+    if (y_off > y_lvl) y_off = (uint16_t)(y_disp - y_some);
+    uint16_t x_off = (uint16_t)(x_disp + x_some);
+    if (x_off > x_lvl) x_off = (uint16_t)(x_disp - x_some);
+    const uint16_t y_hi = *(const uint16_t*)(s + (uint16_t)(LUT_PAGE_ROW + page + ((y_off >> 3) * 2)));
+    const uint16_t y_lo = *(const uint16_t*)(s + (uint16_t)(LUT_SUBROW + (y_off & 7) * 2));
+    *crtc = (uint16_t)(y_lo + y_hi + (x_off >> 2) + 8);
+    *pan  = (uint8_t)(x_off & 3);
+}
+// The window read out of the background VGA over the 320 centre columns of the frame: byte
+// crtc + y*0x56 + ((pan + x) >> 2), plane (pan + x) & 3 (v2_vga_fetch_page's addressing, with
+// the 64K wrap of the address counter). par_on: index 0 stays transparent (the parallax layer
+// beneath), as in the tile pass.
+static void v2_vga_bg_readout(uint8_t* buf, int fbw, int rows, const uint8_t* bg, uint32_t crtc, uint8_t pan, bool par_on) {
+    const int x0 = (fbw - 320) / 2;
+    for (int y = 0; y < rows; y++) {
+        uint8_t* out = buf + (size_t)y * fbw + x0;
+        const uint32_t line = crtc + (uint32_t)y * 0x56u;
+        for (int x = 0; x < 320; x++) {
+            const uint32_t t = (uint32_t)pan + (uint32_t)x;
+            const uint8_t px = bg[(uint32_t)(uint16_t)(line + (t >> 2)) * 4u + (t & 3u)];
+            if (par_on && (px & 0x0F) == 0) continue;
+            out[x] = px;
+        }
+    }
 }
 // sub_1E0C7: a glyph cell painted at a map cell of page [92F9]
 void v2_page_list_glyph(uint16_t page, int16_t x, int16_t y, uint16_t glyph_index) {
     V2DrawCmd c;
     memset(&c, 0, sizeof c);
     c.slot = 0xFFFF; c.x = x; c.y = y; c.off = glyph_index; c.type = V2_CMD_GLYPH; c.mand = 0xFF; c.late = 1;
+    v2_page_list_draw(page, c);
+}
+// sub_1C8F1: a flagged tile repainted (masked) over a dirty cell of page [92F9]
+void v2_page_list_fgtile(uint16_t page, int16_t x, int16_t y, uint16_t tile_word) {
+    V2DrawCmd c;
+    memset(&c, 0, sizeof c);
+    c.slot = 0xFFFE; c.x = x; c.y = y; c.off = tile_word; c.type = V2_CMD_FGTILE; c.mand = 0xFF; c.late = 1;
     v2_page_list_draw(page, c);
 }
 // A span of cells copied from one page to another (sub_1DE05 pass 2: background → [92F7];
@@ -1765,9 +1925,21 @@ void v2_compose_page(uint16_t ds_val, uint16_t page) {
         if (at >= 0) fprintf(stderr, "V2-PL f%d compose page=%02X n=%d slot=%02X at=%d xy=(%d,%d) off=%04X\n", v2_dbg_pre_vm_iter, page, L.n, g_pl_trace_slot, at, L.cmd[at].x, L.cmd[at].y, L.cmd[at].off);
         else fprintf(stderr, "V2-PL f%d compose page=%02X n=%d slot=%02X absent\n", v2_dbg_pre_vm_iter, page, L.n, g_pl_trace_slot);
     }
-    v2_draw_list(L, nullptr, nullptr, 0);     // the page's sprites, in their order
-    v2_draw_flagged_tiles(ds_val);            // sub_1C8F1: the flagged tiles over them
-    v2_draw_list(L, nullptr, nullptr, 1);     // sub_1E0C7: the page's glyph cells over those
+    if (!v2_parallax.on) {
+        // the exact page: sprites, sub_1C8F1's flagged-tile repaints and sub_1E0C7's glyph cells
+        // in the order the passes painted them (the flagged pass below keeps only its parallax
+        // part, none here)
+        v2_tls_fg_from_page = true;
+        v2_draw_list(L, nullptr, nullptr, -1);
+        v2_draw_flagged_tiles(ds_val);
+        v2_tls_fg_from_page = false;
+    } else {
+        // a level with the console parallax layer: its priority pass sits between the sprites
+        // and the flagged tiles / glyphs (a console rule with no original to match)
+        v2_draw_list(L, nullptr, nullptr, 0);     // the page's sprites, in their order
+        v2_draw_flagged_tiles(ds_val);            // the parallax priority pass + the map's flagged tiles
+        v2_draw_list(L, nullptr, nullptr, 1);     // sub_1E0C7: the page's glyph cells over those
+    }
     v2_draw_ui(ds_val);                       // the CJK overlay only (v2_tls_ui_cells_from_page)
     v2_drawlist_copy(v2_frame_draws, L);      // the flip's list for the presenter (records + arena)
     v2_tls_ui_cells_from_page = false;
@@ -2034,6 +2206,7 @@ void v2_draw_flagged_tiles(uint16_t ds_val) {
     // under the flagged tiles (see v2_draw_parallax_pass); only a tile
     // frame has drawn the layer's lower pass this tick
     if (v2_last_frame_tiles || v2_tls_presenter) v2_draw_parallax_pass(st, buf, 0x2000);
+    if (v2_tls_fg_from_page) return;   // the flagged tiles are the page's V2_CMD_FGTILE commands (render_v2.h)
 
 #ifdef V2_RENDER_FROM_SHADOW
     uint8_t* fs_base = v2_resolve_segment(fs_seg);

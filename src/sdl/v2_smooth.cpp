@@ -86,6 +86,7 @@ struct Snap {
     V2DrawList draws;           // the sub-frame's display list (render_v2.h): what the sprite layers drew, in order
     uint16_t tile_ovr[32768];   // the shown page's tile words (render_v2.h page lists; index = render-map word)
     bool tile_ovr_valid;
+    uint8_t vga_bg[65536 * 4];  // the background VGA at this flip (render_v2.h): the tile layer's pixels
     uint32_t par_acc_x, par_acc_y;
     uint64_t t;                 // SDL_GetPerformanceCounter at capture
     bool valid, tile_frame, fullscreen;
@@ -126,6 +127,7 @@ static void fill(Snap& S, const uint8_t* s) {
     v2_drawlist_copy(S.draws, v2_frame_draws);   // the flip's display list (records + the used arena)
     S.tile_ovr_valid = (v2_tile_override != nullptr);   // the page lists: the composed page's tile words
     if (S.tile_ovr_valid) memcpy(S.tile_ovr, v2_tile_override, sizeof S.tile_ovr);
+    memcpy(S.vga_bg, v2_vga_bg, sizeof S.vga_bg);                // the background VGA of this flip (the tile layer's source)
     S.par_acc_x = v2_parallax.acc_x;
     S.par_acc_y = v2_parallax.acc_y;
     S.t = SDL_GetPerformanceCounter();
@@ -173,13 +175,20 @@ static void selftest_dump(const Snap& C) {
         uint32_t acc[2] = { C.par_acc_x, C.par_acc_y };
         const int savew = v2_fbw;
         v2_tls_ds = g_work; v2_tls_out = out; v2_fbw = C.w; v2_tls_fs = C.fs; v2_tls_par_acc = acc; v2_tls_presenter = true;
-        v2_tls_tile_ovr = C.tile_ovr_valid ? C.tile_ovr : nullptr; v2_tls_ui_cells_from_page = C.tile_ovr_valid;
+        v2_tls_tile_ovr = C.tile_ovr_valid ? C.tile_ovr : nullptr; v2_tls_ui_cells_from_page = C.tile_ovr_valid; v2_tls_vga_bg = C.vga_bg;
         v2_draw_tiles(0);
-        v2_draw_list(C.draws, nullptr, nullptr, 0);   // t = 1: the flip's sprite commands at their own positions
-        v2_draw_flagged_tiles(0);
-        v2_draw_list(C.draws, nullptr, nullptr, 1);   // the page's glyph cells over the flagged tiles
+        if (!v2_parallax.on) {   // the exact page: every command in the passes' order (render_v2.h V2_CMD_FGTILE)
+            v2_tls_fg_from_page = true;
+            v2_draw_list(C.draws, nullptr, nullptr, -1);   // t = 1: the flip's commands at their own positions
+            v2_draw_flagged_tiles(0);
+            v2_tls_fg_from_page = false;
+        } else {                 // the console parallax layer's priority pass between the sprites and the rest
+            v2_draw_list(C.draws, nullptr, nullptr, 0);
+            v2_draw_flagged_tiles(0);
+            v2_draw_list(C.draws, nullptr, nullptr, 1);
+        }
         v2_draw_ui(0);
-        v2_tls_tile_ovr = nullptr; v2_tls_ui_cells_from_page = false;
+        v2_tls_tile_ovr = nullptr; v2_tls_ui_cells_from_page = false; v2_tls_vga_bg = nullptr;
         v2_tls_presenter = false; v2_tls_par_acc = nullptr; v2_tls_fs = nullptr; v2_tls_out = nullptr; v2_tls_ds = nullptr; v2_fbw = savew;
         const double ms = (double)(SDL_GetPerformanceCounter() - t0) / (double)SDL_GetPerformanceFrequency() * 1000.0;
         t_sum += ms; t_n++; if (ms > t_max) t_max = ms;
@@ -353,11 +362,14 @@ bool v2_smooth_render(uint8_t* out) {
     // distance to the background is the rounded exact one (a camera-locked viking stays
     // still on the screen, as in the original; no ±1 px shimmer). At t = 1 every command
     // keeps its own position: the frame is the flip.
-    static int16_t g_pos_x[256], g_pos_y[256];
+    static int16_t g_pos_x[V2_DRAWLIST_MAX], g_pos_y[V2_DRAWLIST_MAX];
     for (int i = 0; i < C.draws.n; i++) {
         const V2DrawCmd& c = C.draws.cmd[i];
         g_pos_x[i] = c.x; g_pos_y[i] = c.y;
         if (!interp) continue;
+        // glyph cells and priority-tile repaints are map cells, not objects: they stay in the
+        // world (moved only by the camera), their pseudo slots are no object record of the DS
+        if (c.type == V2_CMD_GLYPH || c.type == V2_CMD_FGTILE) continue;
         // the page lists keep a slot's earlier commands while their residue lives: only the
         // slot's LAST command is the object as it stands, the earlier ones stay where they are
         { bool last = true; for (int k = i + 1; k < C.draws.n; k++) if (C.draws.cmd[k].slot == c.slot) { last = false; break; }
@@ -413,13 +425,20 @@ bool v2_smooth_render(uint8_t* out) {
     v2_tls_fs = C.fs;
     v2_tls_par_acc = acc;
     v2_tls_presenter = true;
-    v2_tls_tile_ovr = C.tile_ovr_valid ? C.tile_ovr : nullptr; v2_tls_ui_cells_from_page = C.tile_ovr_valid;
+    v2_tls_tile_ovr = C.tile_ovr_valid ? C.tile_ovr : nullptr; v2_tls_ui_cells_from_page = C.tile_ovr_valid; v2_tls_vga_bg = C.vga_bg;
     v2_draw_tiles(0);
-    v2_draw_list(C.draws, g_pos_x, g_pos_y, 0);   // the flip's own sprite commands, in its order, at the moved positions
-    v2_draw_flagged_tiles(0);
-    v2_draw_list(C.draws, g_pos_x, g_pos_y, 1);   // the page's glyph cells over the flagged tiles
+    if (!v2_parallax.on) {   // the exact page: every command in the passes' order (render_v2.h V2_CMD_FGTILE)
+        v2_tls_fg_from_page = true;
+        v2_draw_list(C.draws, g_pos_x, g_pos_y, -1);   // the flip's own commands, in its order, at the moved positions
+        v2_draw_flagged_tiles(0);
+        v2_tls_fg_from_page = false;
+    } else {                 // the console parallax layer's priority pass between the sprites and the rest
+        v2_draw_list(C.draws, g_pos_x, g_pos_y, 0);
+        v2_draw_flagged_tiles(0);
+        v2_draw_list(C.draws, g_pos_x, g_pos_y, 1);
+    }
     v2_draw_ui(0);
-    v2_tls_tile_ovr = nullptr; v2_tls_ui_cells_from_page = false;
+    v2_tls_tile_ovr = nullptr; v2_tls_ui_cells_from_page = false; v2_tls_vga_bg = nullptr;
     v2_tls_presenter = false;
     v2_tls_par_acc = nullptr;
     v2_tls_fs = nullptr;

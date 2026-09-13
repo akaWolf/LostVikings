@@ -298,6 +298,11 @@ struct V2DrawCmd {
 // type codes beyond the sprite types 1/2/4: a glyph cell of the text plane (sub_1E0C7 painted
 // it at a map cell: x/y = the cell's world position, off = the glyph index, slot = 0xFFFF)
 #define V2_CMD_GLYPH 0x80
+// ... and a flagged (priority) tile sub_1C8F1 repainted over the sprites of a dirty cell
+// (x/y = the cell's world position, off = the tile word, slot = 0xFFFE): the original
+// repaints such a tile only where a pass dirtied the cell, so the frame carries exactly
+// those repaints, in their order among the sprites and glyphs
+#define V2_CMD_FGTILE 0x81
 // a page can hold a whole text box (up to 40 x 22 glyph cells) on top of its sprites
 #define V2_DRAWLIST_MAX 1024
 // The pixels of a command are the sprite bytes AS THEY WERE at draw time: the page keeps
@@ -378,7 +383,33 @@ extern void v2_page_cells_copy_end(void);
 extern void v2_page_tile_set(uint16_t page, uint16_t fs_off, uint16_t word);
 extern void v2_page_tile_set_all(uint16_t fs_off, uint16_t word);
 extern void v2_page_lists_black(void);
+// The BACKGROUND VGA (2026-09-12): the tile layer of a frame is what the VGA memory holds,
+// read out the way the CRTC does. The pages are not rows of map cells: each page's rows sit
+// at a 42-byte phase inside the 0x56 pitch, a tile row is painted at LUT_PAGE_ROW[row] plus
+// a column term and the window is the linear span of bytes from the CRTC start (sub_16775:
+// LUT_SUBROW + LUT_PAGE_ROW + (x >> 2) + 8), 80 bytes per line across pitch boundaries and
+// through the ring — so the first flip of a level shows the fill's rows where the fill put
+// them and, below them, whatever the memory held: the 0x00 of the clear, or a previous
+// scene's picture and a previous level's tiles where sub_16880 (the port's half wipe) did not
+// reach — exactly like the original. A second pixel plane of the shadow VGA, v2_vga_bg,
+// receives only the BACKGROUND writers: the tile painter (the sub_1689E mirror), the picture
+// chunks of sub_10cd8 (v2_vga_bg_writer set around them, checked in v2_vga_w), the span copies
+// and the fills — never the sprite engines, the glyphs or the flagged-tile repaint, which stay
+// commands on top. The composition reads the window out of it — byte crtc + y * 0x56 +
+// ((pan + x) >> 2), plane (pan + x) & 3 — over the 320 centre columns (the map-based pass
+// stays for the wings of a wide frame; index 0 stays transparent over the parallax layer).
+// The presenter carries a copy in its snapshot and derives its interpolated camera's CRTC
+// start with the same formula (v2_crtc_for_camera).
+extern uint8_t v2_vga_bg[65536 * 4];
+extern bool    v2_vga_bg_writer;                          // true while a background writer paints
+extern thread_local const uint8_t* v2_tls_vga_bg;         // the presenter's copy
+// the CRTC start + pel pan sub_16775 computes for the DS's camera (shadow-side formula)
+extern void v2_crtc_for_camera(const uint8_t* ds, uint32_t* crtc, uint8_t* pan);
 extern void v2_page_list_glyph(uint16_t page, int16_t x, int16_t y, uint16_t glyph_index);
+extern void v2_page_list_fgtile(uint16_t page, int16_t x, int16_t y, uint16_t tile_word);   // sub_1C8F1's repaint of a dirty flagged cell
+// the flagged tiles come from the page's V2_CMD_FGTILE commands: v2_draw_flagged_tiles paints only
+// the parallax layer's priority pass (a console rule) and skips the map's bit-3 tiles
+extern thread_local bool v2_tls_fg_from_page;
 extern void v2_page_list_draw(uint16_t page, const V2DrawCmd& cmd);
 // the composition's tile words: the composed page's per-cell array (index = render-map word)
 // on the game thread, the snapshot's copy on the presenter (thread-local); nullptr = the map
