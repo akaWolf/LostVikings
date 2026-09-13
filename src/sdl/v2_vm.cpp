@@ -22559,7 +22559,15 @@ static inline void v2_blocking_loop_tick() {
     // Every scenario whose replay tail crossed such a loop "passed" in
     // silence (no compares ran past the freeze). Same game thread as the
     // snapshot drain — the #59 race-free invariant holds.
+    // V2_DRAIN_LOG tags the events this tick delivers "loop" (v2_input_recorder.cpp): a
+    // recording made by the game build before the read-then-tick order of these loops
+    // lands such an event one iteration later now — the tag tells which ones to move.
+    extern bool v2_replay_drain_in_loop;
+    { static int on = -1; if (on < 0) on = getenv("V2_DRAIN_LOG") ? 1 : 0;
+      if (on) fprintf(stderr, "LOOPTICK f=%d\n", v2_dbg_pre_vm_iter); }   // the counter this tick produced
+    v2_replay_drain_in_loop = true;
     v2_replay_drain_to_state();
+    v2_replay_drain_in_loop = false;
     // #61 native AIL: the DOS INT8 kept ticking through blocking loops —
     // pump the (frame-based) verify-pair sequencer here too; in V2_ONLY this
     // is the audible instance.

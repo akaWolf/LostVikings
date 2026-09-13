@@ -32,6 +32,8 @@ extern "C" uint8_t sdl_int9_dos_scan(int sdl_scancode);   // render.cpp (#86): 0
 
 // v2 game frame counter, defined in v2_vm.cpp; bumped in v2_phase_frame_begin.
 extern int v2_dbg_pre_vm_iter;
+// defined below the anonymous namespace (a global: v2_vm.cpp's blocking-loop tick sets it)
+extern bool v2_replay_drain_in_loop;
 
 namespace {
 
@@ -360,9 +362,11 @@ int v2_replay_drain_impl(void) {
         g_replay_clock++;
     int applied = 0;
     SDL_Event e; int player = 0;
+    // "loop": delivered by a blocking loop's tick (v2_blocking_loop_tick sets the flag) rather
+    // than by the frame-begin drain — the V2_DRAIN_LOG reader needs the distinction (below).
     while (dequeue_due_replay(&e, &player)) {
         if (g_net.load()) net_capture_impl(&e, true, player);   // lockstep: captured, applied at read + delay
-        else apply_replay_event(e, "clk", player);
+        else apply_replay_event(e, v2_replay_drain_in_loop ? "loop" : "clk", player);
         applied++;
     }
     return applied;
@@ -373,6 +377,11 @@ int v2_replay_drain_impl(void) {
 // C-linkage bridge OUTSIDE the anonymous namespace (the anon-ns extern "C"
 // trap: language linkage C but internal storage — the symbol never exports).
 extern "C" int v2_replay_drain_to_state(void) { return v2_replay_drain_impl(); }
+// Set by v2_blocking_loop_tick around its drain (v2_vm.cpp): the events it delivers are
+// read by the loop's NEXT iteration (the read precedes the tick, as in the original), so
+// a game-build recording made before that order lands them one iteration later than the
+// live session did — the "loop" tag in V2_DRAIN_LOG names the events to move back a frame.
+bool v2_replay_drain_in_loop = false;
 
 // Global sub_12352 call counter — the seq-delivery coordinate. Incremented by
 // v2_input_tick_12352 at the single input-read point of the running world
