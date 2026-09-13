@@ -102,6 +102,12 @@ extern thread_local bool            v2_tls_presenter; // passes run outside the 
 extern "C" int v2_view_rows(void);           // v2_vm.cpp: 176 / 200 (LVX scene) / 224 (LVX_TALL224 level)
 void v2_smooth_capture(void);                 // game thread, at the page flip
 bool v2_smooth_render(uint8_t* out);          // presenter: true = out (320x200) holds an interpolated frame
+bool v2_smooth_effective(void);               // the presenter is interpolating between the sub-frames right now (menu)
+// the vsync lock (render_v2.cpp, 2026-09-11): the game's vsync waits follow the display's refreshes
+bool   v2_vsync_wait_game(void);              // game thread: block until the next game vsync; false = no lock, pace yourself
+bool   v2_vsync_locked(void);
+double v2_vsync_display_hz(void);             // the refresh the schedule runs on (0 = unknown / no lock)
+bool   v2_vsync_auto_smooth(void);            // SMOOTH AUTO's decision: the refresh is no multiple of 60
 extern float v2_smooth_last_t;                // debug: fraction of the last interpolated frame
 
 // UX stage 6 phase 2: a text item of a CJK language bank — a box's UTF-8 text

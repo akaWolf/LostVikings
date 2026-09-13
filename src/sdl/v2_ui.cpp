@@ -41,7 +41,7 @@ void v2_options_ensure_loaded() {
             if (!strcmp(key, "parallax")) v2_options.parallax = val != 0;
             else if (!strcmp(key, "scenes")) v2_options.scenes = val != 0;
             else if (!strcmp(key, "snes_balance")) v2_options.snes_balance = val != 0;
-            else if (!strcmp(key, "smooth")) v2_options.smooth = val != 0;
+            else if (!strcmp(key, "smooth")) v2_options.smooth = (val >= 0 && val <= 2) ? val : 1;   // 0 NONE, 1 AUTO (an old cfg's ON = the new default), 2 ON
             else if (!strcmp(key, "console_finale")) v2_options.console_finale = val != 0;
             else if (!strcmp(key, "filter")) v2_options.filter = (val >= 0 && val <= 5) ? val : 1;   // out of range: the default, SHARP
             else if (!strcmp(key, "integer_scale")) v2_options.integer_scale = val != 0;
@@ -187,7 +187,7 @@ static void activate() {
     case IT_SCENES:   if (net_locked()) break; v2_options.scenes = !v2_options.scenes.load(); v2_options_save(); break;
     case IT_BALANCE:  if (net_locked()) break; v2_options.snes_balance = !v2_options.snes_balance.load(); v2_options_save(); v2_ui_toast("SNES BALANCE: NEXT LEVEL"); break;
     case IT_LANG:     { if (net_locked()) break; int n = v2_locale_count(); if (n > 1) { v2_options.language = (v2_options.language.load() + 1) % n; v2_options_save(); } break; }
-    case IT_SMOOTH:   v2_options.smooth = !v2_options.smooth.load(); v2_options_save(); break;
+    case IT_SMOOTH:   v2_options.smooth = (v2_options.smooth.load() + 1) % 3; v2_options_save(); break;
     case IT_FINALE:   if (net_locked()) break; v2_options.console_finale = !v2_options.console_finale.load(); v2_options_save(); v2_ui_toast("FINALE: NEXT LOAD"); break;
     case IT_FILTER:   v2_options.filter = filter_step(v2_options.filter.load(), 1); v2_options_save(); break;
     case IT_INTEGER:  v2_options.integer_scale = !v2_options.integer_scale.load(); v2_options_save(); break;
@@ -207,7 +207,8 @@ static void activate() {
 }
 static void adjust(int d) {
     switch (cursor) {
-    case IT_PARALLAX: case IT_SCENES: case IT_BALANCE: case IT_SMOOTH: case IT_FINALE: case IT_INTEGER: activate(); break;
+    case IT_PARALLAX: case IT_SCENES: case IT_BALANCE: case IT_FINALE: case IT_INTEGER: activate(); break;
+    case IT_SMOOTH:   v2_options.smooth = (v2_options.smooth.load() + d + 3) % 3; v2_options_save(); break;
     case IT_SOUND:    v2_options.sound_mode = (v2_options.sound_mode.load() + d + 4) % 4; v2_options_save(); break;
     case IT_FILTER:   v2_options.filter = filter_step(v2_options.filter.load(), d); v2_options_save(); break;
     case IT_BORDER:   v2_options.border = (v2_options.border.load() + d + 2) % 2; v2_options_save(); break;
@@ -286,7 +287,12 @@ void v2_ui_draw(uint32_t* rgba, int w, int h, SDL_PixelFormat* fmt) {
         { char lc[8]; snprintf(lc, sizeof lc, "%s", v2_locale_code_at(v2_options.language.load()));
           for (char* c = lc; *c; c++) if (*c >= 'a' && *c <= 'z') *c -= 32;
           snprintf(lines[n++], 40, "LANGUAGE  < %s >", lc); }
-        snprintf(lines[n++], 40, "SMOOTH    [%s]", v2_options.smooth.load() ? "ON " : "OFF");
+        { static const char* const SMOOTH_NAMES[3] = { "NONE", "AUTO", "ON  " };
+          extern bool v2_smooth_effective(void); extern double v2_vsync_display_hz(void); extern bool v2_vsync_locked(void);
+          const int sm = v2_options.smooth.load() % 3;
+          // AUTO shows what it decided for this display; the refresh the game's vsync is locked to follows
+          if (v2_vsync_locked()) snprintf(lines[n++], 44, "SMOOTH    < %s >%s %.0f HZ", SMOOTH_NAMES[sm], sm == 1 ? (v2_smooth_effective() ? " ON " : " OFF") : "", v2_vsync_display_hz());
+          else snprintf(lines[n++], 44, "SMOOTH    < %s >%s NO VSYNC", SMOOTH_NAMES[sm], sm == 1 ? " OFF" : ""); }
         snprintf(lines[n++], 40, "FINALE    [%s]", v2_options.console_finale.load() ? "SNES" : "PC ");
         snprintf(lines[n++], 40, "FILTER    < %s >", FILTER_NAMES[v2_options.filter.load() % 6]);
         snprintf(lines[n++], 40, "INT.SCALE [%s]", v2_options.integer_scale.load() ? "ON " : "OFF");

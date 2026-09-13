@@ -12,7 +12,7 @@ struct V2Options {
     std::atomic<bool> scenes{true};     // play the Genesis interludes (slots 53-57)
     std::atomic<bool> snes_balance{false};   // the SNES 1993 level variants (13 levels), takes effect at the next level load
     std::atomic<int> language{0};            // UX6: index into the language banks (0 = the English original)
-    std::atomic<bool> smooth{true};          // UX9: the presenter interpolates camera/sprites between ticks
+    std::atomic<int>  smooth{1};             // UX9 (reworked 2026-09-11): 0 NONE, 1 AUTO (interpolate between the sub-frames only on a display whose refresh is no multiple of 60 Hz), 2 ON
     std::atomic<bool> console_finale{true};  // UX9: the SNES finale's BG2 dragon layer + crowd on the concert (next load)
     // UX9 step 3 — the presenter's picture (render thread only, no game state):
     std::atomic<int>  filter{1};             // 0 NEAREST, 1 SHARP (integer pre-scale + linear; the default since 2026-09-10), 2 LINEAR, 3 XBRZ, 4 HQX, 5 NONE

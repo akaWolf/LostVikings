@@ -22379,6 +22379,15 @@ static void v2_read_input_12352_iter(uint8_t* shadow) {
     v2gs(shadow).input_prev(ax);
 #ifdef V2_ONLY
     v2_coop_read_inputs(shadow);        // UX stage 8: the words of players 2..3 for this read
+    // V2_INPUT_LOG=1: every read of this mirror — the game frame, the words it
+    // produced (held / edges / the previous word), what fed them (the tap
+    // accumulator, the render thread's held word, the ISR word 0x86DE) and the
+    // active viking's world position at the read (the previous tick's result)
+    { static int lg = -1; if (lg < 0) { const char* e = getenv("V2_INPUT_LOG"); lg = (e && *e == '1') ? 1 : 0; }
+      if (lg) { const uint16_t vk = v2gs(shadow).active_viking();
+          fprintf(stderr, "INPUT f%d keys=%04X edges=%04X prev=%04X | new_kd=%04X held=%04X accum=%04X | vik %02X at %d,%d\n",
+                  v2_dbg_pre_vm_iter, ax, (uint16_t)((ax ^ prev) & ax), prev, new_kd, input_keys, v2gs(shadow).input_accum(),
+                  vk, *(int16_t*)(shadow + vk + OBJ_WORLD_X), *(int16_t*)(shadow + vk + OBJ_WORLD_Y)); } }
 #endif
 }
 

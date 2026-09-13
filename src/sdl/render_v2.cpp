@@ -25,6 +25,119 @@ extern "C" void sdl_int9_note_keydown(int sdl_scancode);  // render.cpp (#62)
 
 const int SCREEN_SCALE_V2 = 2;
 bool v2_present_vsync = false;   // UX stage 9: SDL_RenderPresent blocks on the display refresh
+
+// ============================================================================
+// UX stage 9 rework (2026-09-11): the game's vsync IS the display's vsync.
+// The DOS game paces itself on the VGA vertical retrace (sub_10130 polls it,
+// three waits per game frame at the 60 Hz of Mode X) and moves the camera and
+// the sprites on EVERY retrace: the three sub-frames of a game frame (render1
+// / render2 / render3) hold different positions — a DOSBox capture and the
+// flip log agree, 1..3 px per 60 Hz frame. Pacing those waits with a 16 ms
+// timer while the presenter ran on the display's own refresh (16.67 ms) made
+// the two clocks beat: every ~0.9 s a sub-frame was shown twice and another
+// dropped. The tick-to-tick interpolation of stage 9 hid that hitch but threw
+// the original's sub-frame positions away (a game frame of latency and a
+// rounding shimmer on top). Now the presenter hands the game a "vsync" after
+// each present, on the 60 Hz schedule of the display's refreshes (60 Hz: every
+// one, 120: every other, 144: two-three-two-...), the game's wait loop blocks
+// on it (v2_tick_sleep -> v2_vsync_wait_game), and the presenter latches the
+// game's newest flip as late as it can before its next present — one refresh
+// of latency, like the VGA page flip. Without a real vsync (V2_NO_PRESENT_VSYNC,
+// a compositor that does not block, SDL's dummy driver) the game keeps a 60.0
+// Hz timer of its own and the presenter its 15 ms sleep, as before.
+// ============================================================================
+#include <mutex>
+#include <condition_variable>
+#include <chrono>
+#include <cmath>
+extern bool need_quit;
+namespace {
+std::mutex g_vs_mx; std::condition_variable g_vs_cv;
+uint64_t g_vs_game_seq = 0;            // game vsyncs fired (under g_vs_mx)
+double   g_vs_acc = 0.0;               // the 60 Hz schedule's phase, in refreshes
+double   g_display_hz = 0.0;           // the mode of the window's display (0 = unknown)
+double   g_present_ema_ms = 0.0;       // the measured interval between presents
+uint64_t g_present_last = 0;           // SDL_GetPerformanceCounter at the last present
+unsigned g_present_n = 0;              // presents measured so far (the lock waits for the interval to settle)
+const unsigned VS_WARMUP = 32;         // presents before the lock may engage (~0.5 s at 60 Hz)
+std::atomic<bool> g_vs_locked{false};  // present blocks on a plausible refresh: the game waits on it
+std::atomic<int>  g_vs_hz_x100{0};     // the effective refresh x 100 (menu, SMOOTH AUTO)
+}
+static void v2_vsync_query_display(SDL_Window* w) {
+    SDL_DisplayMode m; const int di = w ? SDL_GetWindowDisplayIndex(w) : -1;
+    g_display_hz = (di >= 0 && SDL_GetCurrentDisplayMode(di, &m) == 0 && m.refresh_rate > 0) ? (double)m.refresh_rate : 0.0;
+}
+// presenter thread, right after SDL_RenderPresent returned (= the display's vsync when it blocks)
+static void v2_vsync_on_present(void) {
+    const uint64_t now = SDL_GetPerformanceCounter(); const double freq = (double)SDL_GetPerformanceFrequency();
+    if (g_present_last) {
+        const double dt = (double)(now - g_present_last) / freq * 1000.0;
+        if (dt > 0.5 && dt < 200.0) { g_present_ema_ms = g_present_ema_ms > 0.0 ? g_present_ema_ms * 0.9 + dt * 0.1 : dt; g_present_n++; }
+    }
+    g_present_last = now;
+    // the effective refresh: the mode's rate when the measured interval agrees with it, else the
+    // measurement itself — once it has settled (the first presents of a window run long: the
+    // level load, the texture creation; an early lock read 20 ms and SMOOTH AUTO took 60 Hz for 48)
+    double hz = 0.0;
+    if (g_present_n >= VS_WARMUP && g_present_ema_ms > 4.0 && g_present_ema_ms < 40.0) {
+        // the mode's rate wins while the measurement is anywhere near it (a loaded machine stretches
+        // the intervals; the mode does not change) — the measurement alone when the mode is unknown
+        // or plainly different (a compositor presenting at its own rate)
+        const double meas = 1000.0 / g_present_ema_ms;
+        hz = (g_display_hz > 0.0 && fabs(1000.0 / g_display_hz - g_present_ema_ms) < 0.35 * g_present_ema_ms) ? g_display_hz : meas;
+    }
+    const bool locked = v2_present_vsync && hz > 0.0;
+    if (locked != g_vs_locked.load(std::memory_order_relaxed)) {
+        g_vs_locked.store(locked, std::memory_order_release);
+        fprintf(stderr, "render_v2: vsync lock %s (display mode %.0f Hz, present interval %.2f ms)\n", locked ? "ON" : "OFF", g_display_hz, g_present_ema_ms);
+    }
+    g_vs_hz_x100.store((int)(hz * 100.0 + 0.5), std::memory_order_relaxed);
+    if (!locked) return;
+    // the 60 Hz schedule on the refreshes: an exact divider for the multiples of 60 (0.5 Hz tolerance), the measured ratio otherwise
+    double step = 60.0 / hz;
+    { const int k = (int)(hz / 60.0 + 0.5); if (k >= 1 && fabs(hz - 60.0 * k) < 0.5) step = 1.0 / k; }
+    bool fire = false;
+    { std::lock_guard<std::mutex> lk(g_vs_mx);
+      g_vs_acc += step;
+      if (g_vs_acc >= 1.0 - 1e-9) { g_vs_acc -= 1.0; if (g_vs_acc > 1.0 || g_vs_acc < 0.0) g_vs_acc = 0.0; g_vs_game_seq++; fire = true; } }
+    if (fire) g_vs_cv.notify_all();
+}
+// game thread (v2_tick_sleep): block until the presenter's next game vsync.
+// false = no lock, or the presenter stalled (a hidden window): the caller paces
+// itself. A vsync that fired while the game was busy counts (the backlog is
+// dropped): the DOS loop sees the retrace flag and goes on, it never catches up.
+bool v2_vsync_wait_game(void) {
+    if (!g_vs_locked.load(std::memory_order_acquire)) return false;
+    static uint64_t seen = 0;
+    std::unique_lock<std::mutex> lk(g_vs_mx);
+    if (g_vs_game_seq > seen) { seen = g_vs_game_seq; return true; }
+    const bool ok = g_vs_cv.wait_for(lk, std::chrono::milliseconds(60), [] { return g_vs_game_seq > seen || need_quit; });
+    seen = g_vs_game_seq;
+    return ok && !need_quit;
+}
+// presenter thread: sleep until shortly before the next refresh, so the snapshot
+// that follows holds the flip the game made for it (the compose and the texture
+// upload take about a millisecond)
+static void v2_vsync_latch_sleep(void) {
+    if (!g_vs_locked.load(std::memory_order_acquire) || g_present_last == 0 || g_present_ema_ms <= 0.0) return;
+    const double freq = (double)SDL_GetPerformanceFrequency();
+    const double margin = g_present_ema_ms * 0.4 < 3.0 ? g_present_ema_ms * 0.4 : 3.0;
+    const double target_ms = g_present_ema_ms - margin;
+    for (;;) {
+        const double since = (double)(SDL_GetPerformanceCounter() - g_present_last) / freq * 1000.0;
+        if (since >= target_ms || need_quit) break;
+        const double left = target_ms - since;
+        if (left > 1.5) SDL_Delay((Uint32)(left - 1.0)); else SDL_Delay(0);
+    }
+}
+bool   v2_vsync_locked(void) { return g_vs_locked.load(std::memory_order_acquire); }
+double v2_vsync_display_hz(void) { return g_vs_hz_x100.load(std::memory_order_relaxed) / 100.0; }
+// SMOOTH AUTO: interpolate only where the 60 Hz schedule is uneven on this display
+bool v2_vsync_auto_smooth(void) {
+    if (!g_vs_locked.load(std::memory_order_acquire)) return false;
+    const double hz = v2_vsync_display_hz(); const int k = (int)(hz / 60.0 + 0.5);
+    return !(k >= 1 && fabs(hz - 60.0 * k) < 0.5);
+}
 const int SCREEN_WIDTH_V2 = 320;
 const int SCREEN_HEIGHT_V2 = 240;
 const int RENDER_WIDTH_V2 = 512;   // the linear stride of stableBuffer / tempDrawBuffer = V2_FB_MAX_W (render_v2.h, included below; static_assert there) — was the 344-px VGA pitch, a wide frame needs more
@@ -189,8 +302,8 @@ static void v2_present_frame(int H) {
         }
     }
     SDL_RenderPresent(myRenderer_v2);
+    v2_vsync_on_present();   // the display's vsync -> the game's (see the module above)
 }
-extern bool need_quit;  // Используем флаг первого окна
 uint16_t input_keys_v2 = 0;
 bool need_quit_v2 = false;  // Не используется, но оставим для совместимости
 
@@ -364,7 +477,9 @@ void render_thread_proc_v2(void* _state)
         SDL_RendererInfo ri;
         v2_present_vsync = myRenderer_v2 && SDL_GetRendererInfo(myRenderer_v2, &ri) == 0 &&
                            (ri.flags & SDL_RENDERER_PRESENTVSYNC);
-        printf("render_v2: presenter %s\n", v2_present_vsync ? "vsync" : "15 ms sleep");
+        v2_vsync_query_display(myWindow_v2);
+        printf("render_v2: presenter %s, display mode %.0f Hz (the game's vsync follows the display once the present interval is measured)\n",
+               v2_present_vsync ? "vsync" : "15 ms sleep", g_display_hz);
     }
     // UX stage 9 step 3: no SDL logical size — v2_present_frame lays the
     // picture out itself (aspect / integer scale / filter / border options)
@@ -493,6 +608,8 @@ void render_thread_proc_v2(void* _state)
       // НЕ вызываем SDL_PollEvent (test mode) - события обрабатываются только в первом окне
       // Это избегает конфликтов с обработкой событий
 
+      if ((loop_counter & 127) == 0) v2_vsync_query_display(myWindow_v2);   // the window may have moved to another display
+      v2_vsync_latch_sleep();      // with the vsync lock: snapshot just before the refresh, after the game's flip for it
       render_callback_v2(_state);  // snapshot drawBuffer→stableBuffer + sprite replay
 #ifndef HEADLESS
       updateDraw_v2();             // читает только stableBuffer

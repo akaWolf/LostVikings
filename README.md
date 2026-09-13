@@ -218,6 +218,18 @@ F1 menu then switches the features: PARALLAX, SCENES and
 FINALE are on by default, SNES BALANCE is off, LANGUAGE and SOUND (PC /
 SNES / SC55 / MT32) as you like.
 
+The game's frame pacing follows the display: the DOS game renders three
+sub-frames per game frame, one per 60 Hz refresh of Mode X, moving the
+camera and the sprites on every one, and the port waits for the
+display's vsync in the same way (60 Hz: every refresh, 120 Hz: every
+other, 144 Hz: two-three-two...), so each sub-frame is shown once, as on
+a VGA. SMOOTH < NONE | AUTO | ON > (F1, `smooth=0/1/2`) interpolates the
+camera and the sprites between the two newest sub-frames at the display's
+own rate; AUTO — the default — does that only on a display whose refresh
+is no multiple of 60 (75, 90, 144, 165 Hz), where the 60 Hz schedule is
+uneven, and stays off on 60 and 120 Hz where there is nothing to smooth.
+The menu line shows the decision and the refresh the game is locked to.
+
 The twelve languages are Blizzard's translations from the Blizzard
 Arcade Collection and are not in the repository either: copy
 `strings/locale.strings` and `lv_snes_strings.json` from the

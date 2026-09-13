@@ -1,30 +1,41 @@
-// UX stage 9 (2026-09-05): smooth scrolling — presenter-side interpolation.
+// UX stage 9 (2026-09-05), reworked 2026-09-11: presenter-side interpolation
+// between the two newest FLIPS — the sub-frames of the DOS game.
 //
-// A GAME frame of the DOS engine is three vsync waits long (pre-VM tick,
-// render1 + flip, post-flip1, render2 + flip, post-flip2: ~48 ms at the
-// port's 16 ms vsync, ~43 ms on the 70 Hz original) — object positions and
-// the camera move once per game frame, i.e. at ~20 Hz, while the window is
-// presented at the display's refresh (60 Hz with PRESENTVSYNC): every
-// position step lands on one of three presented frames and the scroll
-// visibly stutters. Here the presenter renders its OWN frame: the camera and
-// every active sub-sprite's world position are interpolated between the two
-// newest GAME-frame snapshots by the wall-clock fraction elapsed since the
-// newer one (so the three presented frames of a game frame show 1/3, 2/3,
-// 3/3 of the step — one game frame of display latency, no extrapolation
-// artefacts), everything else (sprite animation frames, UI, palette) comes
-// from the newest page flip, and the ordinary render passes (tiles/
-// parallax, sprites, foreground tiles, UI) paint into a presenter buffer
-// through the thread-local overrides of v2_render_funcs.cpp. The game
-// state is never touched: the snapshots are copies, the passes read them and
-// paint elsewhere, so the canon (headless, no presenter) is unaffected and
-// the interpolation can be switched off live (F1 SMOOTH) — the presenter
-// then shows the flip frame as before.
+// The DOS engine renders three sub-frames per game frame (render1 / render2 /
+// render3), one per 60 Hz refresh of Mode X, and moves the camera and the
+// sprites on every one of them (the object's world position steps once per
+// game frame; the sub-sprites follow it in thirds, the viewport scrolls per
+// refresh — a DOSBox capture and the flip log agree: 1..3 px per refresh). So
+// the original's motion is already 60 Hz smooth, and with the game's vsync
+// locked to the display's (render_v2.cpp) every sub-frame is shown once, as on
+// the VGA. Nothing is left to interpolate on a 60 or 120 Hz display.
 //
-// Sub-sprite positions are lerped in WORLD space (OBJ_SPRITE_X/Y are world
-// coordinates; the passes subtract the camera), which keeps a camera-locked
-// viking still on screen while the map glides. A slot that changed by more
-// than V2_SMOOTH_MAX_STEP px (spawn, teleport, wrap) or is inactive in
-// either snapshot keeps its newer position.
+// The first version of this file interpolated between game FRAMES: it took the
+// positions of consecutive ticks and lerped them over the ~50 ms — throwing the
+// original's sub-frame positions away, a game frame of latency, and a ±1 px
+// shimmer where the camera and a sprite were rounded separately. Gone.
+//
+// What remains useful is the display whose refresh is no multiple of 60 (75,
+// 90, 144, 165 Hz): the 60 Hz schedule of the game's vsyncs is uneven there
+// (a sub-frame held for two refreshes, the next for three), and interpolating
+// the camera and the sprite positions between the two newest flips by the
+// wall-clock fraction of the sub-frame period gives even motion at the
+// display's rate — one sub-frame (16.7 ms) of latency. SMOOTH < NONE | AUTO |
+// ON >: AUTO = exactly that case, ON = always (a 60 Hz display then shows
+// positions between flips too, at the same latency), NONE = never.
+//
+// Model: the presenter renders its OWN frame from a snapshot of the newest flip
+// (sprite frames, UI, palette, FS map come from it), with the viewport and the
+// world positions of the sub-sprites active in both flips moved back towards
+// the previous flip by (1 - t). Positions are rounded ONCE, relative to the
+// exact interpolated camera (x = cam_i + round(x_f - cam_f)): the sprite keeps
+// its distance to the background, no shimmer. A slot that moved more than
+// V2_SMOOTH_MAX_STEP px (spawn, teleport, wrap) or is inactive in either flip
+// keeps its newest position; two flips closer than 4 ms are one sub-frame (the
+// game flips again in the post-flip phases) — the later one wins. The passes
+// (tiles/parallax, sprites, foreground tiles, UI) paint into the presenter's
+// buffer through the thread-local overrides of v2_render_funcs.cpp; the game
+// state is never touched, the canon (headless, no presenter) is unaffected.
 #include "render_v2.h"
 #include "v2_ds_layout.h"
 #include "v2_ui.h"
@@ -43,6 +54,7 @@ extern bool v2_last_frame_tiles;     // v2_render_funcs.cpp: the last v2_draw_ti
 extern thread_local int v2_fbw;      // v2_render_funcs.cpp: the frame width this thread renders
 extern "C" int v2_scene_fullscreen(void);
 extern "C" uint16_t v2_lvx_flags(uint16_t level);
+extern bool v2_vsync_auto_smooth(void);   // render_v2.cpp: the display's refresh is no multiple of 60 (the lock on)
 void v2_draw_tiles(uint16_t ds_val);
 void v2_draw_sprites(uint16_t ds_val);
 void v2_draw_sprites_late(uint16_t ds_val);
@@ -52,7 +64,8 @@ void v2_draw_ui(uint16_t ds_val);
 namespace {
 constexpr uint32_t DS_SIZE = 0x10000;
 constexpr uint32_t FS_SIZE = 0x10000;
-constexpr int V2_SMOOTH_MAX_STEP = 48;       // px per tick beyond which a slot is not interpolated
+constexpr int V2_SMOOTH_MAX_STEP = 48;       // px per sub-frame beyond which a slot is not interpolated
+constexpr double SAME_SUBFRAME_MS = 4.0;     // flips closer than this are one sub-frame (the later wins)
 
 struct Snap {
     uint8_t ds[DS_SIZE];
@@ -60,24 +73,21 @@ struct Snap {
     uint32_t par_acc_x, par_acc_y;
     uint64_t t;                 // SDL_GetPerformanceCounter at capture
     bool valid, tile_frame, fullscreen;
-    int w;                      // the frame width the tick rendered at (v2_fbw; UX stage 9 step 4)
-    // UX stage 8 step 2: the logical cameras of players 2..3 at this tick
+    int w;                      // the frame width the flip rendered at (v2_fbw; UX stage 9 step 4)
+    // UX stage 8 step 2: the logical cameras of players 2..3 at this flip
     // (game state, captured with the DS on the game thread)
     int players;
     uint16_t cam_x[V2_COOP_MAX], cam_y[V2_COOP_MAX];
     bool cam_valid[V2_COOP_MAX];
 };
-// g_frame[0/1] = the two newest GAME-frame snapshots (positions/camera),
-// g_flip = the newest page flip (sprite frames, UI, FS map)
-Snap g_frame[2];
-int g_fcur = -1;
-Snap g_flip;
-int g_last_iter = -1;
+// the two newest sub-frames: g_cur = the newest flip, g_prev = the flip before it
+Snap g_cur, g_prev;
 std::mutex g_mx;
 
 // presenter-local copies (the lock is held only for the memcpy)
-Snap g_prev_local, g_cur_local, g_flip_local;
+Snap g_prev_local, g_cur_local;
 uint8_t g_work[DS_SIZE];
+std::atomic<bool> g_effective{false};   // the last render interpolated
 
 inline int16_t rd16(const uint8_t* b, uint32_t o) { return (int16_t)(b[o] | (b[o + 1] << 8)); }
 inline void wr16(uint8_t* b, uint32_t o, int16_t v) { b[o] = (uint8_t)v; b[o + 1] = (uint8_t)((uint16_t)v >> 8); }
@@ -110,76 +120,92 @@ static void fill(Snap& S, const uint8_t* s) {
     S.valid = true;
 }
 
-// Game thread, at every page flip (v2_swap_render_buf): the flip snapshot
-// always; a GAME-frame snapshot at the first flip of a new game frame
-// (render1 — the first image drawn from the tick's new positions).
+// Game thread, at every page flip (v2_swap_render_buf): the flip becomes the
+// newest sub-frame; a flip within SAME_SUBFRAME_MS of the newest replaces it
+// (the post-flip phases flip again without a vsync wait), any other shifts it
+// into the previous slot.
 void v2_smooth_capture(void) {
     uint8_t* s = v2_vm_get_shadow_ds();
     if (!s) return;
     std::lock_guard<std::mutex> lock(g_mx);
-    fill(g_flip, s);
-    if (v2_dbg_pre_vm_iter != g_last_iter) {
-        g_last_iter = v2_dbg_pre_vm_iter;
-        int nxt = (g_fcur + 1) & 1;
-        memcpy(&g_frame[nxt], &g_flip, sizeof(Snap));
-        g_fcur = nxt;
+    // debug: V2_SMOOTH_DUMP — every page flip as the game thread made it: the
+    // viewport and the active viking's object / first sub-sprite positions, so the
+    // motion WITHIN a game frame (the sub-frames) can be read
+    { static FILE* ff = nullptr; static int init = 0; static int nflip = 0;
+      if (!init) { init = 1; const char* dd = getenv("V2_SMOOTH_DUMP");
+          if (dd && *dd) { char path[512]; snprintf(path, sizeof path, "%s/flip_log.txt", dd); ff = fopen(path, "w"); } }
+      if (ff) { const uint16_t vk = (uint16_t)rd16(s, DS_ACTIVE_VIKING); const uint16_t sub = (uint16_t)rd16(s, vk + OBJ_SUB_SLOT);
+          fprintf(ff, "FLIP #%d f%d t=%.1fms vp %d,%d | vik %02X obj %d,%d | sub %02X %d,%d\n", nflip++, v2_dbg_pre_vm_iter,
+                  (double)SDL_GetPerformanceCounter() / (double)SDL_GetPerformanceFrequency() * 1000.0, rd16(s, DS_VIEWPORT_X), rd16(s, DS_VIEWPORT_Y),
+                  vk, rd16(s, vk + OBJ_WORLD_X), rd16(s, vk + OBJ_WORLD_Y), sub,
+                  sub <= 0xFE ? rd16(s, sub + OBJ_SPRITE_X) : 0, sub <= 0xFE ? rd16(s, sub + OBJ_SPRITE_Y) : 0); } }
+    const uint64_t now = SDL_GetPerformanceCounter();
+    const double since_cur_ms = g_cur.valid ? (double)(now - g_cur.t) / (double)SDL_GetPerformanceFrequency() * 1000.0 : 1e9;
+    if (g_cur.valid && since_cur_ms >= SAME_SUBFRAME_MS) memcpy(&g_prev, &g_cur, sizeof(Snap));
+    fill(g_cur, s);
+}
+
+// the SMOOTH option: 0 NONE, 1 AUTO (the display's refresh is no multiple of 60), 2 ON
+static bool smooth_wanted(void) {
+    switch (v2_options.smooth.load()) {
+        case 2: return true;
+        case 1: return v2_vsync_auto_smooth();
+        default: return false;
     }
 }
+bool v2_smooth_effective(void) { return g_effective.load(std::memory_order_relaxed); }
 
 // Presenter thread: paint an interpolated frame into `out` (rows per v2_view_rows,
 // width = the snapshot's v2_fbw, reported in v2_smooth_last_w).
 // false = nothing to interpolate (option off, chunk screens, level change,
-// first tick) — the caller shows the tick frame as before.
+// first flips, the pair is no sub-frame) — the caller shows the flip as before.
 bool v2_smooth_render(uint8_t* out) {
     v2_options_ensure_loaded();
     // UX stage 8 step 2: a client whose player has his own camera renders his
-    // own frame even with SMOOTH off (then t = 1: the newest tick's positions
-    // behind his camera); the tick frame the game thread drew is player 1's.
+    // own frame even without interpolation (then t = 1: the newest flip's
+    // positions behind his camera); the flip the game thread drew is player 1's.
     const int local = g_v2_local_player;
     bool own_cam = false;
     {
         std::lock_guard<std::mutex> lock(g_mx);
-        own_cam = g_fcur >= 0 && local > 0 && local < g_frame[g_fcur].players && g_frame[g_fcur].cam_valid[local];
+        own_cam = g_cur.valid && local > 0 && local < g_cur.players && g_cur.cam_valid[local];
     }
-    const bool smooth_on = v2_options.smooth.load();
-    if (!smooth_on && !own_cam) { v2_smooth_last_reason = 1; return false; }
+    const bool smooth_on = smooth_wanted();
+    if (!smooth_on && !own_cam) { g_effective = false; v2_smooth_last_reason = 1; return false; }
     {
         std::lock_guard<std::mutex> lock(g_mx);
-        if (g_fcur < 0 || !g_flip.valid) { v2_smooth_last_reason = 2; return false; }
-        const Snap& C = g_frame[g_fcur];
-        const Snap& P = g_frame[g_fcur ^ 1];
-        if (!C.valid || !P.valid) { v2_smooth_last_reason = 3; return false; }
-        if (!C.tile_frame || !P.tile_frame || !g_flip.tile_frame) { v2_smooth_last_reason = 4; return false; }
-        if (C.fullscreen != P.fullscreen || C.t <= P.t) { v2_smooth_last_reason = 5; return false; }
-        if (C.w != P.w || C.w != g_flip.w) { v2_smooth_last_reason = 5; return false; }   // a width change = a level change
-        if (rd16(C.ds, DS_LEVEL) != rd16(P.ds, DS_LEVEL) || rd16(g_flip.ds, DS_LEVEL) != rd16(C.ds, DS_LEVEL)) {
-            v2_smooth_last_reason = 6; return false;                  // same level throughout
-        }
-        memcpy(&g_cur_local, &C, sizeof(Snap));
-        memcpy(&g_prev_local, &P, sizeof(Snap));
-        memcpy(&g_flip_local, &g_flip, sizeof(Snap));
+        if (!g_cur.valid) { g_effective = false; v2_smooth_last_reason = 2; return false; }
+        if (smooth_on && !g_prev.valid) { g_effective = false; v2_smooth_last_reason = 3; return false; }
+        memcpy(&g_cur_local, &g_cur, sizeof(Snap));
+        if (g_prev.valid) memcpy(&g_prev_local, &g_prev, sizeof(Snap));
+        else memcpy(&g_prev_local, &g_cur, sizeof(Snap));
     }
     const Snap& C = g_cur_local;
     const Snap& P = g_prev_local;
-    const Snap& L = g_flip_local;
     const double freq = (double)SDL_GetPerformanceFrequency();
-    const double period = (double)(C.t - P.t) / freq;               // s between the two game frames
-    double t;
-    if (!smooth_on) t = 1.0;                                        // own camera, no interpolation: the newest tick
-    else {
-        if (period < 0.020 || period > 0.120) {                     // a stall or a pause: no lerp
-            if (!own_cam) { v2_smooth_last_reason = 7; return false; }
-            t = 1.0;
+    const double period = (double)(C.t - P.t) / freq;               // s between the two newest flips
+    double t = 1.0;                                                 // own camera, no interpolation: the newest flip
+    bool interp = false;
+    if (smooth_on) {
+        // a sub-frame pair: the same level and width, both tile frames, 6..40 ms apart
+        // (the DOS game flips once per game frame on some screens: 50 ms, not a sub-frame)
+        const bool pair = C.tile_frame && P.tile_frame && C.fullscreen == P.fullscreen && C.w == P.w &&
+                          rd16(C.ds, DS_LEVEL) == rd16(P.ds, DS_LEVEL) && period >= 0.006 && period <= 0.040;
+        if (!pair) {
+            if (!own_cam) { g_effective = false; v2_smooth_last_reason = 5; return false; }
         } else {
             t = (double)(SDL_GetPerformanceCounter() - C.t) / freq / period;
             if (t < 0.0) t = 0.0;
             if (t > 1.0) t = 1.0;
+            interp = true;
         }
     }
+    if (!C.tile_frame) { g_effective = false; v2_smooth_last_reason = 4; return false; }
     v2_smooth_last_t = (float)t;
     v2_smooth_last_reason = 0;
+    g_effective = interp;
 
-    memcpy(g_work, L.ds, DS_SIZE);      // the newest flip: sprite frames, UI, everything not interpolated
+    memcpy(g_work, C.ds, DS_SIZE);      // the newest flip: sprite frames, UI, everything not interpolated
     // camera: viewport + the tile-scroll state derived from it (vp >> 3) —
     // the DS viewport, or (UX stage 8 step 2) the local player's own camera
     const bool own_valid = own_cam && C.cam_valid[local] && P.cam_valid[local];
@@ -187,83 +213,61 @@ bool v2_smooth_render(uint8_t* out) {
     int16_t px = own_valid ? (int16_t)P.cam_x[local] : rd16(P.ds, DS_VIEWPORT_X);
     int16_t cy = own_valid ? (int16_t)C.cam_y[local] : rd16(C.ds, DS_VIEWPORT_Y);
     int16_t py = own_valid ? (int16_t)P.cam_y[local] : rd16(P.ds, DS_VIEWPORT_Y);
-    if (own_cam && !own_valid) { cx = px = rd16(L.ds, DS_VIEWPORT_X); cy = py = rd16(L.ds, DS_VIEWPORT_Y); }
+    if (own_cam && !own_valid) { cx = px = rd16(C.ds, DS_VIEWPORT_X); cy = py = rd16(C.ds, DS_VIEWPORT_Y); }
+    // the exact interpolated camera (the sprites are rounded relative to it) and
+    // the integer one written to the frame (the tiles scroll by it)
+    double camx_f = cx, camy_f = cy;
+    int16_t vx = cx, vy = cy;
     {
-        // player 1's path is the stage 9 one: the flip's camera unless the
-        // tick moved it by an interpolable step; an own camera is always
-        // written (the flip carries the DS camera, not this player's)
         bool write = own_cam;
-        int16_t vx = cx, vy = cy;                                   // the newest tick's camera
-        if ((cx != px || cy != py) &&
+        if (interp && (cx != px || cy != py) &&
             cx - px <= V2_SMOOTH_MAX_STEP && px - cx <= V2_SMOOTH_MAX_STEP &&
             cy - py <= V2_SMOOTH_MAX_STEP && py - cy <= V2_SMOOTH_MAX_STEP) {
+            camx_f = px + (double)(cx - px) * t; camy_f = py + (double)(cy - py) * t;
             vx = lerp16(px, cx, t); vy = lerp16(py, cy, t);
             write = true;
         }
+        if (vx < 0) { vx = 0; camx_f = 0.0; }
+        if (vy < 0) { vy = 0; camy_f = 0.0; }
         if (write) {
-            if (vx < 0) vx = 0;
-            if (vy < 0) vy = 0;
             wr16(g_work, DS_VIEWPORT_X, vx);
             wr16(g_work, DS_VIEWPORT_Y, vy);
             wr16(g_work, DS_SCROLL_COL, (int16_t)((uint16_t)vx >> 3));
             wr16(g_work, DS_SCROLL_ROW, (int16_t)((uint16_t)vy >> 3));
         }
     }
-    // sub-sprites: the slots active in both snapshots move by their OWNER's
-    // motion. A sub-sprite's world position is the object's position plus the
-    // animation frame's own offset, and that offset changes from frame to
-    // frame: Olaf's walk keeps the object at 6 px per tick while the sprite
-    // steps 3, 6, 11, 4 ... (the waddle of the original). Lerping the sprite
-    // position spread those offset jumps over the tick — a sway on top of the
-    // motion, seen as a jerky walk. So the object's step (OBJ_WORLD_X/Y of the
-    // slot whose sub-sprite range holds the sprite) is what is interpolated:
-    // the sprite shows its newest frame at its newest offset, moved back by
-    // the part of the object's step not yet elapsed — the frame offset lands
-    // whole at the tick, as on the DOS screen, the motion glides. A sprite
-    // without an owner in both snapshots keeps the plain lerp of its position.
-    static int16_t owner_c[0x100], owner_p[0x100];
-    memset(owner_c, 0xFF, sizeof owner_c); memset(owner_p, 0xFF, sizeof owner_p);
-    for (int side = 0; side < 2; side++) {
-        const Snap& S = side ? P : C; int16_t* owner = side ? owner_p : owner_c;
+    // sub-sprites active in both flips: the world position moved back towards the
+    // previous flip by (1 - t), rounded once relative to the exact camera so the
+    // distance to the background is the rounded exact one (a camera-locked viking
+    // stays still on the screen, as in the original; no ±1 px shimmer)
+    if (interp) {
         for (uint32_t obj = 0; obj <= 0xFE; obj += 2) {
-            if (!rd16(S.ds, obj + OBJ_SUB_COUNT)) continue;
-            const uint16_t s0 = (uint16_t)rd16(S.ds, obj + OBJ_SUB_SLOT), s1 = (uint16_t)rd16(S.ds, obj + OBJ_SUB_END);
-            for (uint32_t s = s0; s < s1 && s <= 0xFE; s += 2) owner[s] = (int16_t)obj;
+            const uint16_t fc = (uint16_t)rd16(C.ds, obj + OBJ_SPRITE_FLAGS);
+            const uint16_t fp = (uint16_t)rd16(P.ds, obj + OBJ_SPRITE_FLAGS);
+            if (!(fc & 0x8000) || !(fp & 0x8000)) continue;
+            const int16_t ax = rd16(C.ds, obj + OBJ_SPRITE_X), bx = rd16(P.ds, obj + OBJ_SPRITE_X);
+            const int16_t ay = rd16(C.ds, obj + OBJ_SPRITE_Y), by = rd16(P.ds, obj + OBJ_SPRITE_Y);
+            if (ax == bx && ay == by) continue;
+            if (ax - bx > V2_SMOOTH_MAX_STEP || bx - ax > V2_SMOOTH_MAX_STEP ||
+                ay - by > V2_SMOOTH_MAX_STEP || by - ay > V2_SMOOTH_MAX_STEP) continue;   // spawn / teleport / wrap
+            const double xf = bx + (double)(ax - bx) * t, yf = by + (double)(ay - by) * t;
+            wr16(g_work, obj + OBJ_SPRITE_X, (int16_t)(vx + lround(xf - camx_f)));
+            wr16(g_work, obj + OBJ_SPRITE_Y, (int16_t)(vy + lround(yf - camy_f)));
         }
-    }
-    for (uint32_t obj = 0; obj <= 0xFE; obj += 2) {
-        uint16_t fc = (uint16_t)rd16(C.ds, obj + OBJ_SPRITE_FLAGS);
-        uint16_t fp = (uint16_t)rd16(P.ds, obj + OBJ_SPRITE_FLAGS);
-        if (!(fc & 0x8000) || !(fp & 0x8000)) continue;
-        int16_t ax = rd16(C.ds, obj + OBJ_SPRITE_X), bx = rd16(P.ds, obj + OBJ_SPRITE_X);
-        int16_t ay = rd16(C.ds, obj + OBJ_SPRITE_Y), by = rd16(P.ds, obj + OBJ_SPRITE_Y);
-        const int16_t ow = owner_c[obj];
-        if (ow >= 0 && ow == owner_p[obj]) {
-            const int dxo = rd16(C.ds, ow + OBJ_WORLD_X) - rd16(P.ds, ow + OBJ_WORLD_X);
-            const int dyo = rd16(C.ds, ow + OBJ_WORLD_Y) - rd16(P.ds, ow + OBJ_WORLD_Y);
-            if (dxo == 0 && dyo == 0) continue;                                 // the owner stood: the sprite stays where the tick put it
-            if (dxo > V2_SMOOTH_MAX_STEP || -dxo > V2_SMOOTH_MAX_STEP ||
-                dyo > V2_SMOOTH_MAX_STEP || -dyo > V2_SMOOTH_MAX_STEP) continue;   // spawn / teleport / wrap
-            wr16(g_work, obj + OBJ_SPRITE_X, (int16_t)(ax - (int)lround((1.0 - t) * dxo)));
-            wr16(g_work, obj + OBJ_SPRITE_Y, (int16_t)(ay - (int)lround((1.0 - t) * dyo)));
-            continue;
-        }
-        if (ax == bx && ay == by) continue;
-        if (ax - bx > V2_SMOOTH_MAX_STEP || bx - ax > V2_SMOOTH_MAX_STEP ||
-            ay - by > V2_SMOOTH_MAX_STEP || by - ay > V2_SMOOTH_MAX_STEP) continue;
-        wr16(g_work, obj + OBJ_SPRITE_X, lerp16(bx, ax, t));
-        wr16(g_work, obj + OBJ_SPRITE_Y, lerp16(by, ay, t));
     }
     // parallax autoscroll accumulators (units of 1/1792 px): lerp unless wrapped
     uint32_t acc[2] = { C.par_acc_x, C.par_acc_y };
-    if (C.par_acc_x >= P.par_acc_x && C.par_acc_x - P.par_acc_x < 1792u * 64u)
-        acc[0] = P.par_acc_x + (uint32_t)((double)(C.par_acc_x - P.par_acc_x) * t);
-    if (C.par_acc_y >= P.par_acc_y && C.par_acc_y - P.par_acc_y < 1792u * 64u)
-        acc[1] = P.par_acc_y + (uint32_t)((double)(C.par_acc_y - P.par_acc_y) * t);
+    if (interp) {
+        if (C.par_acc_x >= P.par_acc_x && C.par_acc_x - P.par_acc_x < 1792u * 64u)
+            acc[0] = P.par_acc_x + (uint32_t)((double)(C.par_acc_x - P.par_acc_x) * t);
+        if (C.par_acc_y >= P.par_acc_y && C.par_acc_y - P.par_acc_y < 1792u * 64u)
+            acc[1] = P.par_acc_y + (uint32_t)((double)(C.par_acc_y - P.par_acc_y) * t);
+    }
 
-    // debug: V2_SMOOTH_DUMP=<dir> — one line per interpolated frame: game
-    // frame, fraction, camera prev/cur/lerp, the active viking's object X
-    // prev/cur and its first sub-sprite's X prev/cur/lerp
+    // debug: V2_SMOOTH_DUMP=<dir> — one line per interpolated frame: game frame,
+    // fraction, the sub-frame period, the wall-clock since the newest flip, camera
+    // prev/cur/lerp, the active viking's object X/Y and its first sub-sprite's X/Y
+    // prev/cur/lerp
     {
         static FILE* lf = nullptr; static int init = 0;
         if (!init) { init = 1; const char* dd = getenv("V2_SMOOTH_DUMP");
@@ -271,19 +275,21 @@ bool v2_smooth_render(uint8_t* out) {
         if (lf) {
             const uint16_t vk = (uint16_t)rd16(C.ds, DS_ACTIVE_VIKING);
             const uint16_t sub = (uint16_t)rd16(C.ds, vk + OBJ_SUB_SLOT);
-            fprintf(lf, "f%d t=%.3f period=%.1fms vp %d,%d -> %d,%d = %d,%d | vik %02X obj-x %d -> %d | sub %02X x %d -> %d = %d\n",
-                    v2_dbg_pre_vm_iter, t, period * 1000.0, px, py, cx, cy, rd16(g_work, DS_VIEWPORT_X), rd16(g_work, DS_VIEWPORT_Y),
-                    vk, rd16(P.ds, vk + OBJ_WORLD_X), rd16(C.ds, vk + OBJ_WORLD_X),
-                    sub, sub <= 0xFE ? rd16(P.ds, sub + OBJ_SPRITE_X) : 0, sub <= 0xFE ? rd16(C.ds, sub + OBJ_SPRITE_X) : 0,
-                    sub <= 0xFE ? rd16(g_work, sub + OBJ_SPRITE_X) : 0);
+            fprintf(lf, "f%d t=%.3f period=%.1fms since=%.1fms vp %d,%d -> %d,%d = %d,%d | vik %02X obj %d,%d -> %d,%d | sub %02X x %d -> %d = %d y %d -> %d = %d\n",
+                    v2_dbg_pre_vm_iter, t, period * 1000.0, (double)(SDL_GetPerformanceCounter() - C.t) / freq * 1000.0,
+                    px, py, cx, cy, rd16(g_work, DS_VIEWPORT_X), rd16(g_work, DS_VIEWPORT_Y),
+                    vk, rd16(P.ds, vk + OBJ_WORLD_X), rd16(P.ds, vk + OBJ_WORLD_Y), rd16(C.ds, vk + OBJ_WORLD_X), rd16(C.ds, vk + OBJ_WORLD_Y),
+                    sub,
+                    sub <= 0xFE ? rd16(P.ds, sub + OBJ_SPRITE_X) : 0, sub <= 0xFE ? rd16(C.ds, sub + OBJ_SPRITE_X) : 0, sub <= 0xFE ? rd16(g_work, sub + OBJ_SPRITE_X) : 0,
+                    sub <= 0xFE ? rd16(P.ds, sub + OBJ_SPRITE_Y) : 0, sub <= 0xFE ? rd16(C.ds, sub + OBJ_SPRITE_Y) : 0, sub <= 0xFE ? rd16(g_work, sub + OBJ_SPRITE_Y) : 0);
         }
     }
     // the passes, in the gameplay frame's order, on the presenter's buffers
     v2_tls_ds = g_work;
     v2_tls_out = out;
-    v2_fbw = L.w;                   // the presenter thread renders at the snapshot's width
-    v2_smooth_last_w = L.w;
-    v2_tls_fs = L.fs;
+    v2_fbw = C.w;                   // the presenter thread renders at the snapshot's width
+    v2_smooth_last_w = C.w;
+    v2_tls_fs = C.fs;
     v2_tls_par_acc = acc;
     v2_tls_presenter = true;
     v2_draw_tiles(0);
