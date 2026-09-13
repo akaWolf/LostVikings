@@ -117,6 +117,8 @@ struct Snap {
     int rows;                   // v2_view_rows at the flip: 176 (HUD band below), 200 (LVX scene), 224 (LVX_TALL224)
     uint32_t par_acc_x, par_acc_y;
     int subframe;               // the flip's sub-frame: 1..3 in render1..3, 0 elsewhere (render_v2.h MOTION EXACT)
+    int frame;                  // the game frame (v2_dbg_pre_vm_iter) at capture — the presentation camera's history
+    uint16_t coop_active[V2_COOP_MAX];   // each player's active viking (0xFFFF none) — the presentation camera's target in co-op
     uint64_t t;                 // SDL_GetPerformanceCounter at capture
     uint32_t seq;               // the fill's ordinal (the presenter's composition cache)
     bool valid, tile_frame, fullscreen;
@@ -184,6 +186,8 @@ static void fill(Snap& S, const uint8_t* s) {
     S.par_acc_x = v2_parallax.acc_x;
     S.par_acc_y = v2_parallax.acc_y;
     S.subframe = v2_flip_subframe();
+    S.frame = v2_dbg_pre_vm_iter;
+    for (int k = 0; k < V2_COOP_MAX; k++) S.coop_active[k] = g_coop.p[k].active;
     S.t = SDL_GetPerformanceCounter();
     S.fullscreen = v2_scene_fullscreen() != 0;
     S.w = v2_fbw;
@@ -372,9 +376,15 @@ static void compose_page(const Snap& C, uint8_t* work, uint8_t* out, uint8_t* hu
 // fraction); the commands' bitmaps live in one arena — the page lists bound their pixels well
 // below it (a type-2 record's strips are its data, 36 bytes each in a 768 KB list arena).
 namespace {
-constexpr int LAYER_W = V2_FB_MAX_W + 8, LAYER_H = 248;
-uint8_t s_bg[LAYER_W * LAYER_H];
+// the world layers around the logical camera carry CAM_MARGIN px on every side (the presentation
+// camera's reach: the leash, the sub-frame interpolation, the shake); the parallax layers follow
+// the presentation camera itself and carry the old tile of margin right / below
+constexpr int CAM_MARGIN = 32;
+constexpr int LAYER_W = V2_FB_MAX_W + 2 * CAM_MARGIN, LAYER_H = 240 + 2 * CAM_MARGIN;
+constexpr int PAR_W = V2_FB_MAX_W + 8, PAR_H = 248;
+uint8_t s_bg[LAYER_W * LAYER_H], s_bg_cov[LAYER_W * LAYER_H];
 uint8_t s_prio[LAYER_W * LAYER_H], s_prio_cov[LAYER_W * LAYER_H];
+uint8_t s_par0[PAR_W * PAR_H], s_par1[PAR_W * PAR_H], s_par1_cov[PAR_W * PAR_H];
 uint8_t s_ui[V2_FB_MAX_W * 240], s_ui_cov[V2_FB_MAX_W * 240];
 constexpr size_t CMD_ARENA = 4u << 20;
 uint8_t s_cmd_px[CMD_ARENA], s_cmd_cov[CMD_ARENA];
@@ -389,29 +399,59 @@ bool cov_any(const uint8_t* cov, size_t n) {
 }  // namespace
 
 // The layers of a tile frame (render_v2.h): compose_map's passes split by what moves separately
-// at k x. dev_x/dev_y = each command's device position (its 1/k position relative to the exact
-// camera, computed by the caller), fx/fy = the camera's fraction in device pixels, `work` the
-// snapshot's DS with the whole camera the layers are composed for.
-static void compose_layers(const Snap& C, const int* dev_x, const int* dev_y, const uint32_t* acc, int k, int fx, int fy,
+// at k x. dev_x/dev_y = each command's device position (its 1/k position relative to the
+// presentation camera, computed by the caller); pcam = the presentation camera (game px, exact);
+// Vr = the flip's logical camera, which `work` (the snapshot's DS) holds — the world layers are
+// composed around it with CAM_MARGIN px on every side and placed by their distance to pcam.
+static void compose_layers(const Snap& C, const int* dev_x, const int* dev_y, const uint32_t* acc, int k, const double pcam[2], const int Vr[2],
                            uint8_t* work, uint8_t* hud, V2DisplayBadge* badges, V2PresentLayers* L) {
-    const int W = C.w, rows = C.rows, LW = W + 8;
+    const int W = C.w, rows = C.rows;
     const int clip_h = (rows == 200) ? 187 : rows;   // v2_draw_tiles' sprite / text clip of this frame
+    const int M = CAM_MARGIN, LW = W + 2 * M;
+    const long ck[2] = { lround(pcam[0] * (double)k), lround(pcam[1] * (double)k) };   // the presentation camera in device pixels
     const int savew = v2_fbw;
     v2_tls_ds = work;
-    v2_fbw = LW;                    // the world layers: the frame plus one tile column (the margin)
     v2_tls_fs = C.fs;
     v2_tls_par_acc = acc;
     v2_tls_presenter = true;
     v2_tls_tile_ovr = C.tile_ovr_valid ? C.tile_ovr : nullptr; v2_tls_ui_cells_from_page = C.tile_ovr_valid; v2_tls_vga_bg = C.vga;
-    // 1. the background: the tile pass with the parallax beneath and the background-VGA readout,
-    //    one tile beyond the frame right and below (v2_tls_kx_margin), opaque
-    v2_tls_out = s_bg; v2_tls_cov = nullptr; v2_tls_kx_margin = 1;
+    const bool par = v2_parallax.on;
+    L->par0 = V2PresentLayer{ nullptr, nullptr, 0, 0, 0, 0, 0 };
+    L->par1 = L->par0;
+    // 0. a parallax level: the layer under the tiles follows the presentation camera — composed
+    //    for its whole part (v2_tls_par_view) with a tile of margin right / below and shifted by the
+    //    remainder of the layer's own offset (floor(c f / 256) per axis in the pass; an autoscroll
+    //    axis ignores the camera), so the parallax moves at its factor at 1/k too
+    int pv[2] = { (int)floor(pcam[0]), (int)floor(pcam[1]) };
+    if (pv[0] < 0) pv[0] = 0; if (pv[1] < 0) pv[1] = 0;
+    int par_dx = 0, par_dy = 0;
+    if (par) {
+        auto par_shift = [&](int axis) -> int {
+            const uint16_t f = axis ? v2_parallax.fy : v2_parallax.fx;
+            if (f & 0x8000) return 0;
+            const double exact = pcam[axis] * (double)(f & 0x7FFF) / 256.0;
+            const double whole = (double)(((uint32_t)(uint16_t)pv[axis] * (uint32_t)(f & 0x7FFF)) >> 8);
+            return -(int)lround((exact - whole) * (double)k);
+        };
+        par_dx = par_shift(0); par_dy = par_shift(1);
+        v2_tls_par_view = pv;
+        v2_tls_out = s_par0; v2_tls_cov = nullptr; v2_fbw = W + 8; v2_clip_h = clip_h + 8; v2_tls_kx_lead = 0; v2_tls_kx_margin = 0; v2_tls_rows_max = PAR_H;
+        memset(s_par0, 0, (size_t)(W + 8) * (size_t)(clip_h + 8));
+        v2_draw_parallax_layer(0, 0);
+        L->par0 = V2PresentLayer{ s_par0, nullptr, W + 8, clip_h + 8, W + 8, par_dx, par_dy };
+        v2_tls_par_view = nullptr;
+    }
+    // 1. the tile layer around the logical camera: the tile pass and the background-VGA readout
+    //    with CAM_MARGIN px of margin on every side (v2_tls_kx_lead / v2_tls_kx_margin) — opaque, or
+    //    with coverage over the parallax layer (index 0 uncovered, v2_tls_par_separate)
+    v2_tls_out = s_bg; v2_tls_cov = par ? s_bg_cov : nullptr; v2_fbw = LW; v2_tls_kx_lead = M; v2_tls_kx_margin = M; v2_tls_rows_max = LAYER_H; v2_tls_par_separate = par;
+    if (par) memset(s_bg_cov, 0, (size_t)LW * (size_t)(rows + 2 * M));
     v2_draw_tiles(0);
-    L->bg = V2PresentLayer{ s_bg, nullptr, LW, rows + 1, LW, -fx, -fy };
+    const int bg_dx = (int)((long)(Vr[0] - M) * k - ck[0]), bg_dy = (int)((long)(Vr[1] - M) * k - ck[1]);   // the layer's (0, 0) is the world point (Vr - M)
+    L->bg = V2PresentLayer{ s_bg, par ? s_bg_cov : nullptr, LW, rows + 2 * M, LW, bg_dx, bg_dy };
     // 2. the commands: each alone in a bitmap of its extent, at its own device position, in the
     //    list's order — on a parallax level the sprites first, then the priority layer, then the
     //    glyphs and repaints (compose_map's two passes); else every command in order
-    const bool par = v2_parallax.on;
     size_t used = 0; int n = 0;
     auto add = [&](int i) {
         const V2DrawCmd& c = C.draws.cmd[i];
@@ -438,19 +478,27 @@ static void compose_layers(const Snap& C, const int* dev_x, const int* dev_y, co
     L->prio_after = n;
     L->prio = V2PresentLayer{ nullptr, nullptr, 0, 0, 0, 0, 0 };
     if (par) {
-        // 3. the priority layer over the sprites: the console layer's priority-1 cells and the
-        //    map's flagged tiles (v2_draw_flagged_tiles, with the background's margin), coverage
-        memset(s_prio, 0, (size_t)LW * (size_t)(rows + 1)); memset(s_prio_cov, 0, (size_t)LW * (size_t)(rows + 1));
-        v2_tls_out = s_prio; v2_tls_cov = s_prio_cov;
+        // 3a. the parallax's priority-1 cells over the sprites, for the presentation camera (coverage)
+        v2_tls_par_view = pv;
+        v2_tls_out = s_par1; v2_tls_cov = s_par1_cov; v2_fbw = W + 8; v2_clip_h = clip_h + 8; v2_tls_kx_lead = 0; v2_tls_kx_margin = 0; v2_tls_rows_max = PAR_H;
+        memset(s_par1, 0, (size_t)(W + 8) * (size_t)(clip_h + 8)); memset(s_par1_cov, 0, (size_t)(W + 8) * (size_t)(clip_h + 8));
+        v2_draw_parallax_layer(0, 1);
+        L->par1 = V2PresentLayer{ s_par1, s_par1_cov, W + 8, clip_h + 8, W + 8, par_dx, par_dy };
+        if (!cov_any(s_par1_cov, (size_t)(W + 8) * (size_t)(clip_h + 8))) L->par1.px = nullptr;
+        v2_tls_par_view = nullptr;
+        // 3b. the map's flagged tiles over the sprites (v2_draw_flagged_tiles without its parallax
+        //     pass), around the logical camera with the tile layer's margins, coverage
+        v2_tls_out = s_prio; v2_tls_cov = s_prio_cov; v2_fbw = LW; v2_tls_kx_lead = M; v2_tls_kx_margin = M; v2_tls_rows_max = LAYER_H; v2_clip_h = clip_h + 2 * M;
+        memset(s_prio, 0, (size_t)LW * (size_t)(rows + 2 * M)); memset(s_prio_cov, 0, (size_t)LW * (size_t)(rows + 2 * M));
         v2_draw_flagged_tiles(0);
-        L->prio = V2PresentLayer{ s_prio, s_prio_cov, LW, rows + 1, LW, -fx, -fy };
-        if (!cov_any(s_prio_cov, (size_t)LW * (size_t)(rows + 1))) L->prio.px = nullptr;   // nothing painted: no layer
+        L->prio = V2PresentLayer{ s_prio, s_prio_cov, LW, rows + 2 * M, LW, bg_dx, bg_dy };
+        if (!cov_any(s_prio_cov, (size_t)LW * (size_t)(rows + 2 * M))) L->prio.px = nullptr;   // nothing painted: no layer
         for (int i = 0; i < C.draws.n; i++) {
             const V2DrawCmd& c = C.draws.cmd[i];
             if (c.type == V2_CMD_GLYPH || c.type == V2_CMD_FGTILE) add(i);
         }
     }
-    v2_tls_kx_margin = 0;
+    v2_tls_kx_lead = 0; v2_tls_kx_margin = 0; v2_tls_rows_max = 240; v2_tls_par_separate = false;
     // 4. the text plane (its cells when they are not page commands) and the CJK overlay: screen-
     //    anchored, no shift, the frame's own width and clip
     memset(s_ui, 0, (size_t)W * 240); memset(s_ui_cov, 0, (size_t)W * 240);
@@ -510,19 +558,117 @@ int owner_of(const uint8_t* ds, uint16_t slot) {
     }
     return -1;
 }
+// the history entry of object `own`, brought up to the snapshot's frame (once per composition:
+// the stamp): a new frame — the whole position, the previous whole position or the fraction
+// changed (an object slower than a pixel per frame moves its fraction alone) — shifts F to F_prev
+// when the chain holds (the whole position last seen is this frame's X_PREV), else F_prev := F
+MotionHist* mhist_touch(int own, const uint8_t* ds) {
+    MotionHist* h = &g_mhist[(own >> 1) & 0x7F];
+    if (h->stamp == g_mhist_comp) return h;
+    h->stamp = g_mhist_comp;
+    const int16_t W[2] = { rd16(ds, (uint16_t)(own + OBJ_WORLD_X)), rd16(ds, (uint16_t)(own + OBJ_WORLD_Y)) };
+    const int16_t XP[2] = { rd16(ds, (uint16_t)(own + OBJ_X_PREV)), rd16(ds, (uint16_t)(own + OBJ_Y_PREV)) };
+    const int F[2] = { ds[(uint16_t)(own + OBJ_FRAC_X)], ds[(uint16_t)(own + OBJ_FRAC_Y)] };   // the byte the integrator adds to
+    if (!h->valid || h->W[0] != W[0] || h->W[1] != W[1] || h->XP[0] != XP[0] || h->XP[1] != XP[1] || h->F[0] != F[0] || h->F[1] != F[1]) {
+        const bool chain = h->valid && h->W[0] == XP[0] && h->W[1] == XP[1];
+        for (int a = 0; a < 2; a++) { h->Fprev[a] = chain ? h->F[a] : F[a]; h->W[a] = W[a]; h->XP[a] = XP[a]; h->F[a] = F[a]; }
+        h->valid = true;
+    }
+    return h;
+}
+// the object's exact position at sub-frame r (render_v2.h MOTION EXACT): P(n-1) + r v / 3
+double obj_exact(const MotionHist* h, int axis, int r) {
+    const int rr = (r <= 0 || r > 3) ? 3 : r;
+    const int d = (int)(int16_t)(h->W[axis] - h->XP[axis]);
+    const double v = (double)d + (double)(h->F[axis] - h->Fprev[axis]) / 256.0;
+    return (double)h->XP[axis] + (double)h->Fprev[axis] / 256.0 + (double)rr * v / 3.0;
+}
+
+// The presentation camera (render_v2.h CAMERA SMOOTH): its state, and the exact logical camera
+// it is leashed to.
+constexpr double CAM_TAU = 0.10;                      // s: the exponential approach to the target
+// The leash around the exact logical camera. y: the dead zone's half-width (sub_1064b: 0x50..0x60) —
+// the target is the logical camera itself there. x: the engine holds a running viking at the far
+// edge of its dead zone plus its speed (the follow moves by the overshoot: an overshoot of o
+// scrolls o px, so the viking sits at W/2 + 16 + v), while the centred presentation camera stands
+// 16 + v ahead of it — 24 px at the top speed of 8 px per frame; with a leash of 16 the camera
+// caught the leash at every walk start (the engine's camera waits for the overshoot) and stood
+// two sub-frames still: a hitch. 32 keeps it slack at any speed and binds only during the
+// engine's own pans, where P then follows L exactly.
+constexpr int CAM_LEASH_X = 32, CAM_LEASH_Y = 8;
+constexpr int CAM_SNAP = 64;                          // px: a jump of the logical camera beyond this resets the presentation camera
+struct CamFrame { int frame; int end[2]; };
+thread_local CamFrame g_cam_ring[4] = { { -1, { 0, 0 } }, { -1, { 0, 0 } }, { -1, { 0, 0 } }, { -1, { 0, 0 } } };   // the ends of the frames seen
+thread_local bool g_cam_valid = false;
+thread_local double g_cam_p[2] = { 0.0, 0.0 };
+thread_local uint64_t g_cam_last = 0;
+// the frame's pending scroll per axis from a snapshot's DS: the amount the follow set this frame
+// (left/up wins over right/down, as sub_10704 reads them) and its sign; 0 when none or locked
+int cam_pending_amt(const uint8_t* ds, int axis, int* sign) {
+    *sign = 0;
+    if (rd16(ds, axis ? DS_SCROLL_LOCK_Y : DS_SCROLL_LOCK_X)) return 0;
+    const int neg = rd16(ds, axis ? DS_SCROLL_AMT_UP : DS_SCROLL_AMT_LEFT), pos = rd16(ds, axis ? DS_SCROLL_AMT_DOWN : DS_SCROLL_AMT_RIGHT);
+    int amt = 0;
+    if (neg) { amt = neg; *sign = -1; } else if (pos) { amt = pos; *sign = 1; }
+    if (amt < 0 || amt > 16) { *sign = 0; return 0; }   // the follow clamps the amount to 0x10
+    return amt;
+}
+// the clamp of the movers: right / down stop at the limit, left / up at 0
+int cam_clamp(const uint8_t* ds, int axis, int v) {
+    const int limit = (uint16_t)rd16(ds, axis ? DS_SCROLL_LIMIT_Y : DS_SCROLL_LIMIT_X);
+    if (v >= limit) v = limit;
+    if (v < 0) v = 0;
+    return v;
+}
+// the camera the engine holds at the end of the frame of a snapshot, per axis: the flip's
+// viewport V plus the steps the frame's amount still has to apply (step 1 before render2's flip,
+// step 2 before render3's — sub_10704 / sub_10753 through the tables), clamped as the movers
+// clamp; own = a co-op player's own camera (set once per frame: nothing pending)
+int cam_frame_end(const uint8_t* ds, int axis, int r, int V, bool own) {
+    if (own || r <= 0 || r >= 3) return V;
+    int sign = 0; const int amt = cam_pending_amt(ds, axis, &sign);
+    if (!amt) return V;
+    int rest = 0;
+    if (r < 2) rest += rd16(ds, (uint16_t)(DS_SCROLL_STEP1_TBL + amt * 2));
+    rest += rd16(ds, (uint16_t)(DS_SCROLL_STEP2_TBL + amt * 2));
+    return cam_clamp(ds, axis, V + sign * rest);
+}
+// ... and the whole movement of that frame (the three parts), for a frame whose predecessor was not seen
+int cam_frame_total(const uint8_t* ds, int axis, bool own) {
+    if (own) return 0;
+    int sign = 0; const int amt = cam_pending_amt(ds, axis, &sign);
+    if (!amt) return 0;
+    return sign * (rd16(ds, (uint16_t)(DS_SCROLL_AMT_TBL + amt * 2)) + rd16(ds, (uint16_t)(DS_SCROLL_STEP1_TBL + amt * 2)) + rd16(ds, (uint16_t)(DS_SCROLL_STEP2_TBL + amt * 2)));
+}
+// the exact logical camera of a snapshot (render_v2.h): the line from the previous frame's end to
+// this frame's end, sampled at the flip's sub-frame; the ring keeps the ends of the frames seen
+// (the newest reconstruction of a frame wins)
+void cam_exact(const Snap& S, bool own, int local, double out[2]) {
+    const int V[2] = { own ? (int)(int16_t)S.cam_x[local] : (int)rd16(S.ds, DS_VIEWPORT_X), own ? (int)(int16_t)S.cam_y[local] : (int)rd16(S.ds, DS_VIEWPORT_Y) };
+    int end[2], prev[2];
+    for (int a = 0; a < 2; a++) end[a] = cam_frame_end(S.ds, a, S.subframe, V[a], own);
+    CamFrame& e = g_cam_ring[S.frame & 3]; e.frame = S.frame; e.end[0] = end[0]; e.end[1] = end[1];
+    const CamFrame& p = g_cam_ring[(S.frame - 1) & 3];
+    if (p.frame == S.frame - 1) { prev[0] = p.end[0]; prev[1] = p.end[1]; }
+    else for (int a = 0; a < 2; a++) prev[a] = cam_clamp(S.ds, a, end[a] - cam_frame_total(S.ds, a, own));   // not seen: the frame's own movement backwards
+    const int r = (S.subframe <= 0 || S.subframe > 3) ? 3 : S.subframe;
+    for (int a = 0; a < 2; a++) out[a] = (double)prev[a] + (double)r * (double)(end[a] - prev[a]) / 3.0;
+}
 }  // namespace
 
 // One frame from a snapshot: see the note above. exact = MOTION EXACT (render_v2.h): the sprite
-// commands at their exact positions (the presenter only; the flip dump keeps the engine's).
-static void compose_snapshot(const Snap& C, const Snap* P, double t, bool interp, int local,
+// commands at their exact positions; cam_smooth = CAMERA SMOOTH: the layers placed by the
+// presentation camera (both the presenter only; the flip dump keeps the engine's). Returns
+// whether the presentation camera is still on its way (the caller composes again next present).
+static bool compose_snapshot(const Snap& C, const Snap* P, double t, bool interp, int local,
                              uint8_t* work, uint8_t* out, uint8_t* hud, V2DisplayBadge* badges, int* w, int* rows,
-                             V2PresentLayers* L, int k, bool out_too, bool exact) {
+                             V2PresentLayers* L, int k, bool out_too, bool exact, bool cam_smooth) {
     memcpy(badges, C.badge, sizeof C.badge);
     if (L) L->k = 0;
     if (!C.tile_frame) {
         compose_page(C, work, out, hud);
         *w = 320; *rows = 0;
-        return;
+        return false;
     }
     if (!P) P = &C;
     memcpy(work, C.ds, DS_SIZE);      // the newest flip: sprite frames, UI, everything not interpolated
@@ -549,27 +695,14 @@ static void compose_snapshot(const Snap& C, const Snap* P, double t, bool interp
     }
     if (vx < 0) { vx = 0; camx_f = 0.0; }
     if (vy < 0) { vy = 0; camy_f = 0.0; }
-    // the sub-pixel presentation: the exact camera at 1/k of a pixel — the layers are composed
-    // for the whole camera just below it and shown shifted left/up by the remainder (fx, fy
-    // device pixels); with nothing interpolated the exact camera is the flip's whole one (fx =
-    // fy = 0) and the layers stand where the flat frame stands
-    int fx = 0, fy = 0;
-    if (L) {
-        const long ckx = lround(camx_f * (double)k), cky = lround(camy_f * (double)k);   // >= 0 after the clamps
-        const int16_t vxi = (int16_t)(ckx / k), vyi = (int16_t)(cky / k);
-        fx = (int)(ckx - (long)vxi * k); fy = (int)(cky - (long)vyi * k);
-        if (vxi != vx || vyi != vy) { vx = vxi; vy = vyi; write = true; }
-    }
+    // the flat frame's camera (compose_map): the interpolated whole camera; the layers below
+    // compose around the flip's own logical camera and place themselves by the exact one
     if (write) {
         wr16(work, DS_VIEWPORT_X, vx);
         wr16(work, DS_VIEWPORT_Y, vy);
         wr16(work, DS_SCROLL_COL, (int16_t)((uint16_t)vx >> 3));
         wr16(work, DS_SCROLL_ROW, (int16_t)((uint16_t)vy >> 3));
     }
-    // the shake fold of that camera: the sprite raster subtracts x_eff = viewport + shake
-    // (v2_draw_list), so the sub-pixel positions below are relative to the exact camera plus it
-    int sdx = 0, sdy = 0;
-    if (L) v2_camera_shake(work, &sdx, &sdy);
     // The display list's commands, each moved back towards the previous flip by (1 - t):
     // the command's slot is looked up in the previous flip's list (its last record);
     // a slot present in both lists and within V2_SMOOTH_MAX_STEP is interpolated, any
@@ -580,8 +713,9 @@ static void compose_snapshot(const Snap& C, const Snap* P, double t, bool interp
     // keeps its own position: the frame is the flip.
     static thread_local int16_t pos_x[V2_DRAWLIST_MAX], pos_y[V2_DRAWLIST_MAX];
     static thread_local int dev_x[V2_DRAWLIST_MAX], dev_y[V2_DRAWLIST_MAX];
-    // MOTION EXACT (render_v2.h): this composition's stamp for the history, the trace
-    if (exact) g_mhist_comp++;
+    static thread_local double xfa[V2_DRAWLIST_MAX], yfa[V2_DRAWLIST_MAX];   // each command's exact world position for the layers
+    // MOTION EXACT / CAMERA SMOOTH (render_v2.h): this composition's stamp for the object history, the trace
+    if (exact || cam_smooth) g_mhist_comp++;
     static int mtrace = -1; if (mtrace < 0) mtrace = getenv("V2_MOTION_TRACE") ? 1 : 0;   // debug: the active viking's first sub-sprite per composition
     const uint16_t trace_slot = mtrace ? (uint16_t)rd16(C.ds, (uint16_t)(rd16(C.ds, DS_ACTIVE_VIKING) + OBJ_SUB_SLOT)) : 0xFFFF;
     for (int i = 0; i < C.draws.n; i++) {
@@ -602,22 +736,9 @@ static void compose_snapshot(const Snap& C, const Snap* P, double t, bool interp
         if (exact && last) {
             own = owner_of(C.ds, c.slot);
             if (own >= 0) {
-                h = &g_mhist[own >> 1];
-                const int16_t W[2] = { rd16(C.ds, (uint16_t)(own + OBJ_WORLD_X)), rd16(C.ds, (uint16_t)(own + OBJ_WORLD_Y)) };
-                const int16_t XP[2] = { rd16(C.ds, (uint16_t)(own + OBJ_X_PREV)), rd16(C.ds, (uint16_t)(own + OBJ_Y_PREV)) };
-                const int F[2] = { C.ds[(uint16_t)(own + OBJ_FRAC_X)], C.ds[(uint16_t)(own + OBJ_FRAC_Y)] };   // the byte the integrator adds to
-                if (h->stamp != g_mhist_comp) {   // once per composition: a new frame of this object shifts the history
-                    h->stamp = g_mhist_comp;
-                    // a new frame: the whole position, the previous whole position OR the fraction changed
-                    // (an object slower than a pixel per frame moves its fraction alone — d = 0, W = X_PREV)
-                    if (!h->valid || h->W[0] != W[0] || h->W[1] != W[1] || h->XP[0] != XP[0] || h->XP[1] != XP[1] || h->F[0] != F[0] || h->F[1] != F[1]) {
-                        const bool chain = h->valid && h->W[0] == XP[0] && h->W[1] == XP[1];   // the frame last seen is this frame's previous one
-                        for (int a = 0; a < 2; a++) { h->Fprev[a] = chain ? h->F[a] : F[a]; h->W[a] = W[a]; h->XP[a] = XP[a]; h->F[a] = F[a]; }
-                        h->valid = true;
-                    }
-                }
-                dxC = exact_delta(C.subframe, (int16_t)(W[0] - XP[0]), F[0], h->Fprev[0]);
-                dyC = exact_delta(C.subframe, (int16_t)(W[1] - XP[1]), F[1], h->Fprev[1]);
+                h = mhist_touch(own, C.ds);   // the object's frame in the history (once per composition)
+                dxC = exact_delta(C.subframe, (int16_t)(h->W[0] - h->XP[0]), h->F[0], h->Fprev[0]);
+                dyC = exact_delta(C.subframe, (int16_t)(h->W[1] - h->XP[1]), h->F[1], h->Fprev[1]);
                 xf = c.x + dxC; yf = c.y + dyC;
                 moved = dxC != 0.0 || dyC != 0.0;
             }
@@ -662,14 +783,7 @@ static void compose_snapshot(const Snap& C, const Snap* P, double t, bool interp
             wr16(work, c.slot + OBJ_SPRITE_X, pos_x[i]);
             wr16(work, c.slot + OBJ_SPRITE_Y, pos_y[i]);
         }
-        // the sub-pixel position: the distance to the exact camera rounded once at k x (a
-        // camera-locked sprite stays still, as on the flat frame); a command that does not move
-        // has a whole world position and lands exactly where the shifted background puts that
-        // point (round((x - cam) k) = x k - round(cam k), the background's device origin)
-        if (L) {
-            dev_x[i] = (int)lround((xf - camx_f) * (double)k) - sdx * k;
-            dev_y[i] = (int)lround((yf - camy_f) * (double)k) - sdy * k;
-        }
+        xfa[i] = xf; yfa[i] = yf;   // the layers place the command by this (below, once the presentation camera is known)
     }
     // parallax autoscroll accumulators (units of 1/1792 px): lerp unless wrapped
     uint32_t acc[2] = { C.par_acc_x, C.par_acc_y };
@@ -705,9 +819,72 @@ static void compose_snapshot(const Snap& C, const Snap* P, double t, bool interp
         compose_map(C, pos_x, pos_y, acc, work, out);
         memcpy(hud, C.hud, sizeof C.hud);
     }
-    if (L) compose_layers(C, dev_x, dev_y, acc, k, fx, fy, work, hud, badges, L);
+    bool cam_moving = false;
+    if (L) {
+        // the layers compose around the flip's own logical camera (a co-op player's own for
+        // players 2..3): back into the working DS after the flat frame's interpolated one
+        const int Vr[2] = { own_cam ? (int)(int16_t)C.cam_x[local] : (int)rd16(C.ds, DS_VIEWPORT_X), own_cam ? (int)(int16_t)C.cam_y[local] : (int)rd16(C.ds, DS_VIEWPORT_Y) };
+        wr16(work, DS_VIEWPORT_X, (int16_t)Vr[0]); wr16(work, DS_VIEWPORT_Y, (int16_t)Vr[1]);
+        wr16(work, DS_SCROLL_COL, (int16_t)((uint16_t)Vr[0] >> 3)); wr16(work, DS_SCROLL_ROW, (int16_t)((uint16_t)Vr[1] >> 3));
+        // the shake fold of that camera: the sprite raster subtracts x_eff = viewport + shake
+        // (v2_draw_list), so the device positions below are relative to the camera plus it
+        int sdx = 0, sdy = 0;
+        v2_camera_shake(work, &sdx, &sdy);
+        // the presentation camera: ORIGINAL — the exact interpolated camera the flat frame rounds;
+        // SMOOTH — the presenter's own (render_v2.h CAMERA)
+        double pcam[2] = { camx_f, camy_f };
+        if (cam_smooth) {
+            double LC[2], Lt[2];
+            cam_exact(C, own_cam, local, LC);
+            Lt[0] = LC[0]; Lt[1] = LC[1];
+            if (interp) { double LP[2]; cam_exact(*P, own_cam, local, LP); Lt[0] = LP[0] + (LC[0] - LP[0]) * t; Lt[1] = LP[1] + (LC[1] - LP[1]) * t; }
+            // the target: x — the active viking's exact position centred, led by its velocity over the
+            // approach time (a steady walk keeps it centred); y — the exact logical camera; the
+            // logical camera itself when it is locked or there is no viking; inside the level's limits
+            const uint16_t vk = own_cam ? C.coop_active[local] : (uint16_t)rd16(C.ds, DS_ACTIVE_VIKING);
+            double T[2] = { Lt[0], Lt[1] };
+            const bool has_vk = vk <= 0xFE && (vk & 1) == 0 && rd16(C.ds, (uint16_t)(vk + OBJ_CODE_SEG)) != 0;
+            if (has_vk && !rd16(C.ds, DS_SCROLL_LOCK_X)) {
+                const MotionHist* hv = mhist_touch((int)vk, C.ds);
+                const double ox = obj_exact(hv, 0, C.subframe);
+                const double vpf = (double)(int16_t)(hv->W[0] - hv->XP[0]) + (double)(hv->F[0] - hv->Fprev[0]) / 256.0;   // px per game frame
+                T[0] = ox - (double)C.w / 2.0 + vpf * 20.0 * CAM_TAU;
+            }
+            for (int a = 0; a < 2; a++) { const double lim = (double)(uint16_t)rd16(C.ds, a ? DS_SCROLL_LIMIT_Y : DS_SCROLL_LIMIT_X); if (T[a] < 0.0) T[a] = 0.0; if (T[a] > lim) T[a] = lim; }
+            // the step on the presenter's clock, the reset on a jump of the logical camera
+            const uint64_t now = SDL_GetPerformanceCounter();
+            double dt = g_cam_valid ? (double)(now - g_cam_last) / (double)SDL_GetPerformanceFrequency() : 0.0;
+            if (dt < 0.0) dt = 0.0; if (dt > 0.05) dt = 0.05;
+            g_cam_last = now;
+            if (!g_cam_valid || fabs(Lt[0] - g_cam_p[0]) > CAM_SNAP || fabs(Lt[1] - g_cam_p[1]) > CAM_SNAP) { g_cam_p[0] = T[0]; g_cam_p[1] = T[1]; g_cam_valid = true; }
+            else { const double a = 1.0 - exp(-dt / CAM_TAU); g_cam_p[0] += (T[0] - g_cam_p[0]) * a; g_cam_p[1] += (T[1] - g_cam_p[1]) * a; }
+            // the leash to the exact logical camera (the dead zone's half-widths), the level's limits
+            int leash = 0;
+            if (g_cam_p[0] < Lt[0] - CAM_LEASH_X) { g_cam_p[0] = Lt[0] - CAM_LEASH_X; leash |= 1; }
+            if (g_cam_p[0] > Lt[0] + CAM_LEASH_X) { g_cam_p[0] = Lt[0] + CAM_LEASH_X; leash |= 1; }
+            if (g_cam_p[1] < Lt[1] - CAM_LEASH_Y) { g_cam_p[1] = Lt[1] - CAM_LEASH_Y; leash |= 2; }
+            if (g_cam_p[1] > Lt[1] + CAM_LEASH_Y) { g_cam_p[1] = Lt[1] + CAM_LEASH_Y; leash |= 2; }
+            for (int a = 0; a < 2; a++) { const double lim = (double)(uint16_t)rd16(C.ds, a ? DS_SCROLL_LIMIT_Y : DS_SCROLL_LIMIT_X); if (g_cam_p[a] < 0.0) g_cam_p[a] = 0.0; if (g_cam_p[a] > lim) g_cam_p[a] = lim; }
+            pcam[0] = g_cam_p[0]; pcam[1] = g_cam_p[1];
+            cam_moving = fabs(T[0] - pcam[0]) > 0.25 / (double)k || fabs(T[1] - pcam[1]) > 0.25 / (double)k;
+            // debug: V2_CAMERA_TRACE=1 — one line per composition: the flip's viewport, the exact
+            // logical camera, the target, the presentation camera, the leash, the step's dt
+            static int ctrace = -1; if (ctrace < 0) ctrace = getenv("V2_CAMERA_TRACE") ? 1 : 0;
+            if (ctrace) fprintf(stderr, "V2-CAMERA f%d r%d t=%.2f V=%d,%d L=%.3f,%.3f T=%.3f,%.3f P=%.3f,%.3f leash=%d dt=%.1fms\n", C.frame, C.subframe, interp ? t : 1.0,
+                                Vr[0], Vr[1], Lt[0], Lt[1], T[0], T[1], pcam[0], pcam[1], leash, dt * 1000.0);
+        }
+        // the device positions: the distance to the presentation camera rounded once at k x (a
+        // camera-locked sprite stays still, as on the flat frame); a command with a whole world
+        // position lands exactly where the shifted background puts that point
+        for (int i = 0; i < C.draws.n; i++) {
+            dev_x[i] = (int)lround((xfa[i] - pcam[0]) * (double)k) - sdx * k;
+            dev_y[i] = (int)lround((yfa[i] - pcam[1]) * (double)k) - sdy * k;
+        }
+        compose_layers(C, dev_x, dev_y, acc, k, pcam, Vr, work, hud, badges, L);
+    }
     *w = C.w;
     *rows = C.rows > 176 ? C.rows : 0;
+    return cam_moving;
 }
 
 // Presenter thread (render_v2.h): the frame to show now — the newest snapshot, or under SMOOTH
@@ -759,11 +936,14 @@ bool v2_present_compose(V2PresentFrame* out) {
     // this frame's width — 0 = the flat frame (the option off, a chunk screen, no renderer)
     const int k = (v2_options.subpixel.load() && C.tile_frame) ? v2_present_scale_k(C.w) : 0;
     const bool exact = v2_options.motion.load() == 1;   // MOTION EXACT (render_v2.h)
-    static bool s_exact = false;
-    if (!(s_have && !interp && !s_interp && C.seq == s_seq && k == s_k && exact == s_exact)) {
-        compose_snapshot(C, interp ? &P : nullptr, t, interp, local, s_work, s_out, s_hud, s_badges, &s_w, &s_rows,
-                         k > 0 ? &s_L : nullptr, k, kx_test != 0, exact);
-        s_seq = C.seq; s_interp = interp; s_have = true; s_k = k; s_exact = exact;
+    const int cam_mode = v2_options.camera.load();      // CAMERA SMOOTH (render_v2.h): the layers only
+    const bool cam_smooth = cam_mode == 1 && k > 0;
+    static bool s_exact = false, s_cam_moving = false; static int s_cam = -1;
+    // (a presentation camera still on its way composes again although nothing else changed)
+    if (!(s_have && !interp && !s_interp && C.seq == s_seq && k == s_k && exact == s_exact && cam_mode == s_cam && !s_cam_moving)) {
+        s_cam_moving = compose_snapshot(C, interp ? &P : nullptr, t, interp, local, s_work, s_out, s_hud, s_badges, &s_w, &s_rows,
+                                        k > 0 ? &s_L : nullptr, k, kx_test != 0, exact, cam_smooth);
+        s_seq = C.seq; s_interp = interp; s_have = true; s_k = k; s_exact = exact; s_cam = cam_mode;
     }
     const bool layers = k > 0 && s_L.k > 0;
     g_effective = interp;
@@ -784,6 +964,6 @@ bool v2_flip_frame_for_dump(uint8_t* map, uint8_t* hud, V2DisplayBadge* badges, 
     int ci;
     { std::lock_guard<std::mutex> lock(g_mx); ci = g_cur_i; }
     if (ci < 0 || !g_pool[ci].valid) return false;
-    compose_snapshot(g_pool[ci], nullptr, 1.0, false, -1, work, map, hud, badges, w, rows, nullptr, 0, false, false);   // the engine's positions: the oracle against the test build's page
+    compose_snapshot(g_pool[ci], nullptr, 1.0, false, -1, work, map, hud, badges, w, rows, nullptr, 0, false, false, false);   // the engine's positions and camera: the oracle against the test build's page
     return true;
 }

@@ -105,8 +105,22 @@ extern thread_local bool            v2_tls_presenter; // passes run outside the 
 // by the camera's fraction). v2_clip_h is the per-frame sprite / text clip height of this
 // thread's passes — v2_draw_tiles sets it (176, 187 on a 200-row scene, 224; +1 with the margin).
 extern thread_local uint8_t*        v2_tls_cov;
-extern thread_local int             v2_tls_kx_margin;
+extern thread_local int             v2_tls_kx_margin;   // px right of / below the frame (a multiple of 8)
 extern thread_local int             v2_clip_h;
+// The presentation camera (CAMERA < ORIGINAL | SMOOTH >, v2_smooth.cpp): the world layers are
+// composed around the flip's LOGICAL camera — the page and the background VGA are exact only in
+// its window — with v2_tls_kx_lead px of margin left of / above the frame as well (the buffer's
+// (0, 0) is the frame's (-lead, -lead); the passes map a buffer cell to the logical cell minus
+// lead / 8, so the page window test and the readout stay the logical camera's), and shown shifted
+// by the presentation camera's distance. v2_tls_rows_max = the rows such a buffer has. The
+// parallax follows the presentation camera itself: v2_tls_par_separate makes the tile pass leave
+// index 0 uncovered (coverage on) and the flagged-tile pass skip the priority pass, and
+// v2_draw_parallax_layer composes one parallax pass alone for the camera v2_tls_par_view.
+extern thread_local int             v2_tls_kx_lead;
+extern thread_local int             v2_tls_rows_max;
+extern thread_local bool            v2_tls_par_separate;
+extern thread_local const int*      v2_tls_par_view;
+extern void v2_draw_parallax_layer(uint16_t ds_val, int prio);   // prio 0 = under the tiles, 1 = the priority-1 cells over the sprites
 extern "C" int v2_view_rows(void);           // v2_vm.cpp: 176 / 200 (LVX scene) / 224 (LVX_TALL224 level)
 void v2_smooth_capture(void);                 // game thread, at the page flip
 // (the presenter's frame comes from v2_present_compose below since 2026-09-15; v2_smooth_render is gone)olated frame
@@ -476,8 +490,10 @@ struct V2PresentLayers {
     int rows;             // 0 = HUD layout (176 map rows + the band), else 200 / 224 map rows shown
     int map_h;            // the map rows shown: 176 / 200 / 224 (the world layers' clip)
     int clip_h;           // the sprite / text clip: 176 / 187 / 224 (v2_draw_tiles' v2_clip_h)
-    V2PresentLayer bg;    // opaque, at (-fx, -fy): the camera's fraction in device pixels
-    V2PresentLayer prio;  // the priority layer (px nullptr when the level has none), at (-fx, -fy)
+    V2PresentLayer par0;  // a parallax level: the layer under the tiles, composed for the presentation camera (px nullptr otherwise)
+    V2PresentLayer bg;    // the tile layer around the logical camera (opaque; coverage over par0 on a parallax level), placed by the presentation camera
+    V2PresentLayer par1;  // a parallax level: its priority-1 cells over the sprites, coverage (px nullptr otherwise)
+    V2PresentLayer prio;  // the map's flagged tiles over the sprites (a parallax level; px nullptr otherwise), placed as bg
     int n_cmd;            // the display list's commands as bitmaps, in draw order
     const V2PresentLayer* cmd;
     int prio_after;       // the commands [0, prio_after) go under the priority layer, the rest over it (= n_cmd without one)
@@ -519,6 +535,23 @@ extern bool v2_present_ref_valid;
 // keeps the engine's steps until the presentation camera (the next step).
 extern int v2_flip_subframe(void);                        // v2_vm.cpp: 1..3 inside render1..3, else 0 (the game thread, at the flip)
 extern int16_t v2_subsprite_delta_fn(int type, int16_t d); // v2_vm.cpp: the catch-up step of render1 / 2 / 3 (type 0 / 1 / 2) for a whole step d
+
+// CAMERA < ORIGINAL | SMOOTH > (2026-09-15, v2_smooth.cpp): the presenter's own camera. The engine
+// (sub_1064b, once per frame) keeps the active viking in a dead zone — x in [vp + W/2 - 16, vp +
+// W/2 + 16], y in [vp + 0x50, vp + 0x60] — moving the viewport by the overshoot (at most 16)
+// through a speed table, in three parts per frame (the mover at once, step 1 before render2's
+// flip, step 2 before render3's: 8 -> 3, 3, 2), clamped to [0, the scroll limit], not under the
+// scroll lock. SMOOTH: the exact logical camera L is the line from the previous frame's end to
+// this frame's end (reconstructed from the flip's viewport and the pending table steps) sampled
+// at the sub-frames; the presentation camera P approaches its target exponentially (100 ms) at
+// the display's rate — x: the viking's exact position centred, led by its velocity; y: L — and is
+// kept on a leash around L: 32 px by x (the engine holds a running viking at the dead zone's far
+// edge plus its speed, so the centred camera stands 16 + v, at most 24, ahead of L — the leash
+// stays slack at any speed and binds only during the engine's own pans, where P follows L
+// smoothly), 8 by y (the dead zone's half-width; the target is L there), inside the level's
+// limits; a jump of L (a level load) resets P. The logical camera,
+// the spawn windows, the scripts, the canon and the flip dump keep the engine's camera; SMOOTH
+// needs SUBPIXEL (the flat frame has no layers to place).
 // the flip dump's frame (game thread): the newest snapshot composed at t = 1 into the caller's buffers
 extern bool v2_flip_frame_for_dump(uint8_t* map, uint8_t* hud, V2DisplayBadge* badges, int* w, int* rows);
 // the HUD band as presented: the 320-px art centred on a wide frame, the stone wall mirrored

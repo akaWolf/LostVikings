@@ -40,9 +40,13 @@ thread_local const uint16_t* v2_tls_tile_ovr = nullptr;        // render_v2.h: t
 thread_local bool            v2_tls_ui_cells_from_page = false; // render_v2.h: text cells are page commands
 thread_local bool            v2_tls_fg_from_page = false;       // render_v2.h: flagged tiles are page commands
 thread_local uint8_t*        v2_tls_cov = nullptr;              // render_v2.h: sub-pixel presentation — the coverage plane of the layer being composed
-thread_local int             v2_tls_kx_margin = 0;              // render_v2.h: sub-pixel presentation — the world passes paint one tile beyond the frame
+thread_local int             v2_tls_kx_margin = 0;              // render_v2.h: sub-pixel presentation — pixels of margin the world passes paint right of / below the frame (a multiple of 8)
+thread_local int             v2_tls_kx_lead = 0;                // render_v2.h: presentation camera — pixels of margin left of / above the frame (a multiple of 8): the buffer's (0, 0) is the frame's (-lead, -lead)
+thread_local int             v2_tls_rows_max = 240;             // render_v2.h: the rows of the buffer the world passes may write (the frame's 240; the presenter's layers are taller)
+thread_local bool            v2_tls_par_separate = false;       // render_v2.h: the presenter composes the parallax layers itself — the tile pass leaves index 0 uncovered, the flagged-tile pass skips the priority pass
+thread_local const int*      v2_tls_par_view = nullptr;         // render_v2.h: the parallax pass's camera {x, y} in place of the DS viewport (the presentation camera)
 const uint16_t*              v2_tile_override = nullptr;        // render_v2.h: the composed page's tile words (game thread)
-static void v2_vga_bg_readout(uint8_t* buf, int fbw, int rows, const uint8_t* bg, uint32_t crtc, uint8_t pan, bool par_on);   // below (the background VGA)
+static void v2_vga_bg_readout(uint8_t* buf, int fbw, int x0, int y0, int rows, const uint8_t* bg, uint32_t crtc, uint8_t pan, bool par_on);   // below (the background VGA)
 static void v2_render_tile_masked(uint8_t* buf, const uint8_t* tgfx_base, const uint8_t* gs_base, uint16_t tile_entry, int screen_x, int screen_y);   // below (the masked tile engine; used by the display list's V2_CMD_FGTILE)
 bool v2_last_frame_tiles = false;   // the last v2_draw_tiles took the tile path (not a chunk screen)
 
@@ -811,10 +815,13 @@ static void v2_draw_parallax_pass(const V2StateViewC& st, uint8_t* buf, uint16_t
     if (!wpx || !hpx) return;
     const uint32_t acc_x = v2_tls_par_acc ? v2_tls_par_acc[0] : P.acc_x;   // UX stage 9: interpolated
     const uint32_t acc_y = v2_tls_par_acc ? v2_tls_par_acc[1] : P.acc_y;
+    // the camera the layer follows: the DS viewport, or the presenter's own (render_v2.h v2_tls_par_view — the presentation camera)
+    const uint16_t view_x = v2_tls_par_view ? (uint16_t)v2_tls_par_view[0] : st.viewport_x();
+    const uint16_t view_y = v2_tls_par_view ? (uint16_t)v2_tls_par_view[1] : st.viewport_y();
     int px = (P.fx & 0x8000) ? (int)(acc_x / 1792u)
-                             : (int)(((uint32_t)st.viewport_x() * (P.fx & 0x7FFF)) >> 8);
+                             : (int)(((uint32_t)view_x * (P.fx & 0x7FFF)) >> 8);
     int py = (P.fy & 0x8000) ? (int)(acc_y / 1792u)
-                             : (int)(((uint32_t)st.viewport_y() * (P.fy & 0x7FFF)) >> 8);
+                             : (int)(((uint32_t)view_y * (P.fy & 0x7FFF)) >> 8);
     px = (px + (int)P.off_x) % wpx; py = (py + (int)P.off_y) % hpx;   // phase offsets (map trailer)
     for (int sy = 0; sy < v2_clip_h; sy++) {
         const int my = (py + sy) % hpx;
@@ -835,6 +842,15 @@ static void v2_draw_parallax_pass(const V2StateViewC& st, uint8_t* buf, uint16_t
     }
 }
 static void v2_draw_parallax(const V2StateViewC& st, uint8_t* buf) { v2_draw_parallax_pass(st, buf, 0); }
+// render_v2.h (the presentation camera): one parallax pass alone into the thread's out buffer —
+// prio 0 = the layer under the tiles, 1 = its priority-1 cells over the sprites
+void v2_draw_parallax_layer(uint16_t ds_val, int prio) {
+    if (!myDrawInfo_v2 || !v2_m2c_base) return;
+    uint8_t* ds_base = v2_get_ds_base(ds_val);
+    V2StateViewC st(ds_base);
+    uint8_t* buf = v2_tls_out ? v2_tls_out : v2_render_buf;
+    v2_draw_parallax_pass(st, buf, prio ? 0x2000 : 0);
+}
 
 void v2_draw_tiles(uint16_t ds_val) {
 #ifdef V2_RENDER_FROM_SHADOW
@@ -857,15 +873,16 @@ void v2_draw_tiles(uint16_t ds_val) {
         const int rows = v2_view_rows();                 // 176 / 200 (scene) / 224 (LVX_TALL224)
         v2_clip_h = (rows == 200) ? 187 : rows;
         v2_tile_rows = (rows == 224) ? 29 : 25;          // 29 x 8 = 232 px covers 224 + the sub-tile offset
-        // Sub-pixel presentation (render_v2.h V2PresentLayers): the world layers carry one more
-        // row and column than the frame — the layer is shown shifted up/left by the camera's
-        // fraction, and the last partial row/column of the exact window must exist. The column
-        // comes with the caller's v2_fbw (+8: one tile column more in v2_fb_cols); the row: one
-        // more tile row for the pass, the parallax and the priority pass paint one line further
-        // (the clip), and the background readout below reads one more line (page lines 176 / 224
-        // lie inside the page's fill of 25 / 30 rows; a 200-row scene's line 200 does not — the
-        // map row stands there).
-        if (v2_tls_kx_margin) { v2_clip_h += 1; v2_tile_rows += 1; }
+        // Sub-pixel presentation (render_v2.h V2PresentLayers): the world layers carry margins
+        // beyond the frame — v2_tls_kx_margin pixels right / below (the layer is shown shifted by
+        // the camera's fraction; with the presentation camera by its whole distance from the
+        // logical one too) and v2_tls_kx_lead pixels left / above. The columns come with the
+        // caller's v2_fbw (lead + frame + margin: v2_fb_cols follows it); the rows: more tile rows
+        // for the pass, the parallax and the priority pass paint that much further (the clip), and
+        // the background readout below reads the page's spare lines under the window (the page's
+        // fill is 25 / 30 rows against the 22 / 28 shown). The buffer's (0, 0) is the frame's
+        // (-lead, -lead): the loops below map their buffer cell to the logical cell cell - lead / 8.
+        if (v2_tls_kx_margin || v2_tls_kx_lead) { v2_clip_h += v2_tls_kx_lead + v2_tls_kx_margin; v2_tile_rows += (v2_tls_kx_lead + v2_tls_kx_margin) / 8; }
     }
 
     // Tile map segment (FS)
@@ -921,12 +938,15 @@ void v2_draw_tiles(uint16_t ds_val) {
     // Normal: clear and draw tiles (all 200 buffer rows: the tile loop below
     // already renders 25 tile rows; rows 176..199 are shown only on
     // full-screen LVX scenes, otherwise the HUD band covers them)
-    memset(buf, 0, (size_t)v2_fbw * 240);
+    memset(buf, 0, (size_t)v2_fbw * (size_t)v2_tls_rows_max);
     // UX stage 2: the parallax layer goes under the tiles; the tile pass then
     // skips the pixels of colour 0 of each palette row (the console's
     // transparent index — on the DOS palette they are blacked out, sub_112ae).
-    v2_draw_parallax(st, buf);
+    // (The presenter composes the parallax as its own layer under the presentation camera —
+    // v2_tls_par_separate: the skipped pixels stay uncovered here and show that layer.)
+    if (!v2_tls_par_separate) v2_draw_parallax(st, buf);
     const bool par_on = v2_parallax.on;
+    const int lead8 = v2_tls_kx_lead / 8;   // the buffer's tile columns / rows left of / above the frame
 
 #ifdef V2_RENDER_FROM_SHADOW
     uint8_t* fs_base = v2_resolve_segment(fs_seg);
@@ -955,7 +975,8 @@ void v2_draw_tiles(uint16_t ds_val) {
     int extra_tile_x = cam.tile_shift_x, extra_tile_y = cam.tile_shift_y;
 
     for (int row_vis = 0; row_vis < v2_tile_rows; row_vis++) {
-        uint16_t row_scrolled = (uint16_t)(row_vis + scroll_x + extra_tile_y);
+        const int rv = row_vis - lead8;   // the frame's tile row (negative in the top margin)
+        uint16_t row_scrolled = (uint16_t)(rv + scroll_x + extra_tile_y);
         // Orig sub_16ded has NO row_scrolled bound — just reads LUT and renders
         // whatever it finds. v2 had `if (row_scrolled >= 64) continue;` hardcoded
         // limit which clipped tiles on large maps when scrolled past row 64.
@@ -966,7 +987,8 @@ void v2_draw_tiles(uint16_t ds_val) {
         uint16_t row_base = *(uint16_t*)(ds_base + lut_off);
 
         for (int col_vis = 0; col_vis < v2_fb_cols(); col_vis++) {
-            uint16_t col_scrolled = (uint16_t)(col_vis + scroll_y + extra_tile_x);
+            const int cv = col_vis - lead8;   // the frame's tile column (negative in the left margin)
+            uint16_t col_scrolled = (uint16_t)(cv + scroll_y + extra_tile_x);
 
             // Read tile map entry: word at fs:[(row_base + col_scrolled) * 2]
             uint16_t tile_map_off = (uint16_t)((row_base + col_scrolled) * 2u);
@@ -1003,18 +1025,19 @@ void v2_draw_tiles(uint16_t ds_val) {
                 // a pel pan); columns 41 and 42 are slack the scroll painters do not keep in every
                 // path (level 2 in 16:10: cells 41..42 of a row still 0xFFFE from the wipe — a black
                 // 16x8 block at the ladder's foot), so the page's word is trusted for columns 0..40.
-                if (ovr && col_vis < 0x29 && row_vis < (v2_view_rows() == 224 ? 0x1E : 0x19)) {
+                if (ovr && cv >= 0 && cv < 0x29 && rv >= 0 && rv < (v2_view_rows() == 224 ? 0x1E : 0x19)) {
                     const uint16_t w = ovr[tile_map_off >> 1];
                     if (w == 0xFFFE) {
                         for (int row = 0; row < 8; row++) {
                             int sy = screen_y + row;
                             if (sy < 0) continue;
-                            if (sy >= 240) break;
+                            if (sy >= v2_tls_rows_max) break;
                             for (int px = 0; px < 8; px++) {
                                 int sx = screen_x + px;
                                 if (sx < 0) continue;
                                 if (sx >= v2_fbw) break;
                                 buf[sy * v2_fbw + sx] = 0;
+                                if (v2_tls_cov) v2_tls_cov[sy * v2_fbw + sx] = 1;   // the wiped cell is black over the parallax layer too
                             }
                         }
                         continue;
@@ -1040,7 +1063,7 @@ void v2_draw_tiles(uint16_t ds_val) {
                 int src_row = vflip ? (7 - row) : row;
                 int sy = screen_y + row;
                 if (sy < 0) continue;
-                if (sy >= 240) break;
+                if (sy >= v2_tls_rows_max) break;
 
                 // Extract 8 pixels for this row
                 uint8_t pixels[8];
@@ -1065,6 +1088,7 @@ void v2_draw_tiles(uint16_t ds_val) {
                     if (sx >= v2_fbw) break;
                     if (par_on && (pixels[px] & 0x0F) == 0) continue;   // UX stage 2: row colour 0 = transparent
                     buf[sy * v2_fbw + sx] = pixels[px];
+                    if (v2_tls_cov) v2_tls_cov[sy * v2_fbw + sx] = 1;   // the tile layer's coverage over the presenter's parallax layer
                 }
             }
         }
@@ -1078,9 +1102,14 @@ void v2_draw_tiles(uint16_t ds_val) {
         static int no_readout = -1; if (no_readout < 0) no_readout = getenv("V2_NO_BG_READOUT") ? 1 : 0;   // debug: the map pass alone
         if (bg && !no_readout) {
             uint32_t crtc = v2_vga_crtc; uint8_t pan = v2_vga_pan;
-            if (v2_tls_presenter) v2_crtc_for_camera(ds_base, &crtc, &pan);   // the interpolated camera's start
-            const int ro_rows = v2_view_rows() + ((v2_tls_kx_margin && v2_view_rows() != 200) ? 1 : 0);   // the margin line (the clip note above)
-            v2_vga_bg_readout(buf, v2_fbw, ro_rows, bg, crtc, pan, par_on);
+            if (v2_tls_presenter) v2_crtc_for_camera(ds_base, &crtc, &pan);   // the camera in the DS (the presenter: the flip's logical camera)
+            // the page's spare lines under the window (its fill is 25 rows = 200 lines for a 176-line
+            // window, 30 = 240 for 224; a 200-line scene has none), less the window's sub-tile offset:
+            // as many of them as the margin asks for — the rest of the margin is the map's
+            const int rows_v = v2_view_rows();
+            int spare = rows_v == 224 ? 16 - pix_off_y : rows_v == 200 ? 0 : 24 - pix_off_y;
+            if (spare < 0) spare = 0; if (spare > v2_tls_kx_margin) spare = v2_tls_kx_margin;
+            v2_vga_bg_readout(buf, v2_fbw, v2_tls_kx_lead, v2_tls_kx_lead, rows_v + spare, bg, crtc, pan, par_on);
         }
     }
 }
@@ -1641,24 +1670,26 @@ void v2_crtc_for_camera(const uint8_t* s, uint32_t* crtc, uint8_t* pan) {
 // the 64K wrap of the address counter). par_on: index 0 stays transparent (the parallax layer
 // beneath), as in the tile pass.
 void v2_vga_readout(uint8_t* buf, int fbw, int rows, const uint8_t* plane, uint32_t crtc, uint8_t pan, bool par_on) {   // render_v2.h: the presenter's page of a chunk screen (the snapshot's whole shadow VGA)
-    v2_vga_bg_readout(buf, fbw, rows, plane, crtc, pan, par_on);
+    v2_vga_bg_readout(buf, fbw, 0, 0, rows, plane, crtc, pan, par_on);
 }
-static void v2_vga_bg_readout(uint8_t* buf, int fbw, int rows, const uint8_t* bg, uint32_t crtc, uint8_t pan, bool par_on) {
+static void v2_vga_bg_readout(uint8_t* buf, int fbw, int x0, int y0, int rows, const uint8_t* bg, uint32_t crtc, uint8_t pan, bool par_on) {
     // The CRTC window starts at the camera's left edge (sub_16775: (x >> 2) + 8 from
     // DS_VIEWPORT_X), and frame column 0 is that edge in every width — the wide frame's
     // camera is the wide window's left edge (v2_view_w), not a 320-px window centred in it.
-    // So the readout lands on columns 0..319; the wing beyond comes from the map pass.
-    // (2026-09-12: placing it at (fbw - 320) / 2 shifted the whole tile layer of a 384-px
-    // frame 32 px right of the sprites — the STRT level in 16:10.)
-    const int x0 = 0; (void)fbw;
+    // So the readout lands on columns 0..319 of the frame; the wing beyond comes from the map
+    // pass. (2026-09-12: placing it at (fbw - 320) / 2 shifted the whole tile layer of a 384-px
+    // frame 32 px right of the sprites — the STRT level in 16:10.) x0 / y0: where the frame's
+    // (0, 0) lies in the buffer (the presenter's layer margins, render_v2.h v2_tls_kx_lead).
     for (int y = 0; y < rows; y++) {
-        uint8_t* out = buf + (size_t)y * fbw + x0;
+        uint8_t* out = buf + (size_t)(y0 + y) * fbw + x0;
+        uint8_t* cov = v2_tls_cov ? v2_tls_cov + (size_t)(y0 + y) * fbw + x0 : nullptr;
         const uint32_t line = crtc + (uint32_t)y * 0x56u;
         for (int x = 0; x < 320; x++) {
             const uint32_t t = (uint32_t)pan + (uint32_t)x;
             const uint8_t px = bg[(uint32_t)(uint16_t)(line + (t >> 2)) * 4u + (t & 3u)];
             if (par_on && (px & 0x0F) == 0) continue;
             out[x] = px;
+            if (cov) cov[x] = 1;
         }
     }
 }
@@ -2307,7 +2338,7 @@ void v2_draw_flagged_tiles(uint16_t ds_val) {
     // UX stage 9: the parallax layer's priority-1 cells over the sprites,
     // under the flagged tiles (see v2_draw_parallax_pass); only a tile
     // frame has drawn the layer's lower pass this tick
-    if (v2_last_frame_tiles || v2_tls_presenter) v2_draw_parallax_pass(st, buf, 0x2000);
+    if ((v2_last_frame_tiles || v2_tls_presenter) && !v2_tls_par_separate) v2_draw_parallax_pass(st, buf, 0x2000);   // (the presenter's own layer under the presentation camera when separate)
     if (v2_tls_fg_from_page) return;   // the flagged tiles are the page's V2_CMD_FGTILE commands (render_v2.h)
 
 #ifdef V2_RENDER_FROM_SHADOW
@@ -2336,8 +2367,10 @@ void v2_draw_flagged_tiles(uint16_t ds_val) {
     int pix_off_x = cam.pix_off_x, pix_off_y = cam.pix_off_y;
     int extra_tile_x = cam.tile_shift_x, extra_tile_y = cam.tile_shift_y;
 
+    const int lead8 = v2_tls_kx_lead / 8;   // the buffer's tile columns / rows left of / above the frame (the tile pass's note)
     for (int row_vis = 0; row_vis < v2_tile_rows; row_vis++) {
-        uint16_t row_scrolled = (uint16_t)(row_vis + scroll_x + extra_tile_y);
+        const int rv = row_vis - lead8;
+        uint16_t row_scrolled = (uint16_t)(rv + scroll_x + extra_tile_y);
         // No `row_scrolled >= 64` clamp — orig sub_1c8f1 (flagged-tile render)
         // doesn't clip rows beyond LUT; v2 hardcode caused tiles missing on
         // large maps when scrolled past row 64.
@@ -2346,7 +2379,8 @@ void v2_draw_flagged_tiles(uint16_t ds_val) {
         uint16_t row_base = *(uint16_t*)(ds_base + lut_off);
 
         for (int col_vis = 0; col_vis < v2_fb_cols(); col_vis++) {
-            uint16_t col_scrolled = (uint16_t)(col_vis + scroll_y + extra_tile_x);
+            const int cv = col_vis - lead8;
+            uint16_t col_scrolled = (uint16_t)(cv + scroll_y + extra_tile_x);
             uint16_t tile_map_off = (uint16_t)((row_base + col_scrolled) * 2u);
             uint16_t tile_entry = *(uint16_t*)(fs_base + tile_map_off);
             // The page lists (render_v2.h): the composed page's own word for the cell
@@ -2363,7 +2397,7 @@ void v2_draw_flagged_tiles(uint16_t ds_val) {
                 // a pel pan); columns 41 and 42 are slack the scroll painters do not keep in every
                 // path (level 2 in 16:10: cells 41..42 of a row still 0xFFFE from the wipe — a black
                 // 16x8 block at the ladder's foot), so the page's word is trusted for columns 0..40.
-                if (ovr && col_vis < 0x29 && row_vis < (v2_view_rows() == 224 ? 0x1E : 0x19)) {
+                if (ovr && cv >= 0 && cv < 0x29 && rv >= 0 && rv < (v2_view_rows() == 224 ? 0x1E : 0x19)) {
                     const uint16_t w = ovr[tile_map_off >> 1];
                     if (w == 0xFFFE) continue;          // black cell: nothing painted there yet
                     if (w != 0xFFFF) tile_entry = w;

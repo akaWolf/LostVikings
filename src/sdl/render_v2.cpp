@@ -588,9 +588,11 @@ static void v2_present_layers(const V2PresentLayers& L) {
     SDL_RenderClear(myRenderer_v2);
     kx_pack_reset();
     const SDL_Rect map_clip = { 0, 0, TW, L.map_h * k }, spr_clip = { 0, 0, TW, L.clip_h * k };
+    if (L.par0.px) kx_layer(L.par0, lut, k, &map_clip);   // a parallax level: the layer under the tiles (the presentation camera)
     kx_layer(L.bg, lut, k, &map_clip);
     for (int i = 0; i < L.prio_after; i++) kx_layer(L.cmd[i], lut, k, &spr_clip);
-    if (L.prio.px) kx_layer(L.prio, lut, k, &spr_clip);
+    if (L.par1.px) kx_layer(L.par1, lut, k, &spr_clip);   // ... its priority-1 cells over the sprites
+    if (L.prio.px) kx_layer(L.prio, lut, k, &spr_clip);   // ... the map's flagged tiles over the sprites
     for (int i = L.prio_after; i < L.n_cmd; i++) kx_layer(L.cmd[i], lut, k, &spr_clip);
     kx_layer(L.ui, lut, k, &spr_clip);
     if (!L.rows) {   // the HUD band: the 320-px art centred, the wall on the wings, the badges (v2_layout_hud_band)
