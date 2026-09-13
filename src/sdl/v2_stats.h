@@ -11,6 +11,7 @@ struct V2Stats {
     std::atomic<int>      vsync_locked{0};        // the game's vsync follows the display
     std::atomic<int>      display_hz_x100{0};     // the refresh the lock runs on
     std::atomic<int>      present_ms_x100{0};     // measured interval between presents
+    std::atomic<int>      presenter_ms_x100{0};   // the presenter's own work between its vsync latch and the present call (sizes the latch margin)
     std::atomic<uint32_t> present_late{0};        // presents that took more than 1.5 refreshes
     std::atomic<uint32_t> flip_drops{0};          // sub-frames the game flipped that were never presented
     std::atomic<uint32_t> flip_doubles{0};        // presents that showed the previous sub-frame again while the game was flipping (60 Hz lock, no interpolation)

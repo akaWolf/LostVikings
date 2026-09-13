@@ -97,12 +97,22 @@ struct Snap {
     uint16_t cam_x[V2_COOP_MAX], cam_y[V2_COOP_MAX];
     bool cam_valid[V2_COOP_MAX];
 };
-// the two newest sub-frames: g_cur = the newest flip, g_prev = the flip before it
-Snap g_cur, g_prev;
+// A pool of snapshots, handed over by index: the game thread fills a free slot and publishes
+// it as the newest (g_cur_i; the previous newest becomes g_prev_i when the flip is a new
+// sub-frame), the presenter pins the two it renders from (g_pin_c/g_pin_p) and reads them
+// in place. Nothing is copied on either side after the fill: the former g_cur/g_prev pair
+// cost a whole-Snap memcpy per flip and two per present (~1.3 MB each), and the presenter's
+// copies ran after the vsync latch, inside the ~3 ms it has before the refresh.
+constexpr int POOL_N = 6;   // 2 published + 2 pinned + 1 being filled, with one to spare
+Snap g_pool[POOL_N];
+int g_cur_i = -1, g_prev_i = -1;    // published (under g_mx)
+int g_pin_c = -1, g_pin_p = -1;     // pinned by the presenter (under g_mx)
 std::mutex g_mx;
-
-// presenter-local copies (the lock is held only for the memcpy)
-Snap g_prev_local, g_cur_local;
+static int free_slot() {   // under g_mx: a slot neither published nor pinned
+    for (int i = 0; i < POOL_N; i++)
+        if (i != g_cur_i && i != g_prev_i && i != g_pin_c && i != g_pin_p) return i;
+    return -1;   // unreachable with POOL_N >= 5
+}
 uint8_t g_work[DS_SIZE];
 std::atomic<bool> g_effective{false};   // the last render interpolated
 std::atomic<uint32_t> g_subframe_seq{0};      // distinct sub-frames captured (STATS, the VRR presenter)
@@ -227,12 +237,16 @@ void v2_smooth_capture(void) {
                   vk, rd16(s, vk + OBJ_WORLD_X), rd16(s, vk + OBJ_WORLD_Y), sub,
                   sub <= 0xFE ? rd16(s, sub + OBJ_SPRITE_X) : 0, sub <= 0xFE ? rd16(s, sub + OBJ_SPRITE_Y) : 0); } }
     const uint64_t now = SDL_GetPerformanceCounter();
-    const double since_cur_ms = g_cur.valid ? (double)(now - g_cur.t) / (double)SDL_GetPerformanceFrequency() * 1000.0 : 1e9;
-    const bool new_subframe = !g_cur.valid || since_cur_ms >= SAME_SUBFRAME_MS;
-    if (g_cur.valid && new_subframe) memcpy(&g_prev, &g_cur, sizeof(Snap));
-    fill(g_cur, s);
-    selftest_dump(g_cur);   // debug (V2_SMOOTH_SELFTEST): the presenter's own composition of this flip
-    g_last_flip_ticks.store(g_cur.t, std::memory_order_relaxed);
+    const Snap* cur = (g_cur_i >= 0 && g_pool[g_cur_i].valid) ? &g_pool[g_cur_i] : nullptr;
+    const double since_cur_ms = cur ? (double)(now - cur->t) / (double)SDL_GetPerformanceFrequency() * 1000.0 : 1e9;
+    const bool new_subframe = !cur || since_cur_ms >= SAME_SUBFRAME_MS;
+    const int k = free_slot();
+    if (k < 0) return;   // cannot happen with POOL_N slots; never overwrite what the presenter reads
+    fill(g_pool[k], s);
+    selftest_dump(g_pool[k]);   // debug (V2_SMOOTH_SELFTEST): the presenter's own composition of this flip
+    if (cur && new_subframe) g_prev_i = g_cur_i;   // a new sub-frame: the newest so far becomes the previous one
+    g_cur_i = k;                                    // a flip within SAME_SUBFRAME_MS replaces the newest instead
+    g_last_flip_ticks.store(g_pool[k].t, std::memory_order_relaxed);
     if (new_subframe) {
         g_subframe_seq.fetch_add(1, std::memory_order_relaxed);
         v2_stats.subframes.fetch_add(1, std::memory_order_relaxed);
@@ -244,14 +258,14 @@ void v2_smooth_capture(void) {
             const uint64_t waited = v2_tick_wait_ticks.load(std::memory_order_relaxed);
             if (last_iter >= 0 && frame_t0) {
                 const double freq = (double)SDL_GetPerformanceFrequency();
-                const double frame_ms = (double)(g_cur.t - frame_t0) / freq * 1000.0;
+                const double frame_ms = (double)(g_pool[g_cur_i].t - frame_t0) / freq * 1000.0;
                 const double work_ms = frame_ms - (double)(waited - wait_t0) / freq * 1000.0;
                 v2_stats.subframes_per_frame.store(in_frame, std::memory_order_relaxed);
                 v2_stats.frame_ms_x100.store((int)(frame_ms * 100.0 + 0.5), std::memory_order_relaxed);
                 v2_stats.work_ms_x100.store((int)((work_ms > 0.0 ? work_ms : 0.0) * 100.0 + 0.5), std::memory_order_relaxed);
                 if (work_ms > 16.7) v2_stats.slow_frames.fetch_add(1, std::memory_order_relaxed);
             }
-            last_iter = v2_dbg_pre_vm_iter; in_frame = 0; frame_t0 = g_cur.t; wait_t0 = waited;
+            last_iter = v2_dbg_pre_vm_iter; in_frame = 0; frame_t0 = g_pool[g_cur_i].t; wait_t0 = waited;
         }
         in_frame++;
     }
@@ -282,20 +296,26 @@ bool v2_smooth_render(uint8_t* out) {
     bool own_cam = false;
     {
         std::lock_guard<std::mutex> lock(g_mx);
-        own_cam = g_cur.valid && local > 0 && local < g_cur.players && g_cur.cam_valid[local];
+        const Snap* cur = (g_cur_i >= 0 && g_pool[g_cur_i].valid) ? &g_pool[g_cur_i] : nullptr;
+        own_cam = cur && local > 0 && local < cur->players && cur->cam_valid[local];
     }
     const bool smooth_on = smooth_wanted();
     if (!smooth_on && !own_cam) { g_effective = false; v2_smooth_last_reason = 1; return false; }
+    // pin the two newest snapshots and render from them in place (no copies); the pins are
+    // released on every exit of this function — the game thread never fills a pinned slot
+    int ci = -1, pi = -1;
     {
         std::lock_guard<std::mutex> lock(g_mx);
-        if (!g_cur.valid) { g_effective = false; v2_smooth_last_reason = 2; return false; }
-        if (smooth_on && !g_prev.valid) { g_effective = false; v2_smooth_last_reason = 3; return false; }
-        memcpy(&g_cur_local, &g_cur, sizeof(Snap));
-        if (g_prev.valid) memcpy(&g_prev_local, &g_prev, sizeof(Snap));
-        else memcpy(&g_prev_local, &g_cur, sizeof(Snap));
+        const bool cur_ok = g_cur_i >= 0 && g_pool[g_cur_i].valid;
+        const bool prev_ok = g_prev_i >= 0 && g_pool[g_prev_i].valid;
+        if (!cur_ok) { g_effective = false; v2_smooth_last_reason = 2; return false; }
+        if (smooth_on && !prev_ok) { g_effective = false; v2_smooth_last_reason = 3; return false; }
+        ci = g_cur_i; pi = prev_ok ? g_prev_i : g_cur_i;
+        g_pin_c = ci; g_pin_p = pi;
     }
-    const Snap& C = g_cur_local;
-    const Snap& P = g_prev_local;
+    struct Unpin { ~Unpin() { std::lock_guard<std::mutex> lock(g_mx); g_pin_c = -1; g_pin_p = -1; } } unpin;
+    const Snap& C = g_pool[ci];
+    const Snap& P = g_pool[pi];
     const double freq = (double)SDL_GetPerformanceFrequency();
     const double period = (double)(C.t - P.t) / freq;               // s between the two newest flips
     double t = 1.0;                                                 // own camera, no interpolation: the newest flip

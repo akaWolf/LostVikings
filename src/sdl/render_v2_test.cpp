@@ -49,7 +49,22 @@ void render_callback_v2(void* state)
     // UX stage 9: an interpolated frame between the two newest ticks (own
     // passes on a snapshot, v2_smooth.cpp) — else the tick frame as before.
     static uint8_t v2_smooth_frame[V2_FB_MAX_W * 240];
+    // debug: V2_SMOOTH_TIME=1 — the presenter's own composition cost per present
+    // (v2_smooth_render: the snapshot copies + the passes), avg/max ms every 2 s
+    static int sm_time = -1; if (sm_time < 0) sm_time = getenv("V2_SMOOTH_TIME") ? 1 : 0;
+    const uint64_t sm_t0 = sm_time ? SDL_GetPerformanceCounter() : 0;
     const bool smooth = v2_smooth_render(v2_smooth_frame);
+    if (sm_time) {
+        static double acc = 0.0, mx = 0.0; static int n = 0, composed = 0; static uint32_t last_ms = 0;
+        const double ms = (double)(SDL_GetPerformanceCounter() - sm_t0) / (double)SDL_GetPerformanceFrequency() * 1000.0;
+        acc += ms; if (ms > mx) mx = ms; n++; if (smooth) composed++;
+        const uint32_t now = SDL_GetTicks();
+        if (last_ms == 0) last_ms = now;
+        if (now - last_ms >= 2000) {
+            fprintf(stderr, "V2-SMOOTH-TIME presents=%d composed=%d avg=%.2fms max=%.2fms\n", n, composed, n ? acc / n : 0.0, mx);
+            acc = 0.0; mx = 0.0; n = 0; composed = 0; last_ms = now;
+        }
+    }
     extern int v2_smooth_last_w;
     // UX stage 9 step 4: the frame's width (its row stride) — the interpolated
     // frame's own, else the published tick frame's

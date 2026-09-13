@@ -130,10 +130,24 @@ bool v2_vsync_wait_game(void) {
 // presenter thread: sleep until shortly before the next refresh, so the snapshot
 // that follows holds the flip the game made for it (the compose and the texture
 // upload take about a millisecond)
+// The margin before the refresh covers the presenter's own work after the latch — the
+// snapshot composition (SMOOTH), the palette conversion, the texture upload — measured on
+// this machine (g_work_ema_ms: latch → the present call, v2_present_frame). A fixed 3 ms
+// (2026-09-12 report: SMOOTH ON on a 60 Hz display slowed the game heavily) left no room
+// for the composition: the present missed its refresh, the game — which takes one vsync
+// per present under the lock — ran at half speed. Under the lock the game flips right
+// after the previous refresh, so a latch several ms earlier still holds that flip.
+uint64_t g_latch_ticks = 0;     // when the presenter left its latch sleep
+double   g_work_ema_ms = 0.0;   // the presenter's work between the latch and the present call
 static void v2_vsync_latch_sleep(void) {
-    if (!g_vs_locked.load(std::memory_order_acquire) || g_present_last == 0 || g_present_ema_ms <= 0.0) return;
+    if (!g_vs_locked.load(std::memory_order_acquire) || g_present_last == 0 || g_present_ema_ms <= 0.0) { g_latch_ticks = 0; return; }
     const double freq = (double)SDL_GetPerformanceFrequency();
-    const double margin = g_present_ema_ms * 0.4 < 3.0 ? g_present_ema_ms * 0.4 : 3.0;
+    double margin = g_work_ema_ms * 1.5 + 1.0;
+    if (margin < 3.0) margin = 3.0;
+    if (margin > g_present_ema_ms * 0.6) margin = g_present_ema_ms * 0.6;
+    { static double forced = -1.0;   // debug: V2_LATCH_MARGIN_MS=<ms> pins the margin (the former fixed 3 ms for an A/B)
+      if (forced < 0.0) { const char* e = getenv("V2_LATCH_MARGIN_MS"); forced = (e && *e) ? atof(e) : 0.0; }
+      if (forced > 0.0) margin = forced; }
     const double target_ms = g_present_ema_ms - margin;
     for (;;) {
         const double since = (double)(SDL_GetPerformanceCounter() - g_present_last) / freq * 1000.0;
@@ -141,6 +155,7 @@ static void v2_vsync_latch_sleep(void) {
         const double left = target_ms - since;
         if (left > 1.5) SDL_Delay((Uint32)(left - 1.0)); else SDL_Delay(0);
     }
+    g_latch_ticks = SDL_GetPerformanceCounter();
 }
 bool   v2_vsync_locked(void) { return g_vs_locked.load(std::memory_order_acquire); }
 double v2_vsync_display_hz(void) { return g_vs_hz_x100.load(std::memory_order_relaxed) / 100.0; }
@@ -358,6 +373,11 @@ static void v2_present_frame(int H) {
             shot = 1;
         }
     }
+    if (g_latch_ticks) {   // the presenter's work since its latch: v2_vsync_latch_sleep sizes the margin by it
+        const double w = (double)(SDL_GetPerformanceCounter() - g_latch_ticks) / (double)SDL_GetPerformanceFrequency() * 1000.0;
+        g_work_ema_ms = g_work_ema_ms > 0.0 ? g_work_ema_ms * 0.9 + w * 0.1 : w;
+        v2_stats.presenter_ms_x100.store((int)(g_work_ema_ms * 100.0 + 0.5), std::memory_order_relaxed);
+    }
     SDL_RenderPresent(myRenderer_v2);
     v2_vsync_on_present();   // the display's vsync -> the game's (see the module above)
 }
@@ -415,11 +435,15 @@ void updateDraw_v2()
     }
   }
 
-  for (int i = 0; i < RENDER_HEIGHT_V2 * RENDER_WIDTH_V2; i++)
+  // the palette mapped once per present (256 SDL_MapRGBA calls), then a table lookup per
+  // pixel — the per-pixel call sat on the presenter's critical path after the vsync latch
   {
-    auto color = buf[i];
-    auto sdl_color = myDrawInfo_v2->drawPalette[color];
-    tempDrawBuffer_v2[i] = SDL_MapRGBA(myFormat_v2, sdl_color.r, sdl_color.g, sdl_color.b, sdl_color.a);
+    Uint32 lut[256];
+    for (int c = 0; c < 256; c++) {
+      const SDL_Color& sc = myDrawInfo_v2->drawPalette[c];
+      lut[c] = SDL_MapRGBA(myFormat_v2, sc.r, sc.g, sc.b, sc.a);
+    }
+    for (int i = 0; i < RENDER_HEIGHT_V2 * RENDER_WIDTH_V2; i++) tempDrawBuffer_v2[i] = lut[buf[i]];
   }
   
   // The DOS raster is 320x240 Mode X (square pixels): 176 viewport + the 64-row

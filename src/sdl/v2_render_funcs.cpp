@@ -980,6 +980,17 @@ void v2_draw_tiles(uint16_t ds_val) {
             // Read tile map entry: word at fs:[(row_base + col_scrolled) * 2]
             uint16_t tile_map_off = (uint16_t)((row_base + col_scrolled) * 2u);
             uint16_t tile_entry = *(uint16_t*)(fs_base + tile_map_off);
+            // debug: V2_MAP_ROWDUMP=<frame>[,<row_vis>] — one screen row's cells at that frame:
+            // the visible column, the render-map cell index, the map word and the page's word
+            {
+                static int rd = -1, rd_f = 0, rd_row = 11;
+                if (rd < 0) { const char* e = getenv("V2_MAP_ROWDUMP"); rd = 0; if (e && *e) { rd = 1; sscanf(e, "%d,%d", &rd_f, &rd_row); } }
+                if (rd == 1 && v2_dbg_pre_vm_iter == rd_f && row_vis == rd_row && !v2_tls_presenter) {
+                    const uint16_t* ovr = v2_tls_presenter ? v2_tls_tile_ovr : v2_tile_override;
+                    fprintf(stderr, "V2-MAPROW f%d row_vis=%d col_vis=%d cell=%04X map=%04X page=%04X fbw=%d\n", v2_dbg_pre_vm_iter, row_vis, col_vis,
+                            tile_map_off >> 1, tile_entry, ovr ? ovr[tile_map_off >> 1] : 0xEEEE, v2_fbw);
+                }
+            }
 
             // Screen position (with sub-tile pixel offset)
             int screen_x = col_vis * 8 - pix_off_x;
@@ -990,7 +1001,14 @@ void v2_draw_tiles(uint16_t ds_val) {
             // by sub_16880 and not painted since).
             {
                 const uint16_t* ovr = v2_tls_presenter ? v2_tls_tile_ovr : v2_tile_override;
-                if (ovr) {
+                // The page holds 43 columns of cells from the camera's scroll column and 25 rows
+                // from its scroll row — 30 on an LVX_TALL224 level (the sub_16DED fill: 0x2B cells
+                // per row, 0x19 rows, 0x1E when v2_view_h_cur is 224; the scroll painters keep
+                // that window). A cell outside it never lies on any page — the wing of a wide
+                // frame beyond 344 px — so the page's word (0xFFFE "wiped, black" included) does
+                // not apply there: the map tile does. (2026-09-12: the 16:10 frame showed black
+                // from column 344 on.)
+                if (ovr && col_vis < 0x2B && row_vis < (v2_view_rows() == 224 ? 0x1E : 0x19)) {
                     const uint16_t w = ovr[tile_map_off >> 1];
                     if (w == 0xFFFE) {
                         for (int row = 0; row < 8; row++) {
@@ -1056,13 +1074,14 @@ void v2_draw_tiles(uint16_t ds_val) {
             }
         }
     }
-    // The background VGA (render_v2.h): the 320 centre columns come from the VGA bytes the CRTC
+    // The background VGA (render_v2.h): columns 0..319 come from the VGA bytes the CRTC
     // window reads — the page's ring, its fill state, its first-flip gaps, the stale memory
-    // beyond the port's half wipe — over the map-based pass above (which stays for the wings
-    // of a wide frame).
+    // beyond the port's half wipe — over the map-based pass above (which stays for the wing
+    // of a wide frame beyond the window).
     {
         const uint8_t* bg = v2_tls_presenter ? v2_tls_vga_bg : v2_vga_bg;
-        if (bg) {
+        static int no_readout = -1; if (no_readout < 0) no_readout = getenv("V2_NO_BG_READOUT") ? 1 : 0;   // debug: the map pass alone
+        if (bg && !no_readout) {
             uint32_t crtc = v2_vga_crtc; uint8_t pan = v2_vga_pan;
             if (v2_tls_presenter) v2_crtc_for_camera(ds_base, &crtc, &pan);   // the interpolated camera's start
             v2_vga_bg_readout(buf, v2_fbw, v2_view_rows(), bg, crtc, pan, par_on);
@@ -1594,7 +1613,13 @@ void v2_crtc_for_camera(const uint8_t* s, uint32_t* crtc, uint8_t* pan) {
 // the 64K wrap of the address counter). par_on: index 0 stays transparent (the parallax layer
 // beneath), as in the tile pass.
 static void v2_vga_bg_readout(uint8_t* buf, int fbw, int rows, const uint8_t* bg, uint32_t crtc, uint8_t pan, bool par_on) {
-    const int x0 = (fbw - 320) / 2;
+    // The CRTC window starts at the camera's left edge (sub_16775: (x >> 2) + 8 from
+    // DS_VIEWPORT_X), and frame column 0 is that edge in every width — the wide frame's
+    // camera is the wide window's left edge (v2_view_w), not a 320-px window centred in it.
+    // So the readout lands on columns 0..319; the wing beyond comes from the map pass.
+    // (2026-09-12: placing it at (fbw - 320) / 2 shifted the whole tile layer of a 384-px
+    // frame 32 px right of the sprites — the STRT level in 16:10.)
+    const int x0 = 0; (void)fbw;
     for (int y = 0; y < rows; y++) {
         uint8_t* out = buf + (size_t)y * fbw + x0;
         const uint32_t line = crtc + (uint32_t)y * 0x56u;
@@ -2250,7 +2275,14 @@ void v2_draw_flagged_tiles(uint16_t ds_val) {
             // The page lists (render_v2.h): the composed page's own word for the cell
             {
                 const uint16_t* ovr = v2_tls_presenter ? v2_tls_tile_ovr : v2_tile_override;
-                if (ovr) {
+                // The page holds 43 columns of cells from the camera's scroll column and 25 rows
+                // from its scroll row — 30 on an LVX_TALL224 level (the sub_16DED fill: 0x2B cells
+                // per row, 0x19 rows, 0x1E when v2_view_h_cur is 224; the scroll painters keep
+                // that window). A cell outside it never lies on any page — the wing of a wide
+                // frame beyond 344 px — so the page's word (0xFFFE "wiped, black" included) does
+                // not apply there: the map tile does. (2026-09-12: the 16:10 frame showed black
+                // from column 344 on.)
+                if (ovr && col_vis < 0x2B && row_vis < (v2_view_rows() == 224 ? 0x1E : 0x19)) {
                     const uint16_t w = ovr[tile_map_off >> 1];
                     if (w == 0xFFFE) continue;          // black cell: nothing painted there yet
                     if (w != 0xFFFF) tile_entry = w;

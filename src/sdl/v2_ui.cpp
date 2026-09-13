@@ -308,6 +308,7 @@ void v2_ui_draw(uint32_t* rgba, int w, int h, SDL_PixelFormat* fmt) {
         snprintf(st[m++], 48, "PACING %s  SMOOTH %s %s", v2_options.pacing.load() ? "VRR" : "VSYNC", SMOOTH_NAMES[v2_options.smooth.load() % 3], v2_smooth_effective() ? "ON" : "OFF");
         snprintf(st[m++], 48, "SUBFRAMES %d/FRAME  DROPS %u  DOUBLES %u  LATE %u", v2_stats.subframes_per_frame.load(), (unsigned)v2_stats.flip_drops.load(), (unsigned)v2_stats.flip_doubles.load(), (unsigned)v2_stats.present_late.load());
         snprintf(st[m++], 48, "FRAME %.1f MS  WORK %.1f MS  SLOW %u", v2_stats.frame_ms_x100.load() / 100.0, v2_stats.work_ms_x100.load() / 100.0, (unsigned)v2_stats.slow_frames.load());
+        snprintf(st[m++], 48, "PRESENTER %.2f MS AFTER LATCH", v2_stats.presenter_ms_x100.load() / 100.0);   // its own work before the present (sizes the latch margin)
         snprintf(st[m++], 48, "AUDIO %d @ %d  UNDERRUNS %u  CLIP %u  CB OVER %u", v2_stats.audio_samples.load(), v2_stats.audio_rate.load(), (unsigned)v2_stats.audio_underruns.load(), (unsigned)v2_stats.audio_clips.load(), (unsigned)v2_stats.audio_cb_overruns.load());
         extern int v2_present_w;   // render_v2_test.cpp: the frame's width (w is the buffer's stride)
         int maxlen = 0; for (int i = 0; i < m; i++) maxlen = maxlen > (int)strlen(st[i]) ? maxlen : (int)strlen(st[i]);

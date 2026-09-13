@@ -396,7 +396,8 @@ extern void v2_page_lists_black(void);
 // chunks of sub_10cd8 (v2_vga_bg_writer set around them, checked in v2_vga_w), the span copies
 // and the fills — never the sprite engines, the glyphs or the flagged-tile repaint, which stay
 // commands on top. The composition reads the window out of it — byte crtc + y * 0x56 +
-// ((pan + x) >> 2), plane (pan + x) & 3 — over the 320 centre columns (the map-based pass
+// ((pan + x) >> 2), plane (pan + x) & 3 — over columns 0..319: the window starts at the
+// camera's left edge, which is frame column 0 in every width (the map-based pass
 // stays for the wings of a wide frame; index 0 stays transparent over the parallax layer).
 // The presenter carries a copy in its snapshot and derives its interpolated camera's CRTC
 // start with the same formula (v2_crtc_for_camera).
