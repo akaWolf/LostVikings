@@ -28,6 +28,7 @@ struct V2Options {
     std::atomic<bool> subpixel{true};        // 2026-09-15: SUBPIXEL — a tile frame composed as layers on the GPU at the window's integer scale k, every layer at 1/k of a game pixel (render_v2.h V2PresentLayers); off = the flat frame
     std::atomic<int>  motion{1};             // 2026-09-15: MOTION — 0 ORIGINAL (the engine's whole-pixel sub-frame steps), 1 EXACT (the sprites on the exact 16.8 trajectories of their objects; render_v2.h)
     std::atomic<int>  camera{1};             // 2026-09-15: CAMERA — 0 ORIGINAL (the engine's stepped viewport), 1 SMOOTH (the presenter's own camera on a leash around the exact logical one; needs SUBPIXEL; render_v2.h)
+    std::atomic<bool> frame_delay{false};    // 2026-09-15: FRAME DLY — the frame's input read and VM moved close to render1's vsync (v2_timing.h); off by default until proven on the user's display
 };
 extern V2Options v2_options;
 void v2_options_ensure_loaded();        // cwd/v2_options.cfg, once

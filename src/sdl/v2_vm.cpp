@@ -42,6 +42,7 @@ extern uint8_t v2_vga[65536 * 4];
 #include "v2_callcount.h"   // M1 call-parity (#65)
 #include "v2_ds_layout.h"
 #include "v2_timing.h"
+#include "v2_stats.h"      // FRAME DELAY: the delay and the misses (STATS)
 #include "v2_gamestate.h"
 #include "v2_obj_view.h"
 #include "v2_coop.h"        // UX stage 8: per-player input words / active vikings (inert with one player)
@@ -23977,6 +23978,55 @@ std::atomic<bool> v2_game_thread_done{false};   // the frame loop has left (v2_g
 // the phases one by one from the main thread, which now belongs to the SDL events and the
 // presenter. The pacing is the vsync waits inside the phases (v2_tick_sleep); the 16 ms sleep
 // at the bottom only bounds the spins that flip nothing (menus, idle).
+// FRAME DELAY (v2_timing.h): the frame starts late by what the refresh leaves after the frame's own
+// work up to render1's flip — measured as an average with a safety of half again, plus the
+// presenter's latch margin (the flip must be captured before the presenter latches for that
+// refresh) and a millisecond — counted from the last vsync wait's return. A wait that finds its
+// vsync already fired (v2_vs_pending) means the flip missed the refresh: the work estimate is
+// raised to what that frame took, times 1.5, and decays back through the average.
+extern bool need_quit;   // file scope: a block extern inside the anonymous namespace below would get internal linkage
+namespace {
+struct FrameDelay { double work1_ema = 0.0; double slept = 0.0; uint64_t start = 0; uint32_t pending_seen = 0; bool active = false; };
+FrameDelay g_fd;
+void v2_frame_delay_sleep(bool novsync) {
+    g_fd.active = false; g_fd.slept = 0.0;
+    g_fd.start = SDL_GetPerformanceCounter();
+    if (novsync || !v2_options.frame_delay.load()) return;
+    const double period = v2_vsync_game_period_ms();
+    const uint64_t wake = v2_vs_last_wake.load(std::memory_order_relaxed);
+    if (period <= 0.0 || wake == 0) return;
+    const double freq = (double)SDL_GetPerformanceFrequency();
+    double margin = g_fd.work1_ema * 1.5 + v2_presenter_latch_margin_ms() + 1.0;
+    if (g_fd.work1_ema <= 0.0) return;                 // nothing measured yet: no delay
+    if (margin > period * 0.75) return;                // the frame's work fills the refresh: no room
+    const double target_ms = period - margin;          // after the wake
+    for (;;) {
+        const double since = (double)(SDL_GetPerformanceCounter() - wake) / freq * 1000.0;
+        if (since >= target_ms || need_quit) break;
+        const double left = target_ms - since;
+        if (left > 1.5) SDL_Delay((Uint32)(left - 1.0)); else SDL_Delay(0);
+    }
+    const uint64_t now = SDL_GetPerformanceCounter();
+    g_fd.slept = (double)(now - g_fd.start) / freq * 1000.0;
+    g_fd.start = now; g_fd.active = true;
+    g_fd.pending_seen = v2_vs_pending.load(std::memory_order_relaxed);
+}
+// after render1 (its flip captured, its vsync waited): the work to the flip, the miss check
+void v2_frame_delay_note_render1(void) {
+    const double freq = (double)SDL_GetPerformanceFrequency();
+    const uint64_t flip1 = v2_smooth_last_flip_ticks();
+    if (!flip1 || flip1 < g_fd.start) return;          // no flip this frame (a chunk screen's frame without one, a menu)
+    const double work1 = (double)(flip1 - g_fd.start) / freq * 1000.0;
+    const bool late = g_fd.active && v2_vs_pending.load(std::memory_order_relaxed) != g_fd.pending_seen;
+    if (late) { v2_stats.frame_delay_late.fetch_add(1, std::memory_order_relaxed); if (work1 * 1.5 > g_fd.work1_ema) g_fd.work1_ema = work1 * 1.5; }
+    else g_fd.work1_ema = g_fd.work1_ema > 0.0 ? g_fd.work1_ema * 0.8 + work1 * 0.2 : work1;
+    v2_stats.frame_delay_ms_x100.store((int)(g_fd.slept * 100.0 + 0.5), std::memory_order_relaxed);
+    // debug: V2_FRAME_DELAY_TRACE=1 — one line per frame: the sleep, the work to the flip, its average, the miss
+    static int tr = -1; if (tr < 0) tr = getenv("V2_FRAME_DELAY_TRACE") ? 1 : 0;
+    if (tr) fprintf(stderr, "V2-FDELAY f%d slept=%.2f work1=%.2f ema=%.2f period=%.2f latch=%.2f%s\n", v2_dbg_pre_vm_iter, g_fd.slept, work1, g_fd.work1_ema,
+                    v2_vsync_game_period_ms(), v2_presenter_latch_margin_ms(), late ? " LATE" : "");
+}
+}  // namespace
 static void v2_game_thread_func() {
     static const int seq[12] = { V2_PHASE_FRAME_BEGIN, V2_PHASE_PRE_VM, V2_PHASE_VM, V2_PHASE_POST_VM,
                                  V2_PHASE_RENDER1, V2_PHASE_POST_FLIP1, V2_PHASE_RENDER2, V2_PHASE_POST_FLIP2,
@@ -23989,7 +24039,11 @@ static void v2_game_thread_func() {
     // warning, the 2 s window stats — FPS-PHASE / FPS-SLOW / FPS-STATS lines
     uint32_t fps_window_start_ms = SDL_GetTicks();
     int fps_frames_in_window = 0; uint32_t fps_work_total_us = 0; int fps_slow_frames = 0;
+    // V2_NOVSYNC=1 (diagnostics): no real-time pacing, a replay runs at CPU speed
+    static int novsync = -1;
+    if (novsync < 0) { const char* e = getenv("V2_NOVSYNC"); novsync = (e && *e == '1') ? 1 : 0; }
     while (!need_quit) {
+        v2_frame_delay_sleep(novsync != 0);   // FRAME DELAY: the frame's start close to render1's vsync
         const uint32_t frame_start_ms = SDL_GetTicks();
         uint32_t phase_ms[12] = {0};
         for (int i = 0; i < 12; i++) {
@@ -23998,6 +24052,7 @@ static void v2_game_thread_func() {
             v2_run_phase(seq[i], ds);
             v2_dbg_phase_complete++;
             phase_ms[i] = SDL_GetTicks() - t;
+            if (seq[i] == V2_PHASE_RENDER1) v2_frame_delay_note_render1();
         }
         if (SDL_GetTicks() - frame_start_ms > 30)
             fprintf(stderr, "FPS-PHASE: FB=%u PV=%u VM=%u PoV=%u R1=%u PF1=%u R2=%u PF2=%u R3=%u AT=%u PF3=%u FE=%u total=%u\n",
@@ -24023,9 +24078,7 @@ static void v2_game_thread_func() {
         // V2_ONLY+HEADLESS: --max-frames from the loop too (the barrier hook never runs standalone)
         { extern int headless_check_exit(void); headless_check_exit(); }
 #endif
-        // V2_NOVSYNC=1 (diagnostics): no real-time pacing, a replay runs at CPU speed
-        static int novsync = -1;
-        if (novsync < 0) { const char* e = getenv("V2_NOVSYNC"); novsync = (e && *e == '1') ? 1 : 0; }
+        // (V2_NOVSYNC: read once above the loop)
         frame_target_ms += FRAME_PERIOD_MS;
         const uint32_t now = SDL_GetTicks();
         if (!novsync && (int32_t)(frame_target_ms - now) > 0) SDL_Delay(frame_target_ms - now);

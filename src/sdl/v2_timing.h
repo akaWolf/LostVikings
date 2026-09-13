@@ -33,6 +33,17 @@ static const uint32_t V2_FRAME_BUDGET_MS = 16;
 
 extern bool v2_vsync_wait_game(void);   // render_v2.cpp: true = a display vsync was waited for (the lock)
 #include <atomic>
+#include <cstdint>
+// FRAME DELAY (2026-09-15, v2_vm.cpp v2_frame_delay_sleep): the game's frame start — the input read
+// of pre-VM and the VM — moved as close to render1's vsync as the frame's work allows, so a key
+// pressed during the previous frame's waits is read later and shown at the same vsync (the
+// game reads input once per 50 ms frame and reacts in that frame: the read-to-flip part of the
+// latency, one refresh today, shrinks by the delay). Inputs from render_v2.cpp:
+extern std::atomic<uint64_t> v2_vs_last_wake;       // when the game's last vsync wait returned
+extern std::atomic<uint32_t> v2_vs_pending;         // waits that found their vsync already fired (the game was late)
+extern double v2_vsync_game_period_ms(void);        // the period between the game's vsyncs (0: no lock or an uneven schedule)
+extern double v2_presenter_latch_margin_ms(void);   // how long before a refresh the presenter latches
+#include <atomic>
 extern std::atomic<uint64_t> v2_tick_wait_ticks;   // render_v2.cpp: performance-counter ticks the game thread spent in these waits (STATS: frame work = frame - waits)
 static inline void v2_tick_sleep(void) {
 #if defined(V2_ONLY) && !defined(HEADLESS)

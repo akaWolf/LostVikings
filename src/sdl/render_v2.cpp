@@ -139,6 +139,10 @@ static void v2_vsync_on_present(void) {
         // the long-window measurement, once settled and near that choice, is the true refresh
         // (59.94 where the mode says 60): the divider and SMOOTH AUTO decide by it
         if (g_meas_hz > 0.0 && fabs(g_meas_hz - hz) < 0.35 * hz) hz = g_meas_hz;
+        // debug: V2_VSYNC_HZ=<hz> pins the effective refresh (a stand on a timer-made vsync, whose
+        // measured rate falls outside the divider's band, still exercises the exact-divider paths)
+        { static double forced = -1.0; if (forced < 0.0) { const char* e = getenv("V2_VSYNC_HZ"); forced = (e && *e) ? atof(e) : 0.0; }
+          if (forced > 0.0) hz = forced; }
     }
     const bool locked = v2_present_vsync && hz > 0.0;
     if (locked != g_vs_locked.load(std::memory_order_relaxed)) {
@@ -170,14 +174,27 @@ static void v2_vsync_on_present(void) {
 // false = no lock, or the presenter stalled (a hidden window): the caller paces
 // itself. A vsync that fired while the game was busy counts (the backlog is
 // dropped): the DOS loop sees the retrace flag and goes on, it never catches up.
+double v2_vsync_display_hz(void);           // below
+std::atomic<uint64_t> v2_vs_last_wake{0};   // v2_timing.h: when the game thread's last vsync wait returned (FRAME DELAY)
+std::atomic<uint32_t> v2_vs_pending{0};     // v2_timing.h: waits that found their vsync already fired — the game was late for it
 bool v2_vsync_wait_game(void) {
     if (!g_vs_locked.load(std::memory_order_acquire)) return false;
     static uint64_t seen = 0;
     std::unique_lock<std::mutex> lk(g_vs_mx);
-    if (g_vs_game_seq > seen) { seen = g_vs_game_seq; return true; }
+    if (g_vs_game_seq > seen) { seen = g_vs_game_seq; v2_vs_pending.fetch_add(1, std::memory_order_relaxed); v2_vs_last_wake.store(SDL_GetPerformanceCounter(), std::memory_order_relaxed); return true; }
     const bool ok = g_vs_cv.wait_for(lk, std::chrono::milliseconds(60), [] { return g_vs_game_seq > seen || need_quit; });
     seen = g_vs_game_seq;
+    if (ok) v2_vs_last_wake.store(SDL_GetPerformanceCounter(), std::memory_order_relaxed);
     return ok && !need_quit;
+}
+// v2_timing.h (FRAME DELAY): the period between the game's vsyncs under the lock — k refreshes
+// when the refresh is an exact multiple of 60 within the band, 0 otherwise (the uneven schedule:
+// the next game vsync may be two or three refreshes away, no room to plan a delay)
+double v2_vsync_game_period_ms(void) {
+    if (!g_vs_locked.load(std::memory_order_acquire)) return 0.0;
+    const double hz = v2_vsync_display_hz(); int k = 0;
+    if (hz <= 0.0 || !vs_exact_divider(hz, &k)) return 0.0;
+    return 1000.0 * (double)k / hz;
 }
 // presenter thread: sleep until shortly before the next refresh, so the snapshot
 // that follows holds the flip the game made for it (the compose and the texture
@@ -191,15 +208,22 @@ bool v2_vsync_wait_game(void) {
 // after the previous refresh, so a latch several ms earlier still holds that flip.
 uint64_t g_latch_ticks = 0;     // when the presenter left its latch sleep
 double   g_work_ema_ms = 0.0;   // the presenter's work between the latch and the present call
-static void v2_vsync_latch_sleep(void) {
-    if (!g_vs_locked.load(std::memory_order_acquire) || g_present_last == 0 || g_present_ema_ms <= 0.0) { g_latch_ticks = 0; return; }
-    const double freq = (double)SDL_GetPerformanceFrequency();
+// the presenter's latch margin before a refresh: its own work after the latch, with room
+// (v2_timing.h: FRAME DELAY plans the game's flip to land before this latch)
+double v2_presenter_latch_margin_ms(void) {
+    if (g_present_ema_ms <= 0.0) return 0.0;
     double margin = g_work_ema_ms * 1.5 + 1.0;
     if (margin < 3.0) margin = 3.0;
     if (margin > g_present_ema_ms * 0.6) margin = g_present_ema_ms * 0.6;
     { static double forced = -1.0;   // debug: V2_LATCH_MARGIN_MS=<ms> pins the margin (the former fixed 3 ms for an A/B)
       if (forced < 0.0) { const char* e = getenv("V2_LATCH_MARGIN_MS"); forced = (e && *e) ? atof(e) : 0.0; }
       if (forced > 0.0) margin = forced; }
+    return margin;
+}
+static void v2_vsync_latch_sleep(void) {
+    if (!g_vs_locked.load(std::memory_order_acquire) || g_present_last == 0 || g_present_ema_ms <= 0.0) { g_latch_ticks = 0; return; }
+    const double freq = (double)SDL_GetPerformanceFrequency();
+    const double margin = v2_presenter_latch_margin_ms();
     const double target_ms = g_present_ema_ms - margin;
     for (;;) {
         const double since = (double)(SDL_GetPerformanceCounter() - g_present_last) / freq * 1000.0;

@@ -48,6 +48,7 @@ void v2_options_ensure_loaded() {
             else if (!strcmp(key, "subpixel")) v2_options.subpixel = val != 0;   // 2026-09-15: the sub-pixel presentation (render_v2.h V2PresentLayers)
             else if (!strcmp(key, "motion")) v2_options.motion = (val >= 0 && val <= 1) ? val : 1;   // 2026-09-15: MOTION < ORIGINAL | EXACT >
             else if (!strcmp(key, "camera")) v2_options.camera = (val >= 0 && val <= 1) ? val : 1;   // 2026-09-15: CAMERA < ORIGINAL | SMOOTH >
+            else if (!strcmp(key, "frame_delay")) v2_options.frame_delay = val != 0;   // 2026-09-15: FRAME DLY (v2_timing.h)
             else if (!strcmp(key, "integer_scale")) v2_options.integer_scale = val != 0;
             // (square_pixels — the step-3 ASPECT toggle — is gone, 2026-09-06: the
             // canvas is always the 320x240 raster; an old cfg's key is ignored here)
@@ -81,7 +82,7 @@ void v2_options_save() {
     fprintf(f, "filter=%d\ninteger_scale=%d\nborder=%d\nsound=%d\nwide=%d\n", v2_options.filter.load(), (int)v2_options.integer_scale.load(), v2_options.border.load(), v2_options.sound_mode.load(), v2_options.wide.load());
     fprintf(f, "audio_buffer=%d\npacing=%d\nstats=%d\n", v2_options.audio_buffer.load(), v2_options.pacing.load(), (int)v2_options.stats.load());
     fprintf(f, "music_volume=%d\nsfx_volume=%d\n", v2_options.music_volume.load(), v2_options.sfx_volume.load());
-    fprintf(f, "subpixel=%d\nmotion=%d\ncamera=%d\n", (int)v2_options.subpixel.load(), v2_options.motion.load(), v2_options.camera.load());
+    fprintf(f, "subpixel=%d\nmotion=%d\ncamera=%d\nframe_delay=%d\n", (int)v2_options.subpixel.load(), v2_options.motion.load(), v2_options.camera.load(), (int)v2_options.frame_delay.load());
     if (v2_options_sc55_roms[0]) fprintf(f, "sc55_roms=%s\n", v2_options_sc55_roms);
     if (v2_options_mt32_roms[0]) fprintf(f, "mt32_roms=%s\n", v2_options_mt32_roms);
     fclose(f);
@@ -177,7 +178,9 @@ enum Item { IT_PARALLAX, IT_SCENES, IT_BALANCE, IT_LANG, IT_SMOOTH, IT_FINALE, I
             IT_CAMERA,                                                     // 2026-09-15: CAMERA < ORIGINAL | SMOOTH > — the presenter's own camera (needs SUBPIXEL)
             IT_INTEGER, IT_BORDER, IT_WIDE, IT_SOUND,
             IT_MUSICVOL, IT_SFXVOL,                                        // 2026-09-11: MUSIC VOL / SFX VOL (0..100 %, step 10)
-            IT_AUDIOBUF, IT_PACING, IT_STATS,                              // 2026-09-11: the audio device buffer, PACING < VSYNC | VRR >, the STATS overlay
+            IT_AUDIOBUF, IT_PACING,                                        // 2026-09-11: the audio device buffer, PACING < VSYNC | VRR >
+            IT_FRAMEDLY,                                                   // 2026-09-15: FRAME DLY [ON/OFF] — the frame's start close to render1's vsync (v2_timing.h)
+            IT_STATS,                                                      // 2026-09-11: the STATS overlay
             IT_NET_PLAYERS, IT_NET_DELAY, IT_NET_HOST, IT_NET_JOIN,      // UX stage 8 tails: the co-op lobby
             IT_LEVEL, IT_SAVE, IT_LOAD, IT_COUNT };
 // cfg codes: 0 NEAREST, 1 SHARP, 2 LINEAR (stage 9), 3 XBRZ, 4 HQX, 5 NONE (stage 11 tail); the menu walks NONE..HQX
@@ -222,6 +225,7 @@ static void activate() {
     case IT_SFXVOL:   v2_options.sfx_volume = (v2_options.sfx_volume.load() + 10) % 110; v2_options_save(); break;
     case IT_AUDIOBUF: { const int b = v2_options.audio_buffer.load(); v2_options.audio_buffer = (b == 256) ? 512 : (b == 512) ? 1024 : 256; v2_options_save(); v2_ui_toast("AUDIO BUF: NEXT START"); break; }
     case IT_PACING:   v2_options.pacing = (v2_options.pacing.load() + 1) % 2; v2_options_save(); break;
+    case IT_FRAMEDLY: v2_options.frame_delay = !v2_options.frame_delay.load(); v2_options_save(); break;
     case IT_STATS:    v2_options.stats = !v2_options.stats.load(); v2_options_save(); break;
     case IT_NET_PLAYERS: v2_ui_net_players = (v2_ui_net_players.load() == 3) ? 2 : 3; break;
     case IT_NET_DELAY:   v2_ui_net_delay = v2_ui_net_delay.load() % 8 + 1; break;
@@ -246,7 +250,7 @@ static void adjust(int d) {
     case IT_MUSICVOL: { int v = v2_options.music_volume.load() + 10 * d; v2_options.music_volume = v < 0 ? 0 : v > 100 ? 100 : v; v2_options_save(); break; }
     case IT_SFXVOL:   { int v = v2_options.sfx_volume.load() + 10 * d; v2_options.sfx_volume = v < 0 ? 0 : v > 100 ? 100 : v; v2_options_save(); break; }
     case IT_AUDIOBUF: { const int b = v2_options.audio_buffer.load(); v2_options.audio_buffer = d > 0 ? ((b == 256) ? 512 : (b == 512) ? 1024 : 256) : ((b == 1024) ? 512 : (b == 512) ? 256 : 1024); v2_options_save(); v2_ui_toast("AUDIO BUF: NEXT START"); break; }
-    case IT_PACING: case IT_STATS: activate(); break;
+    case IT_PACING: case IT_FRAMEDLY: case IT_STATS: activate(); break;
     case IT_NET_PLAYERS: activate(); break;
     case IT_NET_DELAY:   v2_ui_net_delay = (v2_ui_net_delay.load() - 1 + d + 8) % 8 + 1; break;
     case IT_NET_HOST:    net_port = (net_port + d < 1024) ? 1024 : (net_port + d > 65535) ? 65535 : net_port + d; break;
@@ -330,6 +334,7 @@ bool v2_ui_draw(uint32_t* rgba, int w, int h, SDL_PixelFormat* fmt, bool transpa
         snprintf(st[m++], 48, "SUBFRAMES %d/FRAME  DROPS %u  DOUBLES %u  LATE %u", v2_stats.subframes_per_frame.load(), (unsigned)v2_stats.flip_drops.load(), (unsigned)v2_stats.flip_doubles.load(), (unsigned)v2_stats.present_late.load());
         snprintf(st[m++], 48, "FRAME %.1f MS  WORK %.1f MS  SLOW %u", v2_stats.frame_ms_x100.load() / 100.0, v2_stats.work_ms_x100.load() / 100.0, (unsigned)v2_stats.slow_frames.load());
         snprintf(st[m++], 48, "PRESENTER %.2f MS AFTER LATCH", v2_stats.presenter_ms_x100.load() / 100.0);   // its own work before the present (sizes the latch margin)
+        if (v2_options.frame_delay.load()) snprintf(st[m++], 48, "FRAME DELAY %.1f MS  LATE %u", v2_stats.frame_delay_ms_x100.load() / 100.0, (unsigned)v2_stats.frame_delay_late.load());   // the game's late frame start (v2_timing.h)
         snprintf(st[m++], 48, "AUDIO %d @ %d  UNDERRUNS %u  CLIP %u  CB OVER %u", v2_stats.audio_samples.load(), v2_stats.audio_rate.load(), (unsigned)v2_stats.audio_underruns.load(), (unsigned)v2_stats.audio_clips.load(), (unsigned)v2_stats.audio_cb_overruns.load());
         extern int v2_present_w;   // render_v2_test.cpp: the frame's width (w is the buffer's stride)
         int maxlen = 0; for (int i = 0; i < m; i++) maxlen = maxlen > (int)strlen(st[i]) ? maxlen : (int)strlen(st[i]);
@@ -376,6 +381,9 @@ bool v2_ui_draw(uint32_t* rgba, int w, int h, SDL_PixelFormat* fmt, bool transpa
         snprintf(lines[n++], 40, "AUDIO BUF < %d >%s", v2_options.audio_buffer.load(),
                  v2_stats.audio_samples.load() && v2_stats.audio_samples.load() != v2_options.audio_buffer.load() ? " (NEXT START)" : "");
         snprintf(lines[n++], 40, "PACING    < %s >", v2_options.pacing.load() ? "VRR  " : "VSYNC");
+        { const int fd = v2_stats.frame_delay_ms_x100.load();   // the last frame's delay (0 = none: no lock, or the work fills the refresh)
+          if (v2_options.frame_delay.load() && fd) snprintf(lines[n++], 40, "FRAME DLY [ON ]  %.1f MS", fd / 100.0);
+          else snprintf(lines[n++], 40, "FRAME DLY [%s]", v2_options.frame_delay.load() ? "ON " : "OFF"); }
         snprintf(lines[n++], 40, "STATS     [%s]", v2_options.stats.load() ? "ON " : "OFF");
         // UX stage 8 tails: the co-op lobby
         snprintf(lines[n++], 40, "CO-OP     < %d PLAYERS >", v2_ui_net_players.load());
