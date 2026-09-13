@@ -268,6 +268,31 @@ bundle directory, with `DATA.DAT` and the two images beside `vikings`,
 writes `content/` there. The pack itself is never redistributed: it is
 derived from `DATA.DAT` and the console images.
 
+## Level editor and mods
+
+The game's content is editable: maps, spawn tables, level size, quad
+templates, tile pixels and collision masks, palettes, sprite and
+animation banks, the dialogue texts, and the object logic — the world
+scripts that drive every class, in a readable language with a compiler
+that reproduces the original scripts byte for byte. A browser editor
+(`tools/assets/edit_server.py`, Python 3, no dependencies) works on a
+scratch copy of the open asset tree and drives the loop save → pack →
+play; the differences can be exported as a mod package and applied by
+anyone with the game and their own `DATA.DAT`:
+
+```sh
+python3 tools/data/extract_datadat.py DATA.DAT   # the archive -> assets_raw/
+python3 tools/assets/assetc.py                   # -> assets/, the open tree (every chunk round-trip verified)
+python3 tools/assets/edit_server.py              # http://127.0.0.1:8137/
+python3 tools/assets/edit_server.py --scratch content --import-mod their_mod.json   # play someone's mod: import into a tree named content/, then pack
+```
+
+The full guide is [EDITOR.md](EDITOR.md): the pages of the editor, the
+logic language (`tools/data/LVD_LANGUAGE.md`, statement reference
+`tools/data/LVD_REFERENCE.md`), testing a level, the command-line tools,
+mod packages and their current limits. The release bundles ship the
+tools and the guide in `content-tools/`.
+
 ## Sound options
 
 F1 → SOUND < PC | SNES | SC55 | MT32 > (saved as `sound=0..3` in
