@@ -379,7 +379,13 @@ void accept_thread() {
         int k = free_player_slot();
         if (k < 0) { fprintf(stderr, "V2-NET: a connection refused — the game is full\n"); sock_close(cs); continue; }
         sock_nodelay(cs);
-        Peer* p = new Peer; p->s = cs; p->player = k;
+        // alive from the start: the lobby (v2_net_host) marks and starts the peers it finds alive
+        // in the list the moment g_connected reaches its count — with alive set only in start_rx
+        // below, a lobby that woke between g_connected++ and start_rx skipped the peer (no
+        // started, no g_part) while its START still went out a moment later: the client started,
+        // waited for the others' batches and got none, the host neither sent to it nor waited
+        // for it (2026-09-15, tests/coop_net.sh: "read 3 waits for P1 P2" for 13 s, 0 received)
+        Peer* p = new Peer; p->s = cs; p->player = k; p->alive = true;
         char hello[256];
         snprintf(hello, sizeof hello, "W %d %d %d %s\n", g_players, k, g_delay, opts.c_str());
         send_all(p, hello);
@@ -391,16 +397,23 @@ void accept_thread() {
             std::lock_guard<std::mutex> lk(g_peers_mx);
             g_peers.push_back(p);
         }
+        // lobby or a late join — decided under g_mx, where the lobby closes (v2_net_host marks
+        // its peers and clears g_lobby_open in one locked section): a peer the lobby has just
+        // marked started is not started a second time with an image
+        bool late;
+        {
+            std::lock_guard<std::mutex> lk(g_mx);
+            late = !g_lobby_open && !p->started;
+            if (late) { p->started = true; p->needs_image = true; }
+        }
         g_connected++;
         fprintf(stderr, "V2-NET: player %d connected from %s%s\n", k + 1, inet_ntoa(ca.sin_addr),
-                g_lobby_open ? " (lobby)" : " — joining the running game");
-        if (!g_lobby_open) {
+                late ? " — joining the running game" : " (lobby)");
+        if (late) {
             // a late joiner: START now ("S I": an image follows), the state image at the host's next main read
             std::string sl;
             { std::lock_guard<std::mutex> lk(g_mx); sl = start_line(true); }
             send_all(p, sl);
-            p->started = true;
-            p->needs_image = true;
         }
         start_rx(p);
     }
@@ -494,23 +507,28 @@ bool connect_and_hello(const char* host_port, std::string& err) {
 } // namespace
 
 // ================================================================== lobby
+void (*v2_net_idle_hook)(void) = nullptr;   // v2_net.h: the main thread's presenter iteration during the lobby wait
 bool v2_net_host(int port, int players, int delay, int lobby_wait) {
     if (lobby_wait < 0 || lobby_wait > players - 1) lobby_wait = players - 1;
     g_lobby_open = true;
     if (!start_listening(port, players, delay)) return false;
     fprintf(stderr, "V2-NET: hosting %d players on port %d (input delay %d reads), waiting for %d client(s) in the lobby...\n",
             players, port, delay, lobby_wait);
-    while (g_connected.load() < lobby_wait && !need_quit) SDL_Delay(20);
-    // the lobby is complete: everybody in it takes part from read 1; START (with the whole list) to each
-    std::vector<Peer*> lobby = peers_snapshot();
+    while (g_connected.load() < lobby_wait && !need_quit) { if (v2_net_idle_hook) v2_net_idle_hook(); else SDL_Delay(20); }
+    // the lobby is complete: everybody in it takes part from read 1; START (with the whole list) to each.
+    // The lobby closes in ONE locked section: the peers in the list now are the lobby (alive
+    // since their accept), the ones the accept thread adds after it join the running game (its
+    // decision is taken under the same g_mx) — no peer is skipped or started twice
+    std::vector<Peer*> lobby;
+    std::string sl;
     {
         std::lock_guard<std::mutex> lk(g_mx);
+        lobby = peers_snapshot();
         for (Peer* p : lobby) if (p->alive && !p->started) { p->started = true; g_part[p->player] = true; g_part_from[p->player] = 0; }
+        g_lobby_open = false;
+        sl = start_line(false);
     }
-    std::string sl;
-    { std::lock_guard<std::mutex> lk(g_mx); sl = start_line(false); }
     for (Peer* p : lobby) if (p->alive) send_all(p, sl);
-    g_lobby_open = false;
     g_active = true;
     fprintf(stderr, "V2-NET: %s — starting\n", lobby_wait == players - 1 ? "all players in" : "the lobby is in; the others may join the running game");
     return true;

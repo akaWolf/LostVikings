@@ -101,7 +101,7 @@ extern thread_local const uint32_t* v2_tls_par_acc;   // {acc_x, acc_y} of the p
 extern thread_local bool            v2_tls_presenter; // passes run outside the VM frame gate
 extern "C" int v2_view_rows(void);           // v2_vm.cpp: 176 / 200 (LVX scene) / 224 (LVX_TALL224 level)
 void v2_smooth_capture(void);                 // game thread, at the page flip
-bool v2_smooth_render(uint8_t* out);          // presenter: true = out (320x200) holds an interpolated frame
+// (the presenter's frame comes from v2_present_compose below since 2026-09-15; v2_smooth_render is gone)olated frame
 bool v2_smooth_effective(void);               // the presenter is interpolating between the sub-frames right now (menu)
 uint32_t v2_smooth_subframe_seq(void);        // distinct sub-frames flipped so far (STATS)
 uint64_t v2_smooth_last_flip_ticks(void);     // SDL_GetPerformanceCounter at the newest flip
@@ -426,6 +426,35 @@ extern bool v2_compose_at_flip;   // true while v2_compose_page runs: the layer 
 // clear) and its record at each flip's composition, plus the DS fields the pass mirrors
 // saw ([114D]/[114E], CUR/OLD, sprite offset, the page words) — lines "V2-PL f<frame> ..."
 extern bool v2_pl_trace_on(int slot);
+
+// The presenter as the game build's ONLY renderer (2026-09-15, V2_ONLY): the game thread
+// publishes a snapshot at every flip (v2_smooth.cpp) and paints no pixels; the presenter
+// composes every frame it shows from the two newest snapshots. The frame handed back: the
+// map rows (w x 240 indexed; rows 176.. meaningful on a full-screen scene), and either the
+// HUD band art (320 x 64) with the co-op badges or the row count of a full-screen scene.
+struct V2PresentFrame {
+    const uint8_t* map;              // w x 240 indexed pixels (the presenter's own buffer)
+    int w;                           // the frame's width / row stride
+    int rows;                        // 0 = HUD layout (176 map rows + the band), else 200 / 224 map rows shown
+    const uint8_t* hud;              // 320 x 64 indexed HUD art (HUD layout only)
+    const V2DisplayBadge* badges;    // the 3 co-op badges (HUD layout only)
+    bool smooth;                     // an interpolation between the two newest flips
+};
+extern bool v2_present_compose(V2PresentFrame* out);   // false: no snapshot captured yet (paint black)
+// the flip dump's frame (game thread): the newest snapshot composed at t = 1 into the caller's buffers
+extern bool v2_flip_frame_for_dump(uint8_t* map, uint8_t* hud, V2DisplayBadge* badges, int* w, int* rows);
+// the HUD band as presented: the 320-px art centred on a wide frame, the stone wall mirrored
+// outward on both wings, the co-op badges on the portraits (64 rows from dst, stride `stride`)
+extern void v2_layout_hud_band(uint8_t* dst, int stride, int FW, const uint8_t* hud320, const V2DisplayBadge* badges);
+// the CRTC readout of a shadow-VGA plane (v2_vga_bg_readout's addressing: byte crtc + y * 0x56 +
+// ((pan + x) >> 2), plane (pan + x) & 3, the 64K wrap) into columns 0..319 of a buffer of stride fbw
+extern void v2_vga_readout(uint8_t* buf, int fbw, int rows, const uint8_t* plane, uint32_t crtc, uint8_t pan, bool par_on);
+// the presenter (render_v2.cpp): the window and the renderer, one iteration (the events, the
+// vsync latch, the frame, the present), the loop until quit — the test build runs them on its
+// render thread, the game build on the main thread
+extern void v2_presenter_init(void* state);
+extern void v2_presenter_iteration(void);
+extern void v2_presenter_loop(void);
 
 // Single-tile redraw for dirty-rect (sub_1de05 inner loop) — exact orig sub_1689e equivalent
 extern void v2_draw_single_tile(uint16_t ds_val, uint16_t fs_offset, int abs_row, int abs_col);

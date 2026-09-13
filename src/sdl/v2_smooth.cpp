@@ -41,16 +41,31 @@
 // teleport, wrap) keeps its newest position; two flips closer than 4 ms are one
 // sub-frame (the game flips again in the post-flip phases) — the later one wins.
 // At t = 1 every command keeps its own position and the frame IS the flip, byte
-// for byte (V2_SMOOTH_SELFTEST composes it on the game thread at every flip and
-// dumps it next to the flip — the stand "presenter == flip"). The tile layer and
-// the parallax come from the map at the interpolated camera, the foreground tiles
+// for byte (the stand "presenter == flip" held 0 differences on every canon replay
+// before the game thread stopped composing, 2026-09-15). The tile layer and the
+// parallax come from the map at the interpolated camera, the foreground tiles
 // and the UI from the snapshot; all paint into the presenter's buffer through the
 // thread-local overrides of v2_render_funcs.cpp; the game state is never touched,
 // the canon (headless, no presenter) is unaffected.
+//
+// The presenter as the ONLY renderer of the game build (2026-09-15): the game
+// thread paints no pixels any more — at every flip it publishes a snapshot into
+// the pool below (the DS, the render map, the page's display list and tile words,
+// the background VGA of a tile frame or the WHOLE shadow VGA of a chunk screen,
+// the HUD art the HUD mirrors painted, the CRTC start and pan of the flip, the
+// co-op badges) and goes on; every frame the presenter shows is composed here
+// from the newest snapshot (or the two newest, under SMOOTH): a tile frame by
+// the passes above, a chunk screen (byte_2AAAF & 0x42: the logos, the title with
+// its CRTC scroll, the password screen — the page IS the picture) by the CRTC
+// readout of the snapshot's shadow VGA with the CJK overlay, the HUD band from
+// the snapshot's art or, on a chunk screen, from the VGA rows 0..63 (the picture's
+// bottom lives there behind the split). The test build is untouched: its game
+// thread still composes the flip's frame (the LINCMP oracle against the page)
+// and its presenter shows the published page.
 #include "render_v2.h"
 #include "v2_ds_layout.h"
 #include "v2_ui.h"
-#include "v2_coop.h"        // UX stage 8 step 2: the local player's camera
+#include "v2_coop.h"        // UX stage 8 step 2: the local player's camera; the badges' owners
 #include "v2_stats.h"       // the STATS overlay's sub-frame counters
 #include "v2_timing.h"      // v2_tick_wait_ticks: the game thread's vsync waits (STATS: work = frame - waits)
 #include <SDL2/SDL.h>
@@ -63,9 +78,15 @@
 
 extern uint8_t* v2_vm_get_shadow_ds();
 extern uint8_t v2_vm_shadow_fs[];
-extern bool v2_last_frame_tiles;     // v2_render_funcs.cpp: the last v2_draw_tiles took the tile path
+extern bool v2_last_frame_tiles;     // v2_render_funcs.cpp: the last frame-kind decision took the tile path
 extern thread_local int v2_fbw;      // v2_render_funcs.cpp: the frame width this thread renders
+extern uint8_t v2_vga[65536 * 4];    // v2_render_funcs.cpp: the shadow VGA (a chunk screen's page lives there)
+extern uint32_t v2_vga_crtc;         // v2_render_funcs.cpp: the CRTC start of the last flip (sub_16775 mirror)
+extern uint8_t  v2_vga_pan;          //                       and its pel pan
+extern uint8_t v2_hud_buf[320 * 64]; // v2_render_funcs.cpp: the HUD art the HUD mirrors paint (game thread)
+extern uint8_t v2_dac_shadow[768];
 extern "C" int v2_scene_fullscreen(void);
+extern "C" int v2_view_rows(void);
 extern "C" uint16_t v2_lvx_flags(uint16_t level);
 extern bool v2_vsync_auto_smooth(void);   // render_v2.cpp: the display's refresh is no multiple of 60 (the lock on)
 void v2_draw_tiles(uint16_t ds_val);
@@ -86,16 +107,25 @@ struct Snap {
     V2DrawList draws;           // the sub-frame's display list (render_v2.h): what the sprite layers drew, in order
     uint16_t tile_ovr[32768];   // the shown page's tile words (render_v2.h page lists; index = render-map word)
     bool tile_ovr_valid;
-    uint8_t vga_bg[65536 * 4];  // the background VGA at this flip (render_v2.h): the tile layer's pixels
+    // one shadow-VGA plane: the BACKGROUND VGA on a tile frame (render_v2.h: the tile layer's
+    // pixels), the WHOLE shadow VGA otherwise (vga_full: a chunk screen, or a flip before the
+    // map segments are up — the page is presented as the test build presents every frame)
+    uint8_t vga[65536 * 4];
+    bool vga_full;
+    uint32_t crtc; uint8_t pan;  // the CRTC start and pel pan the flip set (sub_16775 mirror)
+    uint8_t hud[320 * 64];      // the HUD art as the HUD mirrors left it at this flip
+    int rows;                   // v2_view_rows at the flip: 176 (HUD band below), 200 (LVX scene), 224 (LVX_TALL224)
     uint32_t par_acc_x, par_acc_y;
     uint64_t t;                 // SDL_GetPerformanceCounter at capture
+    uint32_t seq;               // the fill's ordinal (the presenter's composition cache)
     bool valid, tile_frame, fullscreen;
-    int w;                      // the frame width the flip rendered at (v2_fbw; UX stage 9 step 4)
+    int w;                      // the frame width of the flip (v2_fbw; UX stage 9 step 4)
     // UX stage 8 step 2: the logical cameras of players 2..3 at this flip
-    // (game state, captured with the DS on the game thread)
+    // (game state, captured with the DS on the game thread) and the badges
     int players;
     uint16_t cam_x[V2_COOP_MAX], cam_y[V2_COOP_MAX];
     bool cam_valid[V2_COOP_MAX];
+    V2DisplayBadge badge[3];
 };
 // A pool of snapshots, handed over by index: the game thread fills a free slot and publishes
 // it as the newest (g_cur_i; the previous newest becomes g_prev_i when the flip is a new
@@ -108,12 +138,12 @@ Snap g_pool[POOL_N];
 int g_cur_i = -1, g_prev_i = -1;    // published (under g_mx)
 int g_pin_c = -1, g_pin_p = -1;     // pinned by the presenter (under g_mx)
 std::mutex g_mx;
+uint32_t g_fill_seq = 0;            // under g_mx
 static int free_slot() {   // under g_mx: a slot neither published nor pinned
     for (int i = 0; i < POOL_N; i++)
         if (i != g_cur_i && i != g_prev_i && i != g_pin_c && i != g_pin_p) return i;
     return -1;   // unreachable with POOL_N >= 5
 }
-uint8_t g_work[DS_SIZE];
 std::atomic<bool> g_effective{false};   // the last render interpolated
 std::atomic<uint32_t> g_subframe_seq{0};      // distinct sub-frames captured (STATS, the VRR presenter)
 std::atomic<uint64_t> g_last_flip_ticks{0};   // the newest flip's time
@@ -126,8 +156,8 @@ inline int16_t lerp16(int16_t a, int16_t b, double t) {
 }  // namespace
 
 float v2_smooth_last_t = -1.0f;    // debug: fraction of the last interpolated frame
-int v2_smooth_last_w = 320;         // the width of the last interpolated frame (its row stride)
-int v2_smooth_last_reason = 0;     // debug: why the last call returned false (0 = it did not)
+int v2_smooth_last_w = 320;         // the width of the last composed frame (its row stride)
+int v2_smooth_last_reason = 0;     // debug: 0 = a frame was composed, 2 = no snapshot yet
 
 extern int v2_dbg_pre_vm_iter;   // the game-frame counter (pre-VM barrier)
 
@@ -137,18 +167,22 @@ static void fill(Snap& S, const uint8_t* s) {
     v2_drawlist_copy(S.draws, v2_frame_draws);   // the flip's display list (records + the used arena)
     S.tile_ovr_valid = (v2_tile_override != nullptr);   // the page lists: the composed page's tile words
     if (S.tile_ovr_valid) memcpy(S.tile_ovr, v2_tile_override, sizeof S.tile_ovr);
-    memcpy(S.vga_bg, v2_vga_bg, sizeof S.vga_bg);                // the background VGA of this flip (the tile layer's source)
+    // A tile frame: the frame-kind decision of this flip took the tile path (v2_compose_page:
+    // the map segments are up and the level is no chunk screen) AND this flip's level is not a
+    // chunk screen (byte_2AAAF & 0x42 — sub_11439 skips the tile render there, the chunk pixels
+    // stay in VGA). The flag alone went stale across a level change: the fade-in flips of the
+    // title (a chunk screen) after the S&S logo (a tile level) still carried it, the presenter
+    // composed them itself and its buffer showed whatever it had composed last — the S&S logo
+    // under the title's palette (2026-09-11 report).
+    S.tile_frame = v2_last_frame_tiles && !(s[DS_LEVEL_FLAGS] & 0x42);
+    S.vga_full = !S.tile_frame;
+    memcpy(S.vga, S.vga_full ? v2_vga : v2_vga_bg, sizeof S.vga);   // the page's source: the whole shadow VGA, or the tile layer's plane
+    S.crtc = v2_vga_crtc; S.pan = v2_vga_pan;
+    memcpy(S.hud, v2_hud_buf, sizeof S.hud);
+    S.rows = v2_view_rows();
     S.par_acc_x = v2_parallax.acc_x;
     S.par_acc_y = v2_parallax.acc_y;
     S.t = SDL_GetPerformanceCounter();
-    // A tile frame: the last v2_draw_tiles took the tile path AND this flip's level is
-    // not a chunk screen (byte_2AAAF & 0x42 — sub_11439 skips the tile render there, the
-    // chunk pixels stay in VGA). The flag alone went stale across a level change: the
-    // fade-in flips of the title (a chunk screen) after the S&S logo (a tile level) still
-    // carried it, the presenter composed them itself, v2_draw_tiles' chunk path returns
-    // without painting in presenter mode, and the presenter's buffer showed whatever it
-    // had composed last — the S&S logo under the title's palette (2026-09-11 report).
-    S.tile_frame = v2_last_frame_tiles && !(s[DS_LEVEL_FLAGS] & 0x42);
     S.fullscreen = v2_scene_fullscreen() != 0;
     S.w = v2_fbw;
     S.players = g_v2_coop_players;
@@ -157,64 +191,20 @@ static void fill(Snap& S, const uint8_t* s) {
         S.cam_y[k] = g_coop.p[k].cam_y;
         S.cam_valid[k] = (k > 0) && g_coop.p[k].cam_valid;
     }
+    // UX stage 8 step 2 (co-op): which player holds each viking, and where its portrait sits in
+    // the HUD art (ds:[vk-0x7A84] -> the VGA offset of v2_draw_hud_portrait) — the presenter
+    // paints the P1/P2/P3 badges
+    for (int vk = 0; vk < 3; vk++) {
+        V2DisplayBadge& b = S.badge[vk];
+        b.owner = -1; b.x = 0; b.y = 0;
+        if (g_v2_coop_players <= 1) continue;
+        const uint16_t vga_off = (uint16_t)rd16(s, (uint16_t)(vk * 2 - 0x7A84));
+        b.x = (vga_off % 86) * 4 + 3;
+        b.y = vga_off / 86;
+        b.owner = v2_coop_owner((uint16_t)(vk * 2));
+    }
+    S.seq = ++g_fill_seq;
     S.valid = true;
-}
-
-// debug: V2_SMOOTH_SELFTEST=<dir>:<from>-<to> — at every flip of the game-frame range the
-// presenter's OWN composition of the newest snapshot (the passes below, t = 1, nothing
-// interpolated) is painted on the game thread and written as <dir>/sm_<n>_f<frame>.ppm
-// (map rows, the shadow DAC) — laid next to the V2_FLIP_DUMP of the same flips it shows
-// where the presenter's composition rules differ from the gameplay frame's.
-extern uint8_t v2_dac_shadow[768];
-static void selftest_dump(const Snap& C) {
-    static int on = -1; static char dir[480]; static int from = 0, to = -1, n = 0;
-    if (on < 0) {
-        const char* e = getenv("V2_SMOOTH_SELFTEST"); on = 0;
-        if (e && *e) { snprintf(dir, sizeof dir, "%s", e); char* c = strrchr(dir, ':');
-                       if (c && sscanf(c + 1, "%d-%d", &from, &to) == 2) { *c = 0; on = 1; } }
-    }
-    if (on != 1 || v2_dbg_pre_vm_iter < from || v2_dbg_pre_vm_iter > to || n >= 6000) return;
-    static uint8_t out[V2_FB_MAX_W * 240];
-    // the cost of one presenter composition (what SMOOTH pays per display refresh): summed and
-    // reported at exit as V2-SMOOTH-SELFTEST-TIME
-    static double t_sum = 0.0, t_max = 0.0; static long t_n = 0; static int t_init = 0;
-    if (!t_init) { t_init = 1; atexit([]() { if (t_n) fprintf(stderr, "V2-SMOOTH-SELFTEST-TIME compositions=%ld avg=%.2fms max=%.2fms\n", t_n, t_sum / t_n, t_max); }); }
-    if (C.tile_frame) {
-        const uint64_t t0 = SDL_GetPerformanceCounter();
-        memcpy(g_work, C.ds, DS_SIZE);
-        uint32_t acc[2] = { C.par_acc_x, C.par_acc_y };
-        const int savew = v2_fbw;
-        v2_tls_ds = g_work; v2_tls_out = out; v2_fbw = C.w; v2_tls_fs = C.fs; v2_tls_par_acc = acc; v2_tls_presenter = true;
-        v2_tls_tile_ovr = C.tile_ovr_valid ? C.tile_ovr : nullptr; v2_tls_ui_cells_from_page = C.tile_ovr_valid; v2_tls_vga_bg = C.vga_bg;
-        v2_draw_tiles(0);
-        if (!v2_parallax.on) {   // the exact page: every command in the passes' order (render_v2.h V2_CMD_FGTILE)
-            v2_tls_fg_from_page = true;
-            v2_draw_list(C.draws, nullptr, nullptr, -1);   // t = 1: the flip's commands at their own positions
-            v2_draw_flagged_tiles(0);
-            v2_tls_fg_from_page = false;
-        } else {                 // the console parallax layer's priority pass between the sprites and the rest
-            v2_draw_list(C.draws, nullptr, nullptr, 0);
-            v2_draw_flagged_tiles(0);
-            v2_draw_list(C.draws, nullptr, nullptr, 1);
-        }
-        v2_draw_ui(0);
-        v2_tls_tile_ovr = nullptr; v2_tls_ui_cells_from_page = false; v2_tls_vga_bg = nullptr;
-        v2_tls_presenter = false; v2_tls_par_acc = nullptr; v2_tls_fs = nullptr; v2_tls_out = nullptr; v2_tls_ds = nullptr; v2_fbw = savew;
-        const double ms = (double)(SDL_GetPerformanceCounter() - t0) / (double)SDL_GetPerformanceFrequency() * 1000.0;
-        t_sum += ms; t_n++; if (ms > t_max) t_max = ms;
-        if (t_n % 100 == 0) fprintf(stderr, "V2-SMOOTH-SELFTEST-TIME compositions=%ld avg=%.2fms max=%.2fms (w=%d)\n", t_n, t_sum / t_n, t_max, C.w);   // the game may leave via _exit: report as it goes
-    } else memset(out, 0, sizeof out);   // the presenter shows the flip itself on such frames
-    char path[560]; snprintf(path, sizeof path, "%s/sm_%04d_f%d.ppm", dir, n, v2_dbg_pre_vm_iter);
-    FILE* f = fopen(path, "wb");
-    if (f) {
-        fprintf(f, "P6\n%d 176\n255\n", C.w);
-        for (int y = 0; y < 176; y++) for (int x = 0; x < C.w; x++) {
-            const uint8_t* c = v2_dac_shadow + out[y * C.w + x] * 3;
-            fputc(c[0] << 2, f); fputc(c[1] << 2, f); fputc(c[2] << 2, f);
-        }
-        fclose(f);
-    }
-    n++;
 }
 
 // Game thread, at every page flip (v2_swap_render_buf): the flip becomes the
@@ -243,7 +233,6 @@ void v2_smooth_capture(void) {
     const int k = free_slot();
     if (k < 0) return;   // cannot happen with POOL_N slots; never overwrite what the presenter reads
     fill(g_pool[k], s);
-    selftest_dump(g_pool[k]);   // debug (V2_SMOOTH_SELFTEST): the presenter's own composition of this flip
     if (cur && new_subframe) g_prev_i = g_cur_i;   // a new sub-frame: the newest so far becomes the previous one
     g_cur_i = k;                                    // a flip within SAME_SUBFRAME_MS replaces the newest instead
     g_last_flip_ticks.store(g_pool[k].t, std::memory_order_relaxed);
@@ -283,70 +272,122 @@ static bool smooth_wanted(void) {
 }
 bool v2_smooth_effective(void) { return g_effective.load(std::memory_order_relaxed); }
 
-// Presenter thread: paint an interpolated frame into `out` (rows per v2_view_rows,
-// width = the snapshot's v2_fbw, reported in v2_smooth_last_w).
-// false = nothing to interpolate (option off, chunk screens, level change,
-// first flips, the pair is no sub-frame) — the caller shows the flip as before.
-bool v2_smooth_render(uint8_t* out) {
-    v2_options_ensure_loaded();
-    // UX stage 8 step 2: a client whose player has his own camera renders his
-    // own frame even without interpolation (then t = 1: the newest flip's
-    // positions behind his camera); the flip the game thread drew is player 1's.
-    const int local = g_v2_local_player;
-    bool own_cam = false;
-    {
-        std::lock_guard<std::mutex> lock(g_mx);
-        const Snap* cur = (g_cur_i >= 0 && g_pool[g_cur_i].valid) ? &g_pool[g_cur_i] : nullptr;
-        own_cam = cur && local > 0 && local < cur->players && cur->cam_valid[local];
-    }
-    const bool smooth_on = smooth_wanted();
-    if (!smooth_on && !own_cam) { g_effective = false; v2_smooth_last_reason = 1; return false; }
-    // pin the two newest snapshots and render from them in place (no copies); the pins are
-    // released on every exit of this function — the game thread never fills a pinned slot
-    int ci = -1, pi = -1;
-    {
-        std::lock_guard<std::mutex> lock(g_mx);
-        const bool cur_ok = g_cur_i >= 0 && g_pool[g_cur_i].valid;
-        const bool prev_ok = g_prev_i >= 0 && g_pool[g_prev_i].valid;
-        if (!cur_ok) { g_effective = false; v2_smooth_last_reason = 2; return false; }
-        if (smooth_on && !prev_ok) { g_effective = false; v2_smooth_last_reason = 3; return false; }
-        ci = g_cur_i; pi = prev_ok ? g_prev_i : g_cur_i;
-        g_pin_c = ci; g_pin_p = pi;
-    }
-    struct Unpin { ~Unpin() { std::lock_guard<std::mutex> lock(g_mx); g_pin_c = -1; g_pin_p = -1; } } unpin;
-    const Snap& C = g_pool[ci];
-    const Snap& P = g_pool[pi];
-    const double freq = (double)SDL_GetPerformanceFrequency();
-    const double period = (double)(C.t - P.t) / freq;               // s between the two newest flips
-    double t = 1.0;                                                 // own camera, no interpolation: the newest flip
-    bool interp = false;
-    if (smooth_on) {
-        // a sub-frame pair: the same level and width, both tile frames, 6..40 ms apart
-        // (the DOS game flips once per game frame on some screens: 50 ms, not a sub-frame)
-        const bool pair = C.tile_frame && P.tile_frame && C.fullscreen == P.fullscreen && C.w == P.w &&
-                          rd16(C.ds, DS_LEVEL) == rd16(P.ds, DS_LEVEL) && period >= 0.006 && period <= 0.040;
-        if (!pair) {
-            if (!own_cam) { g_effective = false; v2_smooth_last_reason = 5; return false; }
-        } else {
-            t = (double)(SDL_GetPerformanceCounter() - C.t) / freq / period;
-            if (t < 0.0) t = 0.0;
-            if (t > 1.0) t = 1.0;
-            interp = true;
+// The HUD band as presented (render_v2.h): the 320-px HUD art sits centred on a wide frame; the
+// wings beside it continue the stone wall (2026-09-06: the sides were black). The HUD is a wall
+// of 32-px blocks with the portrait slots in the middle; the outermost block column on each
+// side (art columns 0..31 / 288..319) is reflected outward, ping-pong, so the wall runs on
+// without a seam: the first mirror axis is the picture edge (the block cut there just doubles),
+// the next ones fall inside the rough stone texture. Only the wall is used — a plain mirror of
+// 53 columns (16:9) reached into the first portrait slot. Then (UX stage 8 step 2, co-op) the
+// player's number in the corner of the portrait of the viking he holds — the DOS letter look
+// (body colour 2, the (+1,+1) shadow 1: black/white on 1/2 in every level palette).
+void v2_layout_hud_band(uint8_t* dst, int stride, int FW, const uint8_t* hud320, const V2DisplayBadge* badges) {
+    const int x0 = (FW - 320) / 2;
+    const int WALL = 32;
+    for (int y = 0; y < 64; y++) {
+        uint8_t* row = dst + (size_t)y * stride;
+        const uint8_t* art = hud320 + y * 320;
+        memset(row, 0, (size_t)stride);
+        memcpy(row + x0, art, 320);
+        for (int d = 1; d <= x0; d++) {                              // d = distance from the picture edge
+            const int k = (d - 1) % (2 * WALL);
+            const int off = (k < WALL) ? k : 2 * WALL - 1 - k;       // 0..31, reflected every 32 px
+            row[x0 - d] = art[off];                                  // left wing
+            if (x0 + 320 + d - 1 < FW) row[x0 + 320 + d - 1] = art[319 - off];   // right wing
         }
     }
-    if (!C.tile_frame) { g_effective = false; v2_smooth_last_reason = 4; return false; }
-    v2_smooth_last_t = (float)t;
-    v2_smooth_last_reason = 0;
-    g_effective = interp;
+    if (!badges) return;
+    static const char* const DIGIT[3][5] = {
+        { ".#.", "##.", ".#.", ".#.", "###" },
+        { "###", "..#", "###", "#..", "###" },
+        { "###", "..#", "###", "..#", "###" },
+    };
+    for (int vk = 0; vk < 3; vk++) {
+        const V2DisplayBadge& b = badges[vk];
+        if (b.owner < 0 || b.owner > 2) continue;
+        const int bx = x0 + b.x + 1, by = b.y + 1;
+        for (int r = 0; r < 5; r++)
+            for (int c = 0; c < 3; c++) {
+                if (DIGIT[b.owner][r][c] != '#') continue;
+                const int px = bx + c, py = by + r;
+                if (py + 1 < 64 && px + 1 < FW) dst[(size_t)(py + 1) * stride + px + 1] = 1;   // shadow
+                if (py < 64 && px < FW)         dst[(size_t)py * stride + px] = 2;             // body
+            }
+    }
+}
 
-    memcpy(g_work, C.ds, DS_SIZE);      // the newest flip: sprite frames, UI, everything not interpolated
+// the passes of a tile frame, in the gameplay frame's order, on the caller's buffers: `work` is
+// the snapshot's DS with the camera and the moved positions already written, pos_x/pos_y the
+// commands' positions (nullptr = each command's own), acc the parallax accumulators
+static void compose_map(const Snap& C, const int16_t* pos_x, const int16_t* pos_y, const uint32_t* acc, uint8_t* work, uint8_t* out) {
+    const int savew = v2_fbw;
+    v2_tls_ds = work;
+    v2_tls_out = out;
+    v2_fbw = C.w;                   // this thread renders at the snapshot's width
+    v2_tls_fs = C.fs;
+    v2_tls_par_acc = acc;
+    v2_tls_presenter = true;
+    v2_tls_tile_ovr = C.tile_ovr_valid ? C.tile_ovr : nullptr; v2_tls_ui_cells_from_page = C.tile_ovr_valid; v2_tls_vga_bg = C.vga;
+    v2_draw_tiles(0);
+    if (!v2_parallax.on) {   // the exact page: every command in the passes' order (render_v2.h V2_CMD_FGTILE)
+        v2_tls_fg_from_page = true;
+        v2_draw_list(C.draws, pos_x, pos_y, -1);   // the flip's own commands, in its order, at the given positions
+        v2_draw_flagged_tiles(0);
+        v2_tls_fg_from_page = false;
+    } else {                 // the console parallax layer's priority pass between the sprites and the rest
+        v2_draw_list(C.draws, pos_x, pos_y, 0);
+        v2_draw_flagged_tiles(0);
+        v2_draw_list(C.draws, pos_x, pos_y, 1);
+    }
+    v2_draw_ui(0);
+    v2_tls_tile_ovr = nullptr; v2_tls_ui_cells_from_page = false; v2_tls_vga_bg = nullptr;
+    v2_tls_presenter = false;
+    v2_tls_par_acc = nullptr;
+    v2_tls_fs = nullptr;
+    v2_tls_out = nullptr;
+    v2_tls_ds = nullptr;
+    v2_fbw = savew;
+}
+
+// the page of a chunk screen (or of a flip before the map segments are up): the CRTC readout
+// of the snapshot's whole shadow VGA — the window through the CRTC start the sub_16775 mirror
+// set (the title's scroll from the art to the logo), 320 x 176 — the HUD band from the VGA rows
+// 0..63 (the picture's bottom lives there behind the split), the CJK text overlay (UX6) over it
+static void compose_page(const Snap& C, uint8_t* work, uint8_t* out, uint8_t* hud) {
+    memset(out, 0, (size_t)320 * 240);
+    v2_vga_readout(out, 320, 176, C.vga, C.crtc, C.pan, false);
+    for (int y = 0; y < 64; y++) memcpy(hud + y * 320, C.vga + (size_t)y * 0x56u * 4u, 320);
+    memcpy(work, C.ds, DS_SIZE);
+    const int savew = v2_fbw;
+    v2_tls_ds = work; v2_tls_out = out; v2_fbw = 320; v2_tls_presenter = true; v2_tls_ui_cells_from_page = true;
+    v2_draw_ui(0);   // the CJK overlay only (the cells are the page's glyph commands, already in the picture)
+    v2_tls_ui_cells_from_page = false; v2_tls_presenter = false; v2_tls_out = nullptr; v2_tls_ds = nullptr;
+    v2_fbw = savew;
+}
+
+// One frame from a snapshot (P = the previous one when interpolating, t its fraction; local =
+// the player whose own camera replaces the DS camera, -1 for the DS camera): the map rows into
+// `out` (w x 240), the HUD art into `hud`, the badges, the width and the full-screen row count
+// (0 = the HUD layout). The caller owns every buffer (the presenter thread its own, the flip
+// dump on the game thread its own).
+static void compose_snapshot(const Snap& C, const Snap* P, double t, bool interp, int local,
+                             uint8_t* work, uint8_t* out, uint8_t* hud, V2DisplayBadge* badges, int* w, int* rows) {
+    memcpy(badges, C.badge, sizeof C.badge);
+    if (!C.tile_frame) {
+        compose_page(C, work, out, hud);
+        *w = 320; *rows = 0;
+        return;
+    }
+    if (!P) P = &C;
+    memcpy(work, C.ds, DS_SIZE);      // the newest flip: sprite frames, UI, everything not interpolated
     // camera: viewport + the tile-scroll state derived from it (vp >> 3) —
     // the DS viewport, or (UX stage 8 step 2) the local player's own camera
-    const bool own_valid = own_cam && C.cam_valid[local] && P.cam_valid[local];
+    const bool own_cam = local > 0 && local < C.players && C.cam_valid[local];
+    const bool own_valid = own_cam && P->cam_valid[local];
     int16_t cx = own_valid ? (int16_t)C.cam_x[local] : rd16(C.ds, DS_VIEWPORT_X);
-    int16_t px = own_valid ? (int16_t)P.cam_x[local] : rd16(P.ds, DS_VIEWPORT_X);
+    int16_t px = own_valid ? (int16_t)P->cam_x[local] : rd16(P->ds, DS_VIEWPORT_X);
     int16_t cy = own_valid ? (int16_t)C.cam_y[local] : rd16(C.ds, DS_VIEWPORT_Y);
-    int16_t py = own_valid ? (int16_t)P.cam_y[local] : rd16(P.ds, DS_VIEWPORT_Y);
+    int16_t py = own_valid ? (int16_t)P->cam_y[local] : rd16(P->ds, DS_VIEWPORT_Y);
     if (own_cam && !own_valid) { cx = px = rd16(C.ds, DS_VIEWPORT_X); cy = py = rd16(C.ds, DS_VIEWPORT_Y); }
     // the exact interpolated camera (the sprites are rounded relative to it) and
     // the integer one written to the frame (the tiles scroll by it)
@@ -364,28 +405,24 @@ bool v2_smooth_render(uint8_t* out) {
         if (vx < 0) { vx = 0; camx_f = 0.0; }
         if (vy < 0) { vy = 0; camy_f = 0.0; }
         if (write) {
-            wr16(g_work, DS_VIEWPORT_X, vx);
-            wr16(g_work, DS_VIEWPORT_Y, vy);
-            wr16(g_work, DS_SCROLL_COL, (int16_t)((uint16_t)vx >> 3));
-            wr16(g_work, DS_SCROLL_ROW, (int16_t)((uint16_t)vy >> 3));
+            wr16(work, DS_VIEWPORT_X, vx);
+            wr16(work, DS_VIEWPORT_Y, vy);
+            wr16(work, DS_SCROLL_COL, (int16_t)((uint16_t)vx >> 3));
+            wr16(work, DS_SCROLL_ROW, (int16_t)((uint16_t)vy >> 3));
         }
     }
-    // sub-sprites active in both flips: the world position moved back towards the
-    // previous flip by (1 - t), rounded once relative to the exact camera so the
-    // distance to the background is the rounded exact one (a camera-locked viking
-    // stays still on the screen, as in the original; no ±1 px shimmer)
     // The display list's commands, each moved back towards the previous flip by (1 - t):
-    // the command's slot is looked up in the previous flip's list (its first record);
+    // the command's slot is looked up in the previous flip's list (its last record);
     // a slot present in both lists and within V2_SMOOTH_MAX_STEP is interpolated, any
     // other command (spawn, teleport, wrap, one flip only) keeps the newest position.
     // The world position moved back is rounded once relative to the exact camera so the
     // distance to the background is the rounded exact one (a camera-locked viking stays
     // still on the screen, as in the original; no ±1 px shimmer). At t = 1 every command
     // keeps its own position: the frame is the flip.
-    static int16_t g_pos_x[V2_DRAWLIST_MAX], g_pos_y[V2_DRAWLIST_MAX];
+    static thread_local int16_t pos_x[V2_DRAWLIST_MAX], pos_y[V2_DRAWLIST_MAX];
     for (int i = 0; i < C.draws.n; i++) {
         const V2DrawCmd& c = C.draws.cmd[i];
-        g_pos_x[i] = c.x; g_pos_y[i] = c.y;
+        pos_x[i] = c.x; pos_y[i] = c.y;
         if (!interp) continue;
         // glyph cells and priority-tile repaints are map cells, not objects: they stay in the
         // world (moved only by the camera), their pseudo slots are no object record of the DS
@@ -395,74 +432,117 @@ bool v2_smooth_render(uint8_t* out) {
         { bool last = true; for (int k = i + 1; k < C.draws.n; k++) if (C.draws.cmd[k].slot == c.slot) { last = false; break; }
           if (!last) continue; }
         const V2DrawCmd* p = nullptr;
-        for (int j = P.draws.n - 1; j >= 0; j--) if (P.draws.cmd[j].slot == c.slot) { p = &P.draws.cmd[j]; break; }
+        for (int j = P->draws.n - 1; j >= 0; j--) if (P->draws.cmd[j].slot == c.slot) { p = &P->draws.cmd[j]; break; }
         if (!p) continue;
         const int16_t ax = c.x, bx = p->x, ay = c.y, by = p->y;
         if (ax == bx && ay == by) continue;
         if (ax - bx > V2_SMOOTH_MAX_STEP || bx - ax > V2_SMOOTH_MAX_STEP ||
             ay - by > V2_SMOOTH_MAX_STEP || by - ay > V2_SMOOTH_MAX_STEP) continue;   // spawn / teleport / wrap
         const double xf = bx + (double)(ax - bx) * t, yf = by + (double)(ay - by) * t;
-        g_pos_x[i] = (int16_t)(vx + lround(xf - camx_f));
-        g_pos_y[i] = (int16_t)(vy + lround(yf - camy_f));
+        pos_x[i] = (int16_t)(vx + lround(xf - camx_f));
+        pos_y[i] = (int16_t)(vy + lround(yf - camy_f));
         // the DS copy carries the same position (the V2_SMOOTH_DUMP lines read it)
-        wr16(g_work, c.slot + OBJ_SPRITE_X, g_pos_x[i]);
-        wr16(g_work, c.slot + OBJ_SPRITE_Y, g_pos_y[i]);
+        wr16(work, c.slot + OBJ_SPRITE_X, pos_x[i]);
+        wr16(work, c.slot + OBJ_SPRITE_Y, pos_y[i]);
     }
     // parallax autoscroll accumulators (units of 1/1792 px): lerp unless wrapped
     uint32_t acc[2] = { C.par_acc_x, C.par_acc_y };
     if (interp) {
-        if (C.par_acc_x >= P.par_acc_x && C.par_acc_x - P.par_acc_x < 1792u * 64u)
-            acc[0] = P.par_acc_x + (uint32_t)((double)(C.par_acc_x - P.par_acc_x) * t);
-        if (C.par_acc_y >= P.par_acc_y && C.par_acc_y - P.par_acc_y < 1792u * 64u)
-            acc[1] = P.par_acc_y + (uint32_t)((double)(C.par_acc_y - P.par_acc_y) * t);
+        if (C.par_acc_x >= P->par_acc_x && C.par_acc_x - P->par_acc_x < 1792u * 64u)
+            acc[0] = P->par_acc_x + (uint32_t)((double)(C.par_acc_x - P->par_acc_x) * t);
+        if (C.par_acc_y >= P->par_acc_y && C.par_acc_y - P->par_acc_y < 1792u * 64u)
+            acc[1] = P->par_acc_y + (uint32_t)((double)(C.par_acc_y - P->par_acc_y) * t);
     }
-
     // debug: V2_SMOOTH_DUMP=<dir> — one line per interpolated frame: game frame,
     // fraction, the sub-frame period, the wall-clock since the newest flip, camera
     // prev/cur/lerp, the active viking's object X/Y and its first sub-sprite's X/Y
     // prev/cur/lerp
-    {
+    if (interp) {
         static FILE* lf = nullptr; static int init = 0;
         if (!init) { init = 1; const char* dd = getenv("V2_SMOOTH_DUMP");
             if (dd && *dd) { char path[512]; snprintf(path, sizeof path, "%s/smooth_log.txt", dd); lf = fopen(path, "w"); } }
         if (lf) {
+            const double freq = (double)SDL_GetPerformanceFrequency();
+            const double period = (double)(C.t - P->t) / freq;
             const uint16_t vk = (uint16_t)rd16(C.ds, DS_ACTIVE_VIKING);
             const uint16_t sub = (uint16_t)rd16(C.ds, vk + OBJ_SUB_SLOT);
             fprintf(lf, "f%d t=%.3f period=%.1fms since=%.1fms vp %d,%d -> %d,%d = %d,%d | vik %02X obj %d,%d -> %d,%d | sub %02X x %d -> %d = %d y %d -> %d = %d\n",
                     v2_dbg_pre_vm_iter, t, period * 1000.0, (double)(SDL_GetPerformanceCounter() - C.t) / freq * 1000.0,
-                    px, py, cx, cy, rd16(g_work, DS_VIEWPORT_X), rd16(g_work, DS_VIEWPORT_Y),
-                    vk, rd16(P.ds, vk + OBJ_WORLD_X), rd16(P.ds, vk + OBJ_WORLD_Y), rd16(C.ds, vk + OBJ_WORLD_X), rd16(C.ds, vk + OBJ_WORLD_Y),
+                    px, py, cx, cy, rd16(work, DS_VIEWPORT_X), rd16(work, DS_VIEWPORT_Y),
+                    vk, rd16(P->ds, vk + OBJ_WORLD_X), rd16(P->ds, vk + OBJ_WORLD_Y), rd16(C.ds, vk + OBJ_WORLD_X), rd16(C.ds, vk + OBJ_WORLD_Y),
                     sub,
-                    sub <= 0xFE ? rd16(P.ds, sub + OBJ_SPRITE_X) : 0, sub <= 0xFE ? rd16(C.ds, sub + OBJ_SPRITE_X) : 0, sub <= 0xFE ? rd16(g_work, sub + OBJ_SPRITE_X) : 0,
-                    sub <= 0xFE ? rd16(P.ds, sub + OBJ_SPRITE_Y) : 0, sub <= 0xFE ? rd16(C.ds, sub + OBJ_SPRITE_Y) : 0, sub <= 0xFE ? rd16(g_work, sub + OBJ_SPRITE_Y) : 0);
+                    sub <= 0xFE ? rd16(P->ds, sub + OBJ_SPRITE_X) : 0, sub <= 0xFE ? rd16(C.ds, sub + OBJ_SPRITE_X) : 0, sub <= 0xFE ? rd16(work, sub + OBJ_SPRITE_X) : 0,
+                    sub <= 0xFE ? rd16(P->ds, sub + OBJ_SPRITE_Y) : 0, sub <= 0xFE ? rd16(C.ds, sub + OBJ_SPRITE_Y) : 0, sub <= 0xFE ? rd16(work, sub + OBJ_SPRITE_Y) : 0);
         }
     }
-    // the passes, in the gameplay frame's order, on the presenter's buffers
-    v2_tls_ds = g_work;
-    v2_tls_out = out;
-    v2_fbw = C.w;                   // the presenter thread renders at the snapshot's width
-    v2_smooth_last_w = C.w;
-    v2_tls_fs = C.fs;
-    v2_tls_par_acc = acc;
-    v2_tls_presenter = true;
-    v2_tls_tile_ovr = C.tile_ovr_valid ? C.tile_ovr : nullptr; v2_tls_ui_cells_from_page = C.tile_ovr_valid; v2_tls_vga_bg = C.vga_bg;
-    v2_draw_tiles(0);
-    if (!v2_parallax.on) {   // the exact page: every command in the passes' order (render_v2.h V2_CMD_FGTILE)
-        v2_tls_fg_from_page = true;
-        v2_draw_list(C.draws, g_pos_x, g_pos_y, -1);   // the flip's own commands, in its order, at the moved positions
-        v2_draw_flagged_tiles(0);
-        v2_tls_fg_from_page = false;
-    } else {                 // the console parallax layer's priority pass between the sprites and the rest
-        v2_draw_list(C.draws, g_pos_x, g_pos_y, 0);
-        v2_draw_flagged_tiles(0);
-        v2_draw_list(C.draws, g_pos_x, g_pos_y, 1);
+    compose_map(C, pos_x, pos_y, acc, work, out);
+    memcpy(hud, C.hud, sizeof C.hud);
+    *w = C.w;
+    *rows = C.rows > 176 ? C.rows : 0;
+}
+
+// Presenter thread (render_v2.h): the frame to show now — the newest snapshot, or under SMOOTH
+// an interpolation between the two newest by the wall-clock fraction of their period. The two
+// snapshots are pinned while they are read (the game thread never fills a pinned slot) and
+// released before returning; the frame lives in this function's own buffers. A frame that is
+// not interpolated and whose snapshot has not changed since the last call is not composed
+// again (the menu, a wait: the same flip presented refresh after refresh).
+bool v2_present_compose(V2PresentFrame* out) {
+    v2_options_ensure_loaded();
+    static uint8_t s_work[DS_SIZE], s_out[V2_FB_MAX_W * 240], s_hud[320 * 64];
+    static V2DisplayBadge s_badges[3];
+    static int s_w = 320, s_rows = 0;
+    static uint32_t s_seq = 0; static bool s_interp = true, s_have = false;
+    const int local = g_v2_local_player;   // UX stage 8 step 2: a client's own camera (players 2..3)
+    const bool smooth_on = smooth_wanted();
+    int ci = -1, pi = -1;
+    {
+        std::lock_guard<std::mutex> lock(g_mx);
+        const bool cur_ok = g_cur_i >= 0 && g_pool[g_cur_i].valid;
+        const bool prev_ok = g_prev_i >= 0 && g_pool[g_prev_i].valid;
+        if (!cur_ok) { g_effective = false; v2_smooth_last_reason = 2; return false; }
+        ci = g_cur_i; pi = prev_ok ? g_prev_i : g_cur_i;
+        g_pin_c = ci; g_pin_p = pi;
     }
-    v2_draw_ui(0);
-    v2_tls_tile_ovr = nullptr; v2_tls_ui_cells_from_page = false; v2_tls_vga_bg = nullptr;
-    v2_tls_presenter = false;
-    v2_tls_par_acc = nullptr;
-    v2_tls_fs = nullptr;
-    v2_tls_out = nullptr;
-    v2_tls_ds = nullptr;
+    struct Unpin { ~Unpin() { std::lock_guard<std::mutex> lock(g_mx); g_pin_c = -1; g_pin_p = -1; } } unpin;
+    const Snap& C = g_pool[ci];
+    const Snap& P = g_pool[pi];
+    double t = 1.0;
+    bool interp = false;
+    if (smooth_on && pi != ci) {
+        // a sub-frame pair: the same level and width, both tile frames, 6..40 ms apart
+        // (the DOS game flips once per game frame on some screens: 50 ms, not a sub-frame)
+        const double freq = (double)SDL_GetPerformanceFrequency();
+        const double period = (double)(C.t - P.t) / freq;               // s between the two newest flips
+        const bool pair = C.tile_frame && P.tile_frame && C.fullscreen == P.fullscreen && C.w == P.w &&
+                          rd16(C.ds, DS_LEVEL) == rd16(P.ds, DS_LEVEL) && period >= 0.006 && period <= 0.040;
+        if (pair) {
+            t = (double)(SDL_GetPerformanceCounter() - C.t) / freq / period;
+            if (t < 0.0) t = 0.0;
+            if (t > 1.0) t = 1.0;
+            interp = true;
+        }
+    }
+    if (!(s_have && !interp && !s_interp && C.seq == s_seq)) {
+        compose_snapshot(C, interp ? &P : nullptr, t, interp, local, s_work, s_out, s_hud, s_badges, &s_w, &s_rows);
+        s_seq = C.seq; s_interp = interp; s_have = true;
+    }
+    g_effective = interp;
+    v2_smooth_last_t = (float)t;
+    v2_smooth_last_w = s_w;
+    v2_smooth_last_reason = 0;
+    out->map = s_out; out->w = s_w; out->rows = s_rows; out->hud = s_hud; out->badges = s_badges; out->smooth = interp;
+    return true;
+}
+
+// Game thread, right after v2_smooth_capture (the V2_FLIP_DUMP of v2_swap_render_buf): the
+// newest snapshot composed at t = 1 with the DS camera into the caller's buffers — the frame
+// the presenter shows for this flip, before any interpolation
+bool v2_flip_frame_for_dump(uint8_t* map, uint8_t* hud, V2DisplayBadge* badges, int* w, int* rows) {
+    static uint8_t work[DS_SIZE];
+    int ci;
+    { std::lock_guard<std::mutex> lock(g_mx); ci = g_cur_i; }
+    if (ci < 0 || !g_pool[ci].valid) return false;
+    compose_snapshot(g_pool[ci], nullptr, 1.0, false, -1, work, map, hud, badges, w, rows);
     return true;
 }

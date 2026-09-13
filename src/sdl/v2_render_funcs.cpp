@@ -475,59 +475,16 @@ void v2_swap_render_buf() {
     // is the verified VGA state.
     {
 #ifdef V2_ONLY
-        // Stage 6.2 gated the shadow-VGA writers out of V2_ONLY ("the
-        // Mode-X pixel model dies in the target engine") but this reader
-        // kept scanning the now-empty v2_vga — the user window went black
-        // while the game ran (2026-08-28 report). The target engine's
-        // frame lives in the linear composition buffers: viewport in
-        // v2_render_buf, HUD in v2_hud_buf — present those.
-        extern uint8_t v2_hud_buf[320 * 64];
-        extern uint8_t v2_display_hud_buf[];
-        // A chunk screen (byte_2AAAF & 0x42: the logos, the title, the password screen) is
-        // presented from the shadow-VGA page model (2026-09-11): the window through the CRTC
-        // start the sub_16775 mirror published (the title's scroll from the art to the logo),
-        // the HUD band from VGA rows 0..63 (the picture's bottom lives there behind the split),
-        // the DAC fade as it is — the frame the DOS build shows, byte for byte. The CJK text
-        // overlay (UX6) is painted over it; the tile levels keep the page-list composition.
-        {
-            extern uint8_t* v2_vm_get_shadow_ds();
-            const uint8_t* sh = v2_vm_get_shadow_ds();
-            const bool chunk_screen = sh && (sh[DS_LEVEL_FLAGS] & 0x42) != 0;
-            if (chunk_screen && v2_vga_fetch_page(v2_display_buf, 320 * 176)) {
-                for (int y = 0; y < 64; y++) memcpy(v2_display_hud_buf + y * 320, v2_vga + (size_t)y * 0x56u * 4u, 320);
-                memset(v2_display_buf + 320 * 176, 0, 320 * 64);
-                v2_display_w = 320;
-                v2_display_fullscreen = 0;
-                // the CJK overlay (v2_draw_ui with the cells from the page) onto the presented frame
-                {
-                    uint8_t* save_out = v2_tls_out; const int save_w = v2_fbw; const bool save_f = v2_compose_at_flip, save_c = v2_tls_ui_cells_from_page;
-                    v2_tls_out = v2_display_buf; v2_fbw = 320; v2_compose_at_flip = true; v2_tls_ui_cells_from_page = true;
-                    v2_draw_ui(0);
-                    v2_tls_out = save_out; v2_fbw = save_w; v2_compose_at_flip = save_f; v2_tls_ui_cells_from_page = save_c;
-                }
-            } else {
-                // all 200 rows: rows 176..199 matter only on full-screen LVX scenes
-                memcpy(v2_display_buf, v2_render_buf, (size_t)v2_fbw * 240);
-                v2_display_w = v2_fbw;   // UX stage 9 step 4: the frame's width travels with it
-                { const int r = v2_view_rows(); v2_display_fullscreen = (r > 176) ? r : 0; }   // 0 = HUD layout, else the map rows shown
-                memcpy(v2_display_hud_buf, v2_hud_buf, 320 * 64);
-            }
-        }
-        // UX stage 8 step 2 (co-op): which player holds each viking, and where
-        // its portrait sits in the HUD art (ds:[vk-0x7A84] -> the VGA offset of
-        // v2_draw_hud_portrait) — the presenter paints the P1/P2/P3 badges.
-        { extern uint8_t* v2_vm_get_shadow_ds();
-          const uint8_t* sh = v2_vm_get_shadow_ds();
-          for (int vk = 0; vk < 3; vk++) {
-              V2DisplayBadge& b = v2_display_badge[vk];
-              b.owner = -1;
-              if (!sh || g_v2_coop_players <= 1) continue;
-              uint16_t vga_off = *(const uint16_t*)(sh + (uint16_t)(vk * 2 - 0x7A84));
-              b.x = (vga_off % 86) * 4 + 3;
-              b.y = vga_off / 86;
-              b.owner = v2_coop_owner((uint16_t)(vk * 2));
-          } }
-        v2_smooth_capture();          // UX stage 9: the tick snapshot for the interpolating presenter
+        // The game build (2026-09-15): the game thread paints no pixels and publishes no frame —
+        // it publishes a SNAPSHOT of this flip (v2_smooth_capture: the DS, the render map, the
+        // page's display list and tile words, the background VGA — or the whole shadow VGA on a
+        // chunk screen, byte_2AAAF & 0x42, where the page IS the picture: the logos, the title
+        // with its CRTC scroll, the password screen — the HUD art, the CRTC start and pan, the
+        // co-op badges), and the presenter composes every frame it shows from the two newest
+        // snapshots (v2_present_compose). The former publication of pixels (the composition
+        // buffer, the chunk-screen page fetch with the CJK overlay, the HUD copy, the badges)
+        // lives in the presenter now, from the snapshot.
+        v2_smooth_capture();
 #else
         v2_display_fullscreen = 0;   // verification build presents the shadow-VGA window only
         v2_display_w = 320;          // the shadow-VGA window is the 320-px raster
@@ -668,6 +625,20 @@ void v2_swap_render_buf() {
             char path[560]; snprintf(path, sizeof path, "%s/flip_%04d_f%d.ppm", dir, n, v2_dbg_pre_vm_iter);
             FILE* f = fopen(path, "wb");
             if (f) {
+#ifdef V2_ONLY
+                // the game build (2026-09-15): the presenter's own composition of the snapshot
+                // this flip published, at t = 1, on the canvas as presented (the HUD band centred,
+                // the wings, the badges) — what the user sees at this flip, through the shadow DAC
+                static uint8_t map[V2_FB_MAX_W * 240], hud[320 * 64], canvas[V2_FB_MAX_W * 240]; static V2DisplayBadge bd[3];
+                int W = 320, rows = 0;
+                if (!v2_flip_frame_for_dump(map, hud, bd, &W, &rows)) { memset(map, 0, sizeof map); W = 320; rows = 0; }
+                const int map_rows = rows ? rows : 176;
+                memset(canvas, 0, (size_t)W * 240);
+                memcpy(canvas, map, (size_t)W * map_rows);
+                if (!rows) v2_layout_hud_band(canvas + 176 * W, W, W, hud, bd);
+                fprintf(f, "P6\n%d 240\n255\n", W);
+                for (int i = 0; i < W * 240; i++) { const uint8_t* c = v2_dac_shadow + canvas[i] * 3; fputc(c[0] << 2, f); fputc(c[1] << 2, f); fputc(c[2] << 2, f); }
+#else
                 // the presenter's canvas: the map rows of the display buffer, then the HUD band
                 // (rows 176..239) from the published HUD buffer — through the shadow DAC just
                 // published (6-bit, << 2 like v2_publish_dac_palette)
@@ -682,6 +653,7 @@ void v2_swap_render_buf() {
                     const uint8_t* c = v2_dac_shadow + idx * 3;
                     fputc(c[0] << 2, f); fputc(c[1] << 2, f); fputc(c[2] << 2, f);
                 }
+#endif
                 fclose(f);
             }
 #ifndef V2_ONLY
@@ -1616,6 +1588,9 @@ void v2_crtc_for_camera(const uint8_t* s, uint32_t* crtc, uint8_t* pan) {
 // crtc + y*0x56 + ((pan + x) >> 2), plane (pan + x) & 3 (v2_vga_fetch_page's addressing, with
 // the 64K wrap of the address counter). par_on: index 0 stays transparent (the parallax layer
 // beneath), as in the tile pass.
+void v2_vga_readout(uint8_t* buf, int fbw, int rows, const uint8_t* plane, uint32_t crtc, uint8_t pan, bool par_on) {   // render_v2.h: the presenter's page of a chunk screen (the snapshot's whole shadow VGA)
+    v2_vga_bg_readout(buf, fbw, rows, plane, crtc, pan, par_on);
+}
 static void v2_vga_bg_readout(uint8_t* buf, int fbw, int rows, const uint8_t* bg, uint32_t crtc, uint8_t pan, bool par_on) {
     // The CRTC window starts at the camera's left edge (sub_16775: (x >> 2) + 8 from
     // DS_VIEWPORT_X), and frame column 0 is that edge in every width — the wide frame's
@@ -1958,7 +1933,23 @@ void v2_compose_page(uint16_t ds_val, uint16_t page) {
                 *(const uint16_t*)(s + DS_LEVEL), s[DS_LEVEL_FLAGS], g_page_list[v2_page_idx(page)].n);
     }
     v2_tls_ui_cells_from_page = true;                     // the text cells are the page's glyph commands
+#ifndef V2_ONLY
     v2_draw_tiles(ds_val);
+#else
+    // The game build paints no pixels here (2026-09-15): the presenter composes every frame it
+    // shows from the snapshot this flip publishes (v2_smooth.cpp). What v2_draw_tiles decided at
+    // its head is still decided here — the frame's kind and width the snapshot records — with
+    // exactly the assignments v2_draw_tiles makes: nothing while the map segments are not up
+    // yet, the 320-px chunk raster on a chunk screen (byte_2AAAF & 0x42), else the view width.
+    {
+        uint8_t* s = v2_get_ds_base(ds_val);
+        V2StateViewC st(s);
+        if (st.seg_fs() && st.seg_tilegfx()) {
+            if (v2gs(s).level_flags_b() & 0x42) { v2_last_frame_tiles = false; v2_fbw = 320; }
+            else { v2_chunk_bg_valid = false; v2_last_frame_tiles = true; v2_fbw = v2_view_w; }
+        }
+    }
+#endif
     v2_page_list_bake(page, v2_get_ds_base(ds_val));   // the dead masks as of this flip; fully erased commands go
     if (g_pl_cell_trace == -3) {   // debug V2_PL_CELL_TRACE=<col>,<row>: resolve the cell through the map's row table
         const uint8_t* s = v2_get_ds_base(ds_val);
@@ -1980,6 +1971,9 @@ void v2_compose_page(uint16_t ds_val, uint16_t page) {
         if (at >= 0) fprintf(stderr, "V2-PL f%d compose page=%02X n=%d slot=%02X at=%d xy=(%d,%d) off=%04X\n", v2_dbg_pre_vm_iter, page, L.n, g_pl_trace_slot, at, L.cmd[at].x, L.cmd[at].y, L.cmd[at].off);
         else fprintf(stderr, "V2-PL f%d compose page=%02X n=%d slot=%02X absent\n", v2_dbg_pre_vm_iter, page, L.n, g_pl_trace_slot);
     }
+#ifndef V2_ONLY
+    // the test build composes the flip's frame here (the LINCMP oracle against the shadow-VGA
+    // page); the game build's frame is the presenter's composition of the snapshot (V2_ONLY)
     if (!v2_parallax.on) {
         // the exact page: sprites, sub_1C8F1's flagged-tile repaints and sub_1E0C7's glyph cells
         // in the order the passes painted them (the flagged pass below keeps only its parallax
@@ -1996,6 +1990,7 @@ void v2_compose_page(uint16_t ds_val, uint16_t page) {
         v2_draw_list(L, nullptr, nullptr, 1);     // sub_1E0C7: the page's glyph cells over those
     }
     v2_draw_ui(ds_val);                       // the CJK overlay only (v2_tls_ui_cells_from_page)
+#endif
     v2_drawlist_copy(v2_frame_draws, L);      // the flip's list for the presenter (records + arena)
     v2_tls_ui_cells_from_page = false;
     v2_compose_at_flip = false;

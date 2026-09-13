@@ -23866,17 +23866,9 @@ static std::atomic<uint64_t> v2_last_progress_ms{0}; // last time signal_phase O
 static std::thread v2_hang_detector_thread;
 static std::atomic<bool> v2_hang_detector_quit{false};
 
-static void v2_game_thread_func() {
-    while (true) {
-        std::unique_lock<std::mutex> lock(v2_barrier_mutex);
-        v2_cv_start.wait(lock, []{ return v2_pending_phase != -1; });
-
-        int phase = v2_pending_phase;
-        uint16_t ds = v2_barrier_ds;
-        lock.unlock();
-
-        if (phase == -2) break; // quit
-
+// one phase on the game thread — a frame phase, or a blocking-loop phase of the test build:
+// the hang detector's marks, the dispatch, the per-phase verify
+static void v2_run_phase(int phase, uint16_t ds) {
         static const char* phase_names[] = {
             "FRAME_BEGIN", "PRE_VM", "VM", "POST_VM",
             "RENDER1", "POST_FLIP1", "RENDER2", "POST_FLIP2",
@@ -23935,6 +23927,22 @@ static void v2_game_thread_func() {
         // Phase done — clear current_phase to signal "idle"
         v2_current_phase.store(-1, std::memory_order_relaxed);
         v2_last_progress_ms.store(SDL_GetTicks(), std::memory_order_relaxed);
+}
+
+#ifndef V2_ONLY
+// test mode: the phases arrive from the orig thread through the barrier (v2_signal_phase)
+static void v2_game_thread_func() {
+    while (true) {
+        std::unique_lock<std::mutex> lock(v2_barrier_mutex);
+        v2_cv_start.wait(lock, []{ return v2_pending_phase != -1; });
+
+        int phase = v2_pending_phase;
+        uint16_t ds = v2_barrier_ds;
+        lock.unlock();
+
+        if (phase == -2) break; // quit
+
+        v2_run_phase(phase, ds);
 
         lock.lock();
         v2_pending_phase = -1;
@@ -23942,6 +23950,73 @@ static void v2_game_thread_func() {
         v2_cv_done.notify_one();
     }
 }
+#else
+extern std::atomic<int64_t> v2_dbg_signal_phase_calls;
+extern std::atomic<int64_t> v2_dbg_phase_complete;
+std::atomic<bool> v2_game_thread_done{false};   // the frame loop has left (v2_game_thread_stop waits on it)
+// The game build (2026-09-15): the simulation thread runs the frame loop itself — the twelve
+// phases of one game frame in the orig's order, no barrier (nothing sits on the other side of
+// it here; the blocking loops are inline in the mirrors). Formerly v2_main.cpp's loop signalled
+// the phases one by one from the main thread, which now belongs to the SDL events and the
+// presenter. The pacing is the vsync waits inside the phases (v2_tick_sleep); the 16 ms sleep
+// at the bottom only bounds the spins that flip nothing (menus, idle).
+static void v2_game_thread_func() {
+    static const int seq[12] = { V2_PHASE_FRAME_BEGIN, V2_PHASE_PRE_VM, V2_PHASE_VM, V2_PHASE_POST_VM,
+                                 V2_PHASE_RENDER1, V2_PHASE_POST_FLIP1, V2_PHASE_RENDER2, V2_PHASE_POST_FLIP2,
+                                 V2_PHASE_RENDER3, V2_PHASE_AUDIO_TICK, V2_PHASE_POST_FLIP3, V2_PHASE_FRAME_END };
+    extern bool need_quit;
+    const uint16_t ds = 0;
+    uint32_t frame_target_ms = SDL_GetTicks();
+    const uint32_t FRAME_PERIOD_MS = V2_FRAME_BUDGET_MS;   // v2_timing.h
+    // FPS instrumentation (formerly in v2_main.cpp): the work time per frame, the slow-frame
+    // warning, the 2 s window stats — FPS-PHASE / FPS-SLOW / FPS-STATS lines
+    uint32_t fps_window_start_ms = SDL_GetTicks();
+    int fps_frames_in_window = 0; uint32_t fps_work_total_us = 0; int fps_slow_frames = 0;
+    while (!need_quit) {
+        const uint32_t frame_start_ms = SDL_GetTicks();
+        uint32_t phase_ms[12] = {0};
+        for (int i = 0; i < 12; i++) {
+            const uint32_t t = SDL_GetTicks();
+            v2_dbg_signal_phase_calls++;
+            v2_run_phase(seq[i], ds);
+            v2_dbg_phase_complete++;
+            phase_ms[i] = SDL_GetTicks() - t;
+        }
+        if (SDL_GetTicks() - frame_start_ms > 30)
+            fprintf(stderr, "FPS-PHASE: FB=%u PV=%u VM=%u PoV=%u R1=%u PF1=%u R2=%u PF2=%u R3=%u AT=%u PF3=%u FE=%u total=%u\n",
+                    phase_ms[0], phase_ms[1], phase_ms[2], phase_ms[3], phase_ms[4], phase_ms[5],
+                    phase_ms[6], phase_ms[7], phase_ms[8], phase_ms[9], phase_ms[10], phase_ms[11],
+                    SDL_GetTicks() - frame_start_ms);
+        const uint32_t work_end_ms = SDL_GetTicks();
+        const uint32_t work_ms = work_end_ms - frame_start_ms;
+        fps_work_total_us += work_ms * 1000;
+        fps_frames_in_window++;
+        if (work_ms > FRAME_PERIOD_MS) {
+            fps_slow_frames++;
+            fprintf(stderr, "FPS-SLOW: frame_iter=%d work=%ums > budget=%ums\n", v2_dbg_pre_vm_iter, work_ms, FRAME_PERIOD_MS);
+        }
+        if (work_end_ms - fps_window_start_ms >= 2000) {
+            const float avg_work_ms = (float)fps_work_total_us / (float)fps_frames_in_window / 1000.0f;
+            const float effective_fps = 1000.0f * fps_frames_in_window / (float)(work_end_ms - fps_window_start_ms);
+            fprintf(stderr, "FPS-STATS: window=%ums frames=%d avg_work=%.1fms slow=%d effective_fps=%.1f (target=%.1f)\n",
+                    work_end_ms - fps_window_start_ms, fps_frames_in_window, avg_work_ms, fps_slow_frames, effective_fps, 1000.0f / FRAME_PERIOD_MS);
+            fps_window_start_ms = work_end_ms; fps_frames_in_window = 0; fps_work_total_us = 0; fps_slow_frames = 0;
+        }
+#ifdef HEADLESS
+        // V2_ONLY+HEADLESS: --max-frames from the loop too (the barrier hook never runs standalone)
+        { extern int headless_check_exit(void); headless_check_exit(); }
+#endif
+        // V2_NOVSYNC=1 (diagnostics): no real-time pacing, a replay runs at CPU speed
+        static int novsync = -1;
+        if (novsync < 0) { const char* e = getenv("V2_NOVSYNC"); novsync = (e && *e == '1') ? 1 : 0; }
+        frame_target_ms += FRAME_PERIOD_MS;
+        const uint32_t now = SDL_GetTicks();
+        if (!novsync && (int32_t)(frame_target_ms - now) > 0) SDL_Delay(frame_target_ms - now);
+        else if ((int32_t)(frame_target_ms - now) <= 0) frame_target_ms = now;   // fell behind: no catch-up burst
+    }
+    v2_game_thread_done.store(true, std::memory_order_release);
+}
+#endif
 
 // Hang detector — runs on separate thread, checks every 500ms.
 // If v2 thread hasn't progressed for >2 sec while in a phase OR 5 sec while
@@ -24068,12 +24143,22 @@ void v2_game_thread_start() {
 }
 
 void v2_game_thread_stop() {
+#ifdef V2_ONLY
+    // the frame loop leaves on need_quit at its next frame boundary, or the game thread exits
+    // the process itself from inside a wait (v2_nopl_pump's choke → v2_only_clean_exit): give
+    // it a moment, then let it go
+    extern bool need_quit; need_quit = true;
+    for (int i = 0; i < 200 && !v2_game_thread_done.load(std::memory_order_acquire); i++) SDL_Delay(10);
+    if (v2_game_thread_done.load(std::memory_order_acquire)) { if (v2_game_thread.joinable()) v2_game_thread.join(); }
+    else if (v2_game_thread.joinable()) v2_game_thread.detach();
+#else
     {
         std::lock_guard<std::mutex> lock(v2_barrier_mutex);
         v2_pending_phase = -2;
         v2_cv_start.notify_one();
     }
     if (v2_game_thread.joinable()) v2_game_thread.join();
+#endif
 }
 
 // ============================================================================

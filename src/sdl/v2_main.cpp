@@ -249,6 +249,9 @@ int main(int argc, char* argv[]) {
     // UX stage 8 step 3: the lockstep lobby — the host waits for its players,
     // a client takes its player number and the host's world options; either
     // way the recorder then captures this client's keys for a later read.
+    // The presenter lives on this (main) thread (2026-09-15): the lobby's wait spins one
+    // presenter iteration at a time, so the window is alive while the host waits.
+    v2_net_idle_hook = v2_presenter_iteration;
     {
         const int delay = (net_delay < 0) ? 2 : (net_delay < 1 ? 1 : (net_delay > 8 ? 8 : net_delay));
         if (net_host_port > 0) {
@@ -261,6 +264,7 @@ int main(int argc, char* argv[]) {
         // a client that joined a game already running gets the host's image first (synced = 0)
         if (v2_net_active()) v2_input_recorder_net(g_v2_local_player, (net_join && v2_net_joined_late()) ? 0 : 1);
     }
+    v2_net_idle_hook = nullptr;
 
     // Load baked static EXE data, then point v2 base at it.
     v2_load_static_data();
@@ -270,11 +274,9 @@ int main(int argc, char* argv[]) {
     // --debug shadow_ds[0x202] write happens inside v2_startup() (called from
     // v2_run_animation_vm above). g_debug_mode parsed from argv at top of main.
 
-    v2_game_thread_start();
-
     // (direction V step 2) teleport: load a full state snapshot before the
-    // first frame (game thread is parked until the first phase signal, so the
-    // fill is single-threaded). With V2_SAVE_STATE also set, save back
+    // first frame (the game thread starts below, after the fill, so the fill is
+    // single-threaded). With V2_SAVE_STATE also set, save back
     // immediately — the file pair is a byte-roundtrip channel for tests.
     { const char* lp = getenv("V2_LOAD_STATE");
       if (lp) {
@@ -287,117 +289,21 @@ int main(int argc, char* argv[]) {
           if (sp) v2_state_save(sp);
       } }
 
-    // Main loop: signal v2 phases sequentially. Each phase blocks until done.
-    //
-    // Orig timing (measured on Linux ARM64 by adding tick counter to render.cpp):
-    //   render thread tick ≈ 57 Hz (SDL_Delay(15) → ~17.5 ms on Linux scheduler)
-    //   word_3287c DEC per render tick → ~17.5 ms per sub_10130 wait
-    //   Per orig game frame: 3× sub_16775 + 3× sub_10130 = ~53 ms = ~18.9 FPS
-    //   (NOT 22 FPS as the spec ~15 ms × 3 = ~45 ms would imply — Linux jitter
-    //    rounds SDL_Delay up to scheduler tick boundary).
-    uint16_t ds = 0;
-    uint32_t frame_target_ms = SDL_GetTicks();
-    const uint32_t FRAME_PERIOD_MS = V2_FRAME_BUDGET_MS;  // stage 6.3: v2_timing.h
-    // FPS instrumentation: track work time per frame (excluding sleep). Print
-    // running stats every N frames + warn when individual frame exceeds budget.
-    uint32_t fps_window_start_ms = SDL_GetTicks();
-    int      fps_frames_in_window = 0;
-    uint32_t fps_work_total_us = 0;  // sum of work time (no sleep) per window
-    int      fps_slow_frames = 0;    // frames where work > FRAME_PERIOD_MS
-    while (!need_quit) {
-        uint32_t frame_start_ms = SDL_GetTicks();
-        uint32_t phase_ms[11] = {0};
-        uint32_t t = SDL_GetTicks();
-        v2_signal_phase(V2_PHASE_FRAME_BEGIN, ds);    phase_ms[0] = SDL_GetTicks() - t;
-        t = SDL_GetTicks();
-        v2_signal_phase(V2_PHASE_PRE_VM, ds);         phase_ms[1] = SDL_GetTicks() - t;
-        t = SDL_GetTicks();
-        v2_signal_phase(V2_PHASE_VM, ds);             phase_ms[2] = SDL_GetTicks() - t;
-        t = SDL_GetTicks();
-        v2_signal_phase(V2_PHASE_POST_VM, ds);        phase_ms[3] = SDL_GetTicks() - t;
-        t = SDL_GetTicks();
-        v2_signal_phase(V2_PHASE_RENDER1, ds);        phase_ms[4] = SDL_GetTicks() - t;
-        t = SDL_GetTicks();
-        v2_signal_phase(V2_PHASE_POST_FLIP1, ds);     phase_ms[5] = SDL_GetTicks() - t;
-        t = SDL_GetTicks();
-        v2_signal_phase(V2_PHASE_RENDER2, ds);        phase_ms[6] = SDL_GetTicks() - t;
-        t = SDL_GetTicks();
-        v2_signal_phase(V2_PHASE_POST_FLIP2, ds);     phase_ms[7] = SDL_GetTicks() - t;
-        t = SDL_GetTicks();
-        v2_signal_phase(V2_PHASE_RENDER3, ds);        phase_ms[8] = SDL_GetTicks() - t;
-        // №59: orig 0xDB/0xE1 (word_30C14=0 + sub_108c8) run BEFORE sub_1086f
-        v2_signal_phase(V2_PHASE_AUDIO_TICK, ds);
-        t = SDL_GetTicks();
-        v2_signal_phase(V2_PHASE_POST_FLIP3, ds);     phase_ms[9] = SDL_GetTicks() - t;
-        t = SDL_GetTicks();
-        v2_signal_phase(V2_PHASE_FRAME_END, ds);      phase_ms[10] = SDL_GetTicks() - t;
-        // Log per-phase breakdown when frame is slow (>30ms)
-        if (frame_start_ms != 0 && SDL_GetTicks() - frame_start_ms > 30) {
-            fprintf(stderr, "FPS-PHASE: FB=%u PV=%u VM=%u PoV=%u R1=%u PF1=%u R2=%u PF2=%u R3=%u PF3=%u FE=%u total=%u\n",
-                phase_ms[0], phase_ms[1], phase_ms[2], phase_ms[3], phase_ms[4],
-                phase_ms[5], phase_ms[6], phase_ms[7], phase_ms[8], phase_ms[9], phase_ms[10],
-                SDL_GetTicks() - frame_start_ms);
-        }
-        uint32_t work_end_ms = SDL_GetTicks();
-        uint32_t work_ms = work_end_ms - frame_start_ms;
-        fps_work_total_us += work_ms * 1000;
-        fps_frames_in_window++;
-        // Per-frame slow-frame warning (any frame whose work alone exceeds budget).
-        if (work_ms > FRAME_PERIOD_MS) {
-            fps_slow_frames++;
-            // v2_dbg_pre_vm_iter: file-scope extern (top of file)
-            fprintf(stderr, "FPS-SLOW: frame_iter=%d work=%ums > budget=%ums\n",
-                    v2_dbg_pre_vm_iter, work_ms, FRAME_PERIOD_MS);
-        }
-        // Window stats every ~2s (fps target × 2s).
-        if (work_end_ms - fps_window_start_ms >= 2000) {
-            float avg_work_ms = (float)fps_work_total_us / (float)fps_frames_in_window / 1000.0f;
-            float effective_fps = 1000.0f * fps_frames_in_window / (float)(work_end_ms - fps_window_start_ms);
-            fprintf(stderr, "FPS-STATS: window=%ums frames=%d avg_work=%.1fms slow=%d "
-                            "effective_fps=%.1f (target=%.1f)\n",
-                    work_end_ms - fps_window_start_ms, fps_frames_in_window,
-                    avg_work_ms, fps_slow_frames, effective_fps,
-                    1000.0f / FRAME_PERIOD_MS);
-            fps_window_start_ms = work_end_ms;
-            fps_frames_in_window = 0;
-            fps_work_total_us = 0;
-            fps_slow_frames = 0;
-        }
+    // The simulation runs in its own thread (2026-09-15): the frame loop itself lives there
+    // (v2_game_thread_func in v2_vm.cpp — the twelve phases of a game frame in the orig's order,
+    // the FPS instrumentation, the pacing); this thread is the SDL events and the presenter.
+    v2_game_thread_start();
 
-        // Frame rate limiter: sleep to target 60 FPS.
-#ifdef HEADLESS
-        // V2_ONLY+HEADLESS: the barrier-phase hook that normally enforces
-        // --max-frames never runs standalone — enforce it from the main loop.
-        { extern int headless_check_exit(void); headless_check_exit(); }
-#endif
-        // №59: plain V2_ONLY --max-frames enforcement (frame counter is the
-        // FRAME_BEGIN barrier increment — same counter the traces use). The stop itself
-        // is taken by the game thread at the frame boundary (v2_phase_post_flip3 /
-        // v2_blocking_loop_tick → v2_only_clean_exit), the headless builds' point; this
-        // loop only backs it up two seconds of frames later, for a game thread that
-        // passes no frame boundary any more (a wait that never ends).
-        if (g_v2only_max_frames > 0) {
-            // v2_dbg_pre_vm_iter: file-scope extern (top of file)
-            if (v2_dbg_pre_vm_iter >= g_v2only_max_frames + 120) {
-                fprintf(stderr, "V2_ONLY: --max-frames=%d passed by 120 frames without a frame-boundary stop, exiting\n",
-                        g_v2only_max_frames);
-                need_quit = true;
-            }
-        }
-        // V2_NOVSYNC=1 (diagnostics): drop the real-time frame pacing so a
-        // replay runs at CPU speed — the benchmarking channel for the
-        // gencode-vs-interpreter comparison. Default behavior unchanged.
-        static int novsync = -1;
-        if (novsync < 0) { const char* e = getenv("V2_NOVSYNC"); novsync = (e && *e == '1') ? 1 : 0; }
-        frame_target_ms += FRAME_PERIOD_MS;
-        uint32_t now = SDL_GetTicks();
-        if (!novsync && (int32_t)(frame_target_ms - now) > 0) {
-            SDL_Delay(frame_target_ms - now);
-        } else if ((int32_t)(frame_target_ms - now) <= 0) {
-            // Fell behind — reset target to avoid catch-up burst.
-            frame_target_ms = now;
-        }
-    }
+    // The main thread is the presenter (2026-09-15): the SDL events, the vsync latch, the frame
+    // composed from the newest snapshots, the present — until the quit. The frame loop that
+    // used to be here (the phases signalled one by one through the barrier, with the FPS
+    // instrumentation and the --max-frames fallback) runs in the game thread now
+    // (v2_game_thread_func, v2_vm.cpp); the fallback sits in v2_presenter_iteration.
+    // Orig timing note kept from that loop (measured on Linux ARM64 by adding a tick counter
+    // to render.cpp): the render thread ticked at ≈ 57 Hz (SDL_Delay(15) → ~17.5 ms on the
+    // Linux scheduler), one word_3287c DEC per tick → ~17.5 ms per sub_10130 wait, three
+    // flips + three waits per game frame ≈ 53 ms ≈ 18.9 FPS.
+    v2_presenter_loop();
 
     printf("V2_ONLY: quitting\n");
     v2_game_thread_stop();

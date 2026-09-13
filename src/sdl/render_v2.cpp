@@ -476,9 +476,16 @@ void updateDraw_v2()
 }
 
 std::thread render_thread_v2;
+static void* g_presenter_state = nullptr;   // the state handed to render_callback_v2 by every iteration
 
-void render_thread_proc_v2(void* _state)
+// The presenter in three parts (2026-09-15): the window and the renderer, one iteration, the
+// loop — the test build runs all three on its render thread (render_thread_proc_v2 below), the
+// game build on the MAIN thread (v2_main.cpp: the events and the presentation belong to the
+// main thread, the simulation to its own thread), and the lockstep lobby's wait spins one
+// iteration at a time (v2_net_idle_hook) so the window lives while the host waits.
+void v2_presenter_init(void* _state)
 {
+  g_presenter_state = _state;
   // myDrawInfo_v2 is allocated in render_init_v2() on the game thread BEFORE this
   // detached thread starts (#179). It doubles as the "v2 mirror enabled" gate
   // (`if (myDrawInfo_v2)` throughout seg000); calloc'ing it here raced both the
@@ -576,11 +583,25 @@ void render_thread_proc_v2(void* _state)
         printf("render_v2: no game controller support (%s)\n", SDL_GetError());
 #endif
     printf("render_v2: Entering main loop...\n");
+  }
+}
 
-    int loop_counter = 0;
-    while (!need_quit)  // Используем флаг первого окна
+// one presenter iteration: the events, the pacing wait, the frame, the present
+void v2_presenter_iteration(void)
+{
+    static int loop_counter = 0;
+    void* _state = g_presenter_state;
     {
 #ifdef V2_ONLY
+      // the --max-frames fallback (formerly in v2_main.cpp's loop): the stop itself is taken
+      // by the game thread at the frame boundary (v2_phase_post_flip3 / v2_blocking_loop_tick
+      // → v2_only_clean_exit); this backs it up 120 frames later, for a game thread that
+      // passes no frame boundary any more (a wait that never ends)
+      { extern int g_v2only_max_frames;
+        if (g_v2only_max_frames > 0 && v2_dbg_pre_vm_iter >= g_v2only_max_frames + 120 && !need_quit) {
+            fprintf(stderr, "V2_ONLY: --max-frames=%d passed by 120 frames without a frame-boundary stop, exiting\n", g_v2only_max_frames);
+            need_quit = true;
+        } }
       // V2_ONLY: orig window hidden, no event handler there → handle events here.
       // v2_input_poll_event = drop-in SDL_PollEvent wrapper for record/replay.
       extern uint16_t input_keys, input_keys_v2;
@@ -732,7 +753,21 @@ void render_thread_proc_v2(void* _state)
 
       loop_counter++;
     }
+}
+
+void v2_presenter_loop(void)
+{
+  while (!need_quit) {
+    if (myWindow_v2) v2_presenter_iteration();
+    else SDL_Delay(50);   // no window (its creation failed): the game runs on, this only waits for the quit
   }
+}
+
+// the test build's render thread: the presenter beside the two game threads
+void render_thread_proc_v2(void* _state)
+{
+  v2_presenter_init(_state);
+  v2_presenter_loop();
 }
 
 void render_init_v2(void* state)
@@ -745,6 +780,12 @@ void render_init_v2(void* state)
     myDrawInfo_v2 = (myDrawInfoS_v2 *)calloc(1, sizeof(myDrawInfoS_v2));
     assert(myDrawInfo_v2);
   }
+#ifdef V2_ONLY
+  // the game build (2026-09-15): the presenter lives on the main thread — the window and the
+  // renderer are created here, on the caller's (main) thread; v2_main.cpp runs the loop
+  v2_presenter_init(state);
+#else
   render_thread_v2 = std::thread(render_thread_proc_v2, state);
   render_thread_v2.detach();
+#endif
 }

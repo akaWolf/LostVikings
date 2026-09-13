@@ -79,3 +79,8 @@ bool v2_net_take_image(std::vector<uint8_t>& img, long& read_n);          // the
 void v2_net_send_hash(int frame, uint32_t hash);
 
 void v2_net_shutdown();
+
+// the host's lobby wait spins on the main thread before the game starts; in the game build the
+// presenter lives on the main thread (2026-09-15), so the wait runs one presenter iteration per
+// spin through this hook (the window stays alive; nullptr = a plain 20 ms sleep)
+extern void (*v2_net_idle_hook)(void);

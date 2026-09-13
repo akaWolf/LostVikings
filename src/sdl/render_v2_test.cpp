@@ -46,14 +46,26 @@ void render_callback_v2(void* state)
 
     uint8_t* sbuf = myDrawInfo_v2->stableBuffer;
 
-    // UX stage 9: an interpolated frame between the two newest ticks (own
-    // passes on a snapshot, v2_smooth.cpp) — else the tick frame as before.
-    static uint8_t v2_smooth_frame[V2_FB_MAX_W * 240];
+    // The frame source. The game build (2026-09-15): the presenter is the only renderer — every
+    // frame is composed from the snapshots the game thread publishes at its flips
+    // (v2_present_compose, v2_smooth.cpp): the newest flip, or an interpolation between the two
+    // newest under SMOOTH. The test build presents the shadow-VGA page the game thread
+    // published (v2_display_buf), as before.
     // debug: V2_SMOOTH_TIME=1 — the presenter's own composition cost per present
-    // (v2_smooth_render: the snapshot copies + the passes), avg/max ms every 2 s
+    // (v2_present_compose: the passes), avg/max ms every 2 s
     static int sm_time = -1; if (sm_time < 0) sm_time = getenv("V2_SMOOTH_TIME") ? 1 : 0;
     const uint64_t sm_t0 = sm_time ? SDL_GetPerformanceCounter() : 0;
-    const bool smooth = v2_smooth_render(v2_smooth_frame);
+    const uint8_t* frame_src; int FW; int fs_rows; const uint8_t* hud_src; const V2DisplayBadge* badge_src; bool smooth;
+#ifdef V2_ONLY
+    static uint8_t black[V2_FB_MAX_W * 240];
+    V2PresentFrame pf;
+    if (v2_present_compose(&pf)) { frame_src = pf.map; FW = pf.w; fs_rows = pf.rows; hud_src = pf.hud; badge_src = pf.badges; smooth = pf.smooth; }
+    else { frame_src = black; FW = 320; fs_rows = 0; hud_src = black; badge_src = nullptr; smooth = false; }
+    v2_display_w = FW; v2_display_fullscreen = fs_rows;   // the presenter owns these in the game build (updateDraw_v2 reads the rows)
+#else
+    extern uint8_t v2_display_hud_buf[];
+    frame_src = v2_display_buf; FW = v2_display_w; fs_rows = v2_display_fullscreen; hud_src = v2_display_hud_buf; badge_src = v2_display_badge; smooth = false;
+#endif
     if (sm_time) {
         static double acc = 0.0, mx = 0.0; static int n = 0, composed = 0; static uint32_t last_ms = 0;
         const double ms = (double)(SDL_GetPerformanceCounter() - sm_t0) / (double)SDL_GetPerformanceFrequency() * 1000.0;
@@ -65,11 +77,7 @@ void render_callback_v2(void* state)
             acc = 0.0; mx = 0.0; n = 0; composed = 0; last_ms = now;
         }
     }
-    extern int v2_smooth_last_w;
-    // UX stage 9 step 4: the frame's width (its row stride) — the interpolated
-    // frame's own, else the published tick frame's
-    const int FW = smooth ? v2_smooth_last_w : v2_display_w;
-    v2_present_w = FW;
+    v2_present_w = FW;   // UX stage 9 step 4: the frame's width (its row stride)
     // debug: V2_PRESENT_DUMP=<dir>:<from>-<to> writes EVERY presented frame whose
     // game frame lies in [from, to] as <dir>/pf_<n>_f<game frame>_<ms>.ppm (the
     // 320x240 canvas the presenter shows: the interpolated frame or the published
@@ -87,7 +95,7 @@ void render_callback_v2(void* state)
                                      smooth ? "sm" : "tick", v2_smooth_last_reason);
             FILE* f = fopen(path, "wb");
             if (f) {
-                const uint8_t* src = smooth ? v2_smooth_frame : v2_display_buf;
+                const uint8_t* src = frame_src;
                 fprintf(f, "P6\n%d 240\n255\n", FW);
                 for (int i = 0; i < FW * 240; i++) { const SDL_Color& c = myDrawInfo_v2->drawPalette[src[i]]; fputc(c.r, f); fputc(c.g, f); fputc(c.b, f); }
                 fclose(f);
@@ -110,7 +118,7 @@ void render_callback_v2(void* state)
                                      (unsigned)SDL_GetTicks());
             FILE* f = fopen(path, "wb");
             if (f) {
-                const uint8_t* src = smooth ? v2_smooth_frame : v2_display_buf;
+                const uint8_t* src = frame_src;
                 fprintf(f, "P6\n%d 200\n255\n", FW);
                 for (int i = 0; i < FW * 200; i++) { const SDL_Color& c = myDrawInfo_v2->drawPalette[src[i]]; fputc(c.r, f); fputc(c.g, f); fputc(c.b, f); }
                 fclose(f);
@@ -121,7 +129,7 @@ void render_callback_v2(void* state)
     // Copy viewport (rows 0-175) from the chosen frame under lock
     {
         std::lock_guard<std::mutex> lock(v2_display_mutex);
-        const uint8_t* src = smooth ? v2_smooth_frame : v2_display_buf;
+        const uint8_t* src = frame_src;
         for (int y = 0; y < 176; y++) {
             memcpy(sbuf + y * V2_FB_MAX_W, src + y * FW, FW);
             memset(sbuf + y * V2_FB_MAX_W + FW, 0, V2_FB_MAX_W - FW); // padding
@@ -131,11 +139,11 @@ void render_callback_v2(void* state)
         if (g_dump_pgm_request.load(std::memory_order_acquire)) {
             FILE* f = fopen("/tmp/v2_ladder.ppm", "wb");
             if (f) {
-                const int H = v2_display_fullscreen ? v2_display_fullscreen : 176;   // UX stage 0/9: map rows shown
-                fprintf(f, "P6\n%d %d\n255\n", v2_display_w, H);
+                const int H = fs_rows ? fs_rows : 176;   // UX stage 0/9: map rows shown
+                fprintf(f, "P6\n%d %d\n255\n", FW, H);
                 for (int y = 0; y < H; y++) {
-                    for (int x = 0; x < v2_display_w; x++) {
-                        uint8_t c = v2_display_buf[y * v2_display_w + x];
+                    for (int x = 0; x < FW; x++) {
+                        uint8_t c = frame_src[y * FW + x];
                         fputc(myDrawInfo_v2->drawPalette[c].r, f);
                         fputc(myDrawInfo_v2->drawPalette[c].g, f);
                         fputc(myDrawInfo_v2->drawPalette[c].b, f);
@@ -155,62 +163,22 @@ void render_callback_v2(void* state)
     extern uint8_t v2_display_hud_buf[];
     {
         std::lock_guard<std::mutex> lock(v2_display_mutex);
-        if (v2_display_fullscreen) {
-            const uint8_t* src2 = smooth ? v2_smooth_frame : v2_display_buf;   // UX stage 9
+        if (fs_rows) {
+            const uint8_t* src2 = frame_src;   // UX stage 9
             // UX stage 0/9: LVX full-screen scene (200 rows) or an LVX_TALL224
             // level (224 rows) — rows 176.. come from the map render, the rest
             // stay black. The HUD band is never painted on these slots.
-            const int shown = v2_display_fullscreen - 176;
+            const int shown = fs_rows - 176;
             for (int y = 0; y < 64; y++) {
                 if (y < shown) memcpy(sbuf + (176 + y) * V2_FB_MAX_W, src2 + (176 + y) * FW, FW);
                 else        memset(sbuf + (176 + y) * V2_FB_MAX_W, 0, FW);
                 memset(sbuf + (176 + y) * V2_FB_MAX_W + FW, 0, V2_FB_MAX_W - FW); // padding
             }
         } else {
-            // the 320-px HUD art sits centred on a wide frame; the wings beside it
-            // continue the stone wall (2026-09-06: the sides were black). The HUD
-            // is a wall of 32-px blocks with the portrait slots in the middle; the
-            // outermost block column on each side (art columns 0..31 / 288..319)
-            // is reflected outward, ping-pong, so the wall runs on without a seam:
-            // the first mirror axis is the picture edge (the block cut there just
-            // doubles), the next ones fall inside the rough stone texture. Only the
-            // wall is used — a plain mirror of 53 columns (16:9) reached into the
-            // first portrait slot.
-            const int x0 = (FW - 320) / 2;
-            const int WALL = 32;
-            for (int y = 0; y < 64; y++) {
-                uint8_t* row = sbuf + (176 + y) * V2_FB_MAX_W;
-                const uint8_t* art = v2_display_hud_buf + y * 320;
-                memset(row, 0, V2_FB_MAX_W);
-                memcpy(row + x0, art, 320);
-                for (int d = 1; d <= x0; d++) {                              // d = distance from the picture edge
-                    const int k = (d - 1) % (2 * WALL);
-                    const int off = (k < WALL) ? k : 2 * WALL - 1 - k;       // 0..31, reflected every 32 px
-                    row[x0 - d] = art[off];                                  // left wing
-                    if (x0 + 320 + d - 1 < FW) row[x0 + 320 + d - 1] = art[319 - off];   // right wing
-                }
-            }
-            // UX stage 8 step 2 (co-op): the player's number in the corner of
-            // the portrait of the viking he holds — the DOS letter look (body
-            // colour 2, the (+1,+1) shadow 1: black/white on 1/2 in every
-            // level palette).
-            static const char* const DIGIT[3][5] = {
-                { ".#.", "##.", ".#.", ".#.", "###" },
-                { "###", "..#", "###", "#..", "###" },
-                { "###", "..#", "###", "..#", "###" },
-            };
-            for (int vk = 0; vk < 3; vk++) {
-                const V2DisplayBadge& b = v2_display_badge[vk];
-                if (b.owner < 0 || b.owner > 2) continue;
-                const int bx = x0 + b.x + 1, by = b.y + 1;
-                for (int r = 0; r < 5; r++)
-                    for (int c = 0; c < 3; c++) {
-                        if (DIGIT[b.owner][r][c] != '#') continue;
-                        const int px = bx + c, py = by + r;
-                        if (py + 1 < 64 && px + 1 < FW) sbuf[(176 + py + 1) * V2_FB_MAX_W + px + 1] = 1;   // shadow
-                        if (py < 64 && px < FW)         sbuf[(176 + py) * V2_FB_MAX_W + px] = 2;           // body
-                    }
-            }
+            // the 320-px HUD art centred on a wide frame, the stone wall mirrored outward on
+            // the wings, the co-op badges on the portraits (v2_layout_hud_band, v2_smooth.cpp —
+            // the flip dump paints the same canvas)
+            v2_layout_hud_band(sbuf + 176 * V2_FB_MAX_W, V2_FB_MAX_W, FW, hud_src, badge_src);
         }
     }
 }

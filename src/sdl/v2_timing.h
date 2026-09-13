@@ -11,9 +11,13 @@
 //     by the presenter on the 60 Hz schedule of its refreshes (render_v2.cpp,
 //     v2_vsync_wait_game) — the game's flips and the display's frames run in
 //     lockstep as on the VGA. Without a real vsync the tick is a 60.0 Hz timer.
-//   - PRESENTATION: a separate thread snapshots the newest flip right before
-//     each refresh and blits it; SMOOTH (v2_smooth.cpp) interpolates between
+//   - PRESENTATION (2026-09-15): the MAIN thread is the presenter of the game
+//     build (the SDL events, the vsync latch, the frame, the present); the
+//     simulation runs in its own thread and publishes a snapshot at every flip
+//     (v2_smooth.cpp) — the presenter composes every frame it shows from the
+//     newest snapshot right before each refresh; SMOOTH interpolates between
 //     the two newest flips for displays whose refresh is no multiple of 60.
+//     (The test build keeps its render thread beside the orig and mirror threads.)
 #pragma once
 #include <SDL2/SDL.h>
 #include <cstdlib>
@@ -21,7 +25,7 @@
 
 // The VGA refresh of Mode X 320x240: the tick period when no display vsync is available.
 static const double V2_TICK_HZ = 60.0;
-// Presenter thread pacing (snapshot + blit cadence) without a vsync present.
+// Presenter pacing (the compose + blit cadence) without a vsync present.
 static const uint32_t V2_PRESENT_MS = 15;
 // Main-loop frame budget (outer pacing target; the wait loops inside the
 // phases dominate, so this mostly bounds menu/idle spins).
