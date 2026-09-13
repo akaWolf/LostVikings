@@ -1767,6 +1767,17 @@ static void v2_page_list_bake(uint16_t page, const uint8_t* s) {
     V2DrawList& L = g_page_list[pi];
     const uint32_t* E = g_cell_epoch[pi];
     const int clipx = (int)(int16_t)v2gs(s).clip_limit_x(), clipy = (int)(int16_t)v2gs(s).clip_limit_y();
+    // The erased window: sub_1DE05 pass 2 restores 0x2B columns from the camera's scroll column
+    // over the page's rows (0x19, 0x1E on an LVX_TALL224 level) from its scroll row and never
+    // touches a cell beyond — at 320 px nothing beyond is shown, so a stale sprite image there
+    // is the original's own invisible residue. A wide frame shows those cells (the wing past
+    // 344 px), where a record would then live for ever: a moving sprite left its earlier
+    // frames behind (2026-09-12: coloured fragments beside Erik's head at the page's edge in
+    // 16:10, a garbled double viking in 16:9). Outside the window a record's cell stays alive
+    // only while the record is its slot's newest — the object as it stands; a static sprite
+    // drawn once keeps its cells, a moving one leaves nothing behind.
+    const int win_c0 = (int)(int16_t)v2gs(s).scroll_col(), win_r0 = (int)(int16_t)v2gs(s).scroll_row();
+    const int win_c1 = win_c0 + 0x2B, win_r1 = win_r0 + (v2_view_rows() == 224 ? 0x1E : 0x19);
     int w = 0;
     for (int i = 0; i < L.n; i++) {
         V2DrawCmd c = L.cmd[i];
@@ -1778,6 +1789,7 @@ static void v2_page_list_bake(uint16_t page, const uint8_t* s) {
         memset(c.dead, 0, sizeof c.dead);
         int alive = 0;
         uint32_t killer = 0;   // debug: the newest erase epoch among the dead cells
+        int newest = -1;       // is this record its slot's newest one? (decided on the first cell outside the erased window)
         for (int r = 0; r < nrows; r++) {
             const int row = cy0 + r;
             if (row < 0 || row >= clipy) { alive += ncols; continue; }   // off the map: the erase clips there, nothing restores such a cell
@@ -1785,6 +1797,10 @@ static void v2_page_list_bake(uint16_t page, const uint8_t* s) {
             for (int cc = 0; cc < ncols; cc++) {
                 const int col = cx0 + cc;
                 if (col < 0 || col >= clipx) { alive++; continue; }
+                if (c.slot <= 0xFE && (col >= win_c1 || row >= win_r1)) {   // beyond the erased window (the wing)
+                    if (newest < 0) { newest = 1; for (int j = i + 1; j < L.n; j++) if (L.cmd[j].slot == c.slot) { newest = 0; break; } }
+                    if (!newest) { c.dead[r >> 3] |= (uint64_t)1 << (((r & 7) << 3) | cc); continue; }
+                }
                 const uint32_t wi = (uint16_t)((rowbase + col) << 1) >> 1;
                 const uint64_t bit = (uint64_t)1 << (((r & 7) << 3) | cc);
                 if (!(c.keep[r >> 3] & bit)) { c.dead[r >> 3] |= bit; continue; }   // outside a span copy's cells
@@ -1801,6 +1817,16 @@ static void v2_page_list_bake(uint16_t page, const uint8_t* s) {
                     rd ? rd[0] : 0, rd ? rd[1] : 0, rd ? rd[2] : 0, rd ? rd[3] : 0, rd ? rd[4] : 0, rd ? rd[5] : 0, rd ? rd[6] : 0, rd ? rd[7] : 0, rd ? rd[8] : 0,
                     lv ? lv[0] : 0, lv ? lv[1] : 0, lv ? lv[2] : 0, lv ? lv[3] : 0, lv ? lv[4] : 0, lv ? lv[5] : 0, lv ? lv[6] : 0, lv ? lv[7] : 0, lv ? lv[8] : 0);
         }
+        // debug: V2_PL_WINGDUMP=<frame> — every record of the shown page that reaches beyond the
+        // erased window at that frame, with the slot's current position in the DS
+        { static int wd = -1, wd_f = 0; if (wd < 0) { const char* e = getenv("V2_PL_WINGDUMP"); wd = 0; if (e && *e) { wd = 1; wd_f = atoi(e); } }
+          if (wd == 1 && v2_dbg_pre_vm_iter == wd_f && (cx0 + ncols > win_c1 || cy0 + nrows > win_r1)) {
+              const int sx = c.slot <= 0xFE ? (int)(int16_t)*(const uint16_t*)(s + (uint16_t)(c.slot + OBJ_SPRITE_X)) : -1;
+              const int sy = c.slot <= 0xFE ? (int)(int16_t)*(const uint16_t*)(s + (uint16_t)(c.slot + OBJ_SPRITE_Y)) : -1;
+              const int sfl = c.slot <= 0xFE ? (int)*(const uint16_t*)(s + (uint16_t)(c.slot + OBJ_SPRITE_FLAGS)) : -1;
+              fprintf(stderr, "V2-PLW f%d page=%02X i=%d slot=%02X type=%d xy=(%d,%d) off=%04X strips=%d epoch=%u newest=%d alive=%d ds_xy=(%d,%d) ds_fl=%04X win=[%d..%d)x[%d..%d)\n",
+                      v2_dbg_pre_vm_iter, page, i, c.slot, (int)c.type, c.x, c.y, c.off, (int)c.strips, c.epoch, newest, alive, sx, sy, sfl, win_c0, win_c1, win_r0, win_r1);
+          } }
         if (alive == 0) continue;
         L.cmd[w++] = c;
     }
