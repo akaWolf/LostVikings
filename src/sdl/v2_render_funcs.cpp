@@ -39,6 +39,8 @@ thread_local bool            v2_tls_presenter = false;
 thread_local const uint16_t* v2_tls_tile_ovr = nullptr;        // render_v2.h: the snapshot's page tile words (presenter)
 thread_local bool            v2_tls_ui_cells_from_page = false; // render_v2.h: text cells are page commands
 thread_local bool            v2_tls_fg_from_page = false;       // render_v2.h: flagged tiles are page commands
+thread_local uint8_t*        v2_tls_cov = nullptr;              // render_v2.h: sub-pixel presentation — the coverage plane of the layer being composed
+thread_local int             v2_tls_kx_margin = 0;              // render_v2.h: sub-pixel presentation — the world passes paint one tile beyond the frame
 const uint16_t*              v2_tile_override = nullptr;        // render_v2.h: the composed page's tile words (game thread)
 static void v2_vga_bg_readout(uint8_t* buf, int fbw, int rows, const uint8_t* bg, uint32_t crtc, uint8_t pan, bool par_on);   // below (the background VGA)
 static void v2_render_tile_masked(uint8_t* buf, const uint8_t* tgfx_base, const uint8_t* gs_base, uint16_t tile_entry, int screen_x, int screen_y);   // below (the masked tile engine; used by the display list's V2_CMD_FGTILE)
@@ -66,7 +68,7 @@ uint8_t  v2_hud_buf[320*64];
 // composition buffer: 176 (orig VGA split) or 200 on a full-screen scene.
 int v2_display_fullscreen = 0;
 extern "C" int v2_scene_fullscreen(void);   // v2_vm.cpp: LVX_FULLSCREEN of ds:0x25AD
-static thread_local int v2_clip_h = 176;   // per thread: the presenter's passes set their own
+thread_local int v2_clip_h = 176;   // per thread: the presenter's passes set their own (render_v2.h: the sub-pixel layers set it between their passes)
 // UX stage 9, step 4: the frame width this thread renders (= the row stride of
 // buf and the horizontal clip). The game thread sets it in v2_draw_tiles — 320
 // for a chunk screen, v2_view_w for a tile level; the presenter's passes take
@@ -769,6 +771,14 @@ static V2Camera v2_effective_camera(const uint8_t* ds_base) {
     c.tile_shift_y = (int)(c.y_eff >> 3) - (int)(y_disp >> 3);
     return c;
 }
+// render_v2.h (the sub-pixel presentation, v2_smooth.cpp): the shake fold alone — x_eff minus
+// the viewport per axis, the whole pixels v2_draw_list subtracts beyond the viewport
+void v2_camera_shake(const uint8_t* ds, int* dx, int* dy) {
+    const V2Camera c = v2_effective_camera(ds);
+    V2StateViewC st(ds);
+    *dx = (int)(int16_t)c.x_eff - (int)(int16_t)st.viewport_x();
+    *dy = (int)(int16_t)c.y_eff - (int)(int16_t)st.viewport_y();
+}
 // debug (V2_VGA_DUMP): the window base of each page role (0 / 0x34 / 0x68) by the
 // sub_16775 formula — LUT[0x89F8 + role + (y>>3)*2] + LUT[0x8E58 + (y&7)*2] + (x>>2) + 8
 static void v2_dbg_role_bases(const uint8_t* sh, uint16_t rb[3]) {
@@ -820,7 +830,7 @@ static void v2_draw_parallax_pass(const V2StateViewC& st, uint8_t* buf, uint16_t
             const int tx = (cell & 0x4000) ? (7 - (mx & 7)) : (mx & 7);
             const int tyy = (cell & 0x8000) ? (7 - ty) : ty;
             const uint8_t v = P.tiles[idx * 64 + tyy * 8 + tx];
-            if (v) out[sx] = (uint8_t)(((cell >> 10) & 7) * 16 + v);
+            if (v) { out[sx] = (uint8_t)(((cell >> 10) & 7) * 16 + v); if (v2_tls_cov) v2_tls_cov[sy * v2_fbw + sx] = 1; }   // (the coverage: the priority layer of the sub-pixel presentation, render_v2.h)
         }
     }
 }
@@ -847,6 +857,15 @@ void v2_draw_tiles(uint16_t ds_val) {
         const int rows = v2_view_rows();                 // 176 / 200 (scene) / 224 (LVX_TALL224)
         v2_clip_h = (rows == 200) ? 187 : rows;
         v2_tile_rows = (rows == 224) ? 29 : 25;          // 29 x 8 = 232 px covers 224 + the sub-tile offset
+        // Sub-pixel presentation (render_v2.h V2PresentLayers): the world layers carry one more
+        // row and column than the frame — the layer is shown shifted up/left by the camera's
+        // fraction, and the last partial row/column of the exact window must exist. The column
+        // comes with the caller's v2_fbw (+8: one tile column more in v2_fb_cols); the row: one
+        // more tile row for the pass, the parallax and the priority pass paint one line further
+        // (the clip), and the background readout below reads one more line (page lines 176 / 224
+        // lie inside the page's fill of 25 / 30 rows; a 200-row scene's line 200 does not — the
+        // map row stands there).
+        if (v2_tls_kx_margin) { v2_clip_h += 1; v2_tile_rows += 1; }
     }
 
     // Tile map segment (FS)
@@ -1060,7 +1079,8 @@ void v2_draw_tiles(uint16_t ds_val) {
         if (bg && !no_readout) {
             uint32_t crtc = v2_vga_crtc; uint8_t pan = v2_vga_pan;
             if (v2_tls_presenter) v2_crtc_for_camera(ds_base, &crtc, &pan);   // the interpolated camera's start
-            v2_vga_bg_readout(buf, v2_fbw, v2_view_rows(), bg, crtc, pan, par_on);
+            const int ro_rows = v2_view_rows() + ((v2_tls_kx_margin && v2_view_rows() != 200) ? 1 : 0);   // the margin line (the clip note above)
+            v2_vga_bg_readout(buf, v2_fbw, ro_rows, bg, crtc, pan, par_on);
         }
     }
 }
@@ -1176,8 +1196,10 @@ void v2_draw_single_tile(uint16_t ds_val, uint16_t fs_offset, int abs_row, int a
 // Writes ALL colors including 0 (matching original VGA behavior where mask
 // controls which bytes are written, not the color value).
 static inline void v2_put_pixel(uint8_t* buf, int sx, int sy, uint8_t color) {
-    if (sx >= 0 && sx < v2_fbw && sy >= 0 && sy < v2_clip_h)   // 176, or 200 on full-screen scenes; v2_fbw columns
+    if (sx >= 0 && sx < v2_fbw && sy >= 0 && sy < v2_clip_h) {  // v2_clip_h rows (176, 187 on a full-screen scene, 224); v2_fbw columns
         buf[sy * v2_fbw + sx] = color;
+        if (v2_tls_cov) v2_tls_cov[sy * v2_fbw + sx] = 1;   // sub-pixel presentation: the layer's coverage (render_v2.h)
+    }
 }
 
 static void v2_draw_sprites_impl(uint16_t ds_val, int late_gate, int only_obj = -1);
@@ -1430,6 +1452,21 @@ static void v2_raster_glyph(uint8_t* buf, const uint8_t* ds_base, uint16_t glyph
         }
     }
 }
+// the level's tile graphics and mask table for a flagged-tile repaint (V2_CMD_FGTILE): the
+// guards and the bases of v2_draw_flagged_tiles, from the given DS
+static void v2_fg_bases(uint8_t* ds_base, const uint8_t** tgfx, const uint8_t** gs) {
+    *tgfx = nullptr; *gs = nullptr;
+    V2StateViewC stv(ds_base);
+    const uint16_t tgfx_seg = stv.seg_tilegfx(), gs_seg = stv.seg_gs();
+    if (!(tgfx_seg && gs_seg && v2_m2c_base)) return;
+#ifdef V2_RENDER_FROM_SHADOW
+    *tgfx = v2_resolve_segment(tgfx_seg);
+    *gs = v2_vm_is_gs_shadow_valid() ? v2_vm_get_shadow_gs() : v2_m2c_base + ((uint32_t)gs_seg << 4);
+#else
+    *tgfx = v2_m2c_base + ((uint32_t)tgfx_seg << 4);
+    *gs = v2_m2c_base + ((uint32_t)gs_seg << 4);
+#endif
+}
 void v2_draw_list(const V2DrawList& L, const int16_t* pos_x, const int16_t* pos_y, int which) {
     if (!v2_m2c_base || !myDrawInfo_v2) return;
     uint8_t* ds_base = v2_get_ds_base(0);                     // the presenter's snapshot DS (camera)
@@ -1448,20 +1485,7 @@ void v2_draw_list(const V2DrawList& L, const int16_t* pos_x, const int16_t* pos_
         const uint8_t* rec = c.data_len ? L.arena + c.data_off : nullptr;   // the record's own strip bytes
         if (fgtile) {
             if (c.dead[0] & 1u) continue;   // its one cell restored since the repaint
-            if (!fg_resolved) {
-                fg_resolved = true;
-                V2StateViewC stv(ds_base);
-                const uint16_t tgfx_seg = stv.seg_tilegfx(), gs_seg = stv.seg_gs();
-                if (tgfx_seg && gs_seg && v2_m2c_base) {   // the guards of v2_draw_flagged_tiles
-#ifdef V2_RENDER_FROM_SHADOW
-                    fg_tgfx = v2_resolve_segment(tgfx_seg);
-                    fg_gs = v2_vm_is_gs_shadow_valid() ? v2_vm_get_shadow_gs() : v2_m2c_base + ((uint32_t)gs_seg << 4);
-#else
-                    fg_tgfx = v2_m2c_base + ((uint32_t)tgfx_seg << 4);
-                    fg_gs = v2_m2c_base + ((uint32_t)gs_seg << 4);
-#endif
-                }
-            }
+            if (!fg_resolved) { fg_resolved = true; v2_fg_bases(ds_base, &fg_tgfx, &fg_gs); }   // the guards of v2_draw_flagged_tiles
             if (fg_tgfx && fg_gs) v2_render_tile_masked(buf, fg_tgfx, fg_gs, c.off, x - viewport_x, y - viewport_y);
             continue;
         }
@@ -1560,6 +1584,34 @@ static inline void v2_cmd_extent(const V2DrawCmd& c, int& w, int& h) {
     if (c.type == 2) { w = 32; h = (int)c.strips; }
     else if (c.type == 1 || c.type == V2_CMD_GLYPH || c.type == V2_CMD_FGTILE) { w = 8; h = 8; }
     else { w = 16; h = 16; }
+}
+void v2_cmd_extent_of(const V2DrawCmd& c, int* w, int* h) { v2_cmd_extent(c, *w, *h); }   // render_v2.h
+// Sub-pixel presentation (render_v2.h V2PresentLayers): command i of a list rasterised alone, at
+// (0, 0) of a w x h bitmap (its extent) with a coverage plane — the same raster v2_draw_list
+// runs for it (the record's own bytes, its dead cells relative to its own anchor, the handler's
+// clip masks), minus the frame clip: the presenter clips the bitmap at the k x target. The TLS
+// DS is the caller's snapshot (the glyph page, the tile graphics and mask bases). The thread's
+// out buffer, coverage, width and clip are set for the bitmap and restored.
+void v2_raster_cmd_bitmap(const V2DrawList& L, int i, uint8_t* px, uint8_t* cov, int w, int h) {
+    const V2DrawCmd& c = L.cmd[i];
+    uint8_t* ds_base = v2_get_ds_base(0);
+    uint8_t* const save_out = v2_tls_out; uint8_t* const save_cov = v2_tls_cov;
+    const int save_w = v2_fbw, save_clip = v2_clip_h;
+    v2_tls_out = px; v2_tls_cov = cov; v2_fbw = w; v2_clip_h = h;
+    const uint8_t* rec = c.data_len ? L.arena + c.data_off : nullptr;   // the record's own strip bytes
+    if (c.type == V2_CMD_FGTILE) {
+        if (!(c.dead[0] & 1u)) {   // its one cell restored since the repaint: nothing (v2_draw_list)
+            const uint8_t* tgfx = nullptr; const uint8_t* gs = nullptr;
+            v2_fg_bases(ds_base, &tgfx, &gs);
+            if (tgfx && gs) v2_render_tile_masked(px, tgfx, gs, c.off, 0, 0);
+        }
+    } else if (c.type == V2_CMD_GLYPH) {
+        v2_raster_glyph(px, ds_base, c.off, 0, 0, c.dead, c.x & 7, c.y & 7, rec);
+    } else {
+        v2_raster_sprite(px, c.type, c.flags, 0, 0, c.seg, c.off, (int)c.strips, c.slot, 0xFFFF,
+                         c.dead, c.x & 7, c.y & 7, c.mand, c.clip_top, c.clip_bot, rec);
+    }
+    v2_tls_out = save_out; v2_tls_cov = save_cov; v2_fbw = save_w; v2_clip_h = save_clip;
 }
 // The background VGA (render_v2.h): the pixel plane of the shadow VGA that only the
 // background writers reach — v2_vga_w mirrors a write here while v2_vga_bg_writer is set,

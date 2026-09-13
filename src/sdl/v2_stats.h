@@ -15,6 +15,7 @@ struct V2Stats {
     std::atomic<uint32_t> present_late{0};        // presents that took more than 1.5 refreshes
     std::atomic<uint32_t> flip_drops{0};          // sub-frames the game flipped that were never presented
     std::atomic<uint32_t> flip_doubles{0};        // presents that showed the previous sub-frame again while the game was flipping (60 Hz lock, no interpolation)
+    std::atomic<int>      kx{0};                  // 2026-09-15: the sub-pixel presentation's k of the frame shown (0 = the flat frame: SUBPIXEL off, a chunk screen)
     // game thread (v2_smooth.cpp capture / v2_main.cpp)
     std::atomic<uint32_t> subframes{0};           // distinct sub-frames flipped so far
     std::atomic<int>      subframes_per_frame{0}; // of the last complete game frame (3 in play)

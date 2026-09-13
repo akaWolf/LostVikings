@@ -365,14 +365,124 @@ static void compose_page(const Snap& C, uint8_t* work, uint8_t* out, uint8_t* hu
     v2_fbw = savew;
 }
 
+// The sub-pixel layers (render_v2.h V2PresentLayers): the presenter's own buffers. A world
+// layer carries one tile of margin beyond the frame (it is shown shifted left/up by the camera's
+// fraction); the commands' bitmaps live in one arena — the page lists bound their pixels well
+// below it (a type-2 record's strips are its data, 36 bytes each in a 768 KB list arena).
+namespace {
+constexpr int LAYER_W = V2_FB_MAX_W + 8, LAYER_H = 248;
+uint8_t s_bg[LAYER_W * LAYER_H];
+uint8_t s_prio[LAYER_W * LAYER_H], s_prio_cov[LAYER_W * LAYER_H];
+uint8_t s_ui[V2_FB_MAX_W * 240], s_ui_cov[V2_FB_MAX_W * 240];
+constexpr size_t CMD_ARENA = 4u << 20;
+uint8_t s_cmd_px[CMD_ARENA], s_cmd_cov[CMD_ARENA];
+V2PresentLayer s_cmd[V2_DRAWLIST_MAX];
+// any pixel covered? (a layer nothing was painted into is dropped: no conversion, no copy)
+bool cov_any(const uint8_t* cov, size_t n) {
+    const uint64_t* q = (const uint64_t*)cov; const size_t n8 = n / 8;
+    for (size_t i = 0; i < n8; i++) if (q[i]) return true;
+    for (size_t i = n8 * 8; i < n; i++) if (cov[i]) return true;
+    return false;
+}
+}  // namespace
+
+// The layers of a tile frame (render_v2.h): compose_map's passes split by what moves separately
+// at k x. dev_x/dev_y = each command's device position (its 1/k position relative to the exact
+// camera, computed by the caller), fx/fy = the camera's fraction in device pixels, `work` the
+// snapshot's DS with the whole camera the layers are composed for.
+static void compose_layers(const Snap& C, const int* dev_x, const int* dev_y, const uint32_t* acc, int k, int fx, int fy,
+                           uint8_t* work, uint8_t* hud, V2DisplayBadge* badges, V2PresentLayers* L) {
+    const int W = C.w, rows = C.rows, LW = W + 8;
+    const int clip_h = (rows == 200) ? 187 : rows;   // v2_draw_tiles' sprite / text clip of this frame
+    const int savew = v2_fbw;
+    v2_tls_ds = work;
+    v2_fbw = LW;                    // the world layers: the frame plus one tile column (the margin)
+    v2_tls_fs = C.fs;
+    v2_tls_par_acc = acc;
+    v2_tls_presenter = true;
+    v2_tls_tile_ovr = C.tile_ovr_valid ? C.tile_ovr : nullptr; v2_tls_ui_cells_from_page = C.tile_ovr_valid; v2_tls_vga_bg = C.vga;
+    // 1. the background: the tile pass with the parallax beneath and the background-VGA readout,
+    //    one tile beyond the frame right and below (v2_tls_kx_margin), opaque
+    v2_tls_out = s_bg; v2_tls_cov = nullptr; v2_tls_kx_margin = 1;
+    v2_draw_tiles(0);
+    L->bg = V2PresentLayer{ s_bg, nullptr, LW, rows + 1, LW, -fx, -fy };
+    // 2. the commands: each alone in a bitmap of its extent, at its own device position, in the
+    //    list's order — on a parallax level the sprites first, then the priority layer, then the
+    //    glyphs and repaints (compose_map's two passes); else every command in order
+    const bool par = v2_parallax.on;
+    size_t used = 0; int n = 0;
+    auto add = [&](int i) {
+        const V2DrawCmd& c = C.draws.cmd[i];
+        if (c.type == V2_CMD_FGTILE && (c.dead[0] & 1u)) return;   // its one cell restored since the repaint (v2_draw_list skips it)
+        int cw = 0, ch = 0; v2_cmd_extent_of(c, &cw, &ch);
+        if (cw <= 0 || ch <= 0) return;
+        const size_t need = (size_t)cw * (size_t)ch;
+        if (used + need > CMD_ARENA) {
+            static bool said = false;
+            if (!said) { said = true; fprintf(stderr, "V2-KX: the command arena is full after %d commands — the rest of this frame's commands are not shown\n", n); }
+            return;
+        }
+        uint8_t* px = s_cmd_px + used; uint8_t* cov = s_cmd_cov + used; used += need;
+        memset(px, 0, need); memset(cov, 0, need);
+        v2_raster_cmd_bitmap(C.draws, i, px, cov, cw, ch);
+        s_cmd[n] = V2PresentLayer{ px, cov, cw, ch, cw, dev_x[i], dev_y[i] };
+        n++;
+    };
+    for (int i = 0; i < C.draws.n; i++) {
+        const V2DrawCmd& c = C.draws.cmd[i];
+        if (par && (c.type == V2_CMD_GLYPH || c.type == V2_CMD_FGTILE)) continue;
+        add(i);
+    }
+    L->prio_after = n;
+    L->prio = V2PresentLayer{ nullptr, nullptr, 0, 0, 0, 0, 0 };
+    if (par) {
+        // 3. the priority layer over the sprites: the console layer's priority-1 cells and the
+        //    map's flagged tiles (v2_draw_flagged_tiles, with the background's margin), coverage
+        memset(s_prio, 0, (size_t)LW * (size_t)(rows + 1)); memset(s_prio_cov, 0, (size_t)LW * (size_t)(rows + 1));
+        v2_tls_out = s_prio; v2_tls_cov = s_prio_cov;
+        v2_draw_flagged_tiles(0);
+        L->prio = V2PresentLayer{ s_prio, s_prio_cov, LW, rows + 1, LW, -fx, -fy };
+        if (!cov_any(s_prio_cov, (size_t)LW * (size_t)(rows + 1))) L->prio.px = nullptr;   // nothing painted: no layer
+        for (int i = 0; i < C.draws.n; i++) {
+            const V2DrawCmd& c = C.draws.cmd[i];
+            if (c.type == V2_CMD_GLYPH || c.type == V2_CMD_FGTILE) add(i);
+        }
+    }
+    v2_tls_kx_margin = 0;
+    // 4. the text plane (its cells when they are not page commands) and the CJK overlay: screen-
+    //    anchored, no shift, the frame's own width and clip
+    memset(s_ui, 0, (size_t)W * 240); memset(s_ui_cov, 0, (size_t)W * 240);
+    v2_tls_out = s_ui; v2_tls_cov = s_ui_cov; v2_fbw = W; v2_clip_h = clip_h;
+    v2_draw_ui(0);
+    L->ui = V2PresentLayer{ s_ui, s_ui_cov, W, clip_h, W, 0, 0 };
+    if (!cov_any(s_ui_cov, (size_t)W * (size_t)clip_h)) L->ui.px = nullptr;   // no text this frame: no layer
+    v2_tls_cov = nullptr;
+    v2_tls_tile_ovr = nullptr; v2_tls_ui_cells_from_page = false; v2_tls_vga_bg = nullptr;
+    v2_tls_presenter = false;
+    v2_tls_par_acc = nullptr;
+    v2_tls_fs = nullptr;
+    v2_tls_out = nullptr;
+    v2_tls_ds = nullptr;
+    v2_fbw = savew;
+    memcpy(hud, C.hud, 320 * 64);
+    L->k = k; L->w = W; L->rows = rows > 176 ? rows : 0; L->map_h = rows; L->clip_h = clip_h;
+    L->n_cmd = n; L->cmd = s_cmd; L->hud = hud; L->badges = badges;
+}
+
 // One frame from a snapshot (P = the previous one when interpolating, t its fraction; local =
 // the player whose own camera replaces the DS camera, -1 for the DS camera): the map rows into
 // `out` (w x 240), the HUD art into `hud`, the badges, the width and the full-screen row count
 // (0 = the HUD layout). The caller owns every buffer (the presenter thread its own, the flip
-// dump on the game thread its own).
+// dump on the game thread its own). L with k >= 1 (the sub-pixel presentation): a tile frame is
+// composed as LAYERS into L — `out` gets the flat frame beside them only when out_too asks (the
+// stand V2_KX_SELFTEST compares the two at t = 1; the flat frame then stands on the layers'
+// whole camera, which is the flip's own when nothing is interpolated); a chunk screen always
+// lands in `out` (L->k stays 0).
 static void compose_snapshot(const Snap& C, const Snap* P, double t, bool interp, int local,
-                             uint8_t* work, uint8_t* out, uint8_t* hud, V2DisplayBadge* badges, int* w, int* rows) {
+                             uint8_t* work, uint8_t* out, uint8_t* hud, V2DisplayBadge* badges, int* w, int* rows,
+                             V2PresentLayers* L, int k, bool out_too) {
     memcpy(badges, C.badge, sizeof C.badge);
+    if (L) L->k = 0;
     if (!C.tile_frame) {
         compose_page(C, work, out, hud);
         *w = 320; *rows = 0;
@@ -393,24 +503,37 @@ static void compose_snapshot(const Snap& C, const Snap* P, double t, bool interp
     // the integer one written to the frame (the tiles scroll by it)
     double camx_f = cx, camy_f = cy;
     int16_t vx = cx, vy = cy;
-    {
-        bool write = own_cam;
-        if (interp && (cx != px || cy != py) &&
-            cx - px <= V2_SMOOTH_MAX_STEP && px - cx <= V2_SMOOTH_MAX_STEP &&
-            cy - py <= V2_SMOOTH_MAX_STEP && py - cy <= V2_SMOOTH_MAX_STEP) {
-            camx_f = px + (double)(cx - px) * t; camy_f = py + (double)(cy - py) * t;
-            vx = lerp16(px, cx, t); vy = lerp16(py, cy, t);
-            write = true;
-        }
-        if (vx < 0) { vx = 0; camx_f = 0.0; }
-        if (vy < 0) { vy = 0; camy_f = 0.0; }
-        if (write) {
-            wr16(work, DS_VIEWPORT_X, vx);
-            wr16(work, DS_VIEWPORT_Y, vy);
-            wr16(work, DS_SCROLL_COL, (int16_t)((uint16_t)vx >> 3));
-            wr16(work, DS_SCROLL_ROW, (int16_t)((uint16_t)vy >> 3));
-        }
+    bool write = own_cam;
+    if (interp && (cx != px || cy != py) &&
+        cx - px <= V2_SMOOTH_MAX_STEP && px - cx <= V2_SMOOTH_MAX_STEP &&
+        cy - py <= V2_SMOOTH_MAX_STEP && py - cy <= V2_SMOOTH_MAX_STEP) {
+        camx_f = px + (double)(cx - px) * t; camy_f = py + (double)(cy - py) * t;
+        vx = lerp16(px, cx, t); vy = lerp16(py, cy, t);
+        write = true;
     }
+    if (vx < 0) { vx = 0; camx_f = 0.0; }
+    if (vy < 0) { vy = 0; camy_f = 0.0; }
+    // the sub-pixel presentation: the exact camera at 1/k of a pixel — the layers are composed
+    // for the whole camera just below it and shown shifted left/up by the remainder (fx, fy
+    // device pixels); with nothing interpolated the exact camera is the flip's whole one (fx =
+    // fy = 0) and the layers stand where the flat frame stands
+    int fx = 0, fy = 0;
+    if (L) {
+        const long ckx = lround(camx_f * (double)k), cky = lround(camy_f * (double)k);   // >= 0 after the clamps
+        const int16_t vxi = (int16_t)(ckx / k), vyi = (int16_t)(cky / k);
+        fx = (int)(ckx - (long)vxi * k); fy = (int)(cky - (long)vyi * k);
+        if (vxi != vx || vyi != vy) { vx = vxi; vy = vyi; write = true; }
+    }
+    if (write) {
+        wr16(work, DS_VIEWPORT_X, vx);
+        wr16(work, DS_VIEWPORT_Y, vy);
+        wr16(work, DS_SCROLL_COL, (int16_t)((uint16_t)vx >> 3));
+        wr16(work, DS_SCROLL_ROW, (int16_t)((uint16_t)vy >> 3));
+    }
+    // the shake fold of that camera: the sprite raster subtracts x_eff = viewport + shake
+    // (v2_draw_list), so the sub-pixel positions below are relative to the exact camera plus it
+    int sdx = 0, sdy = 0;
+    if (L) v2_camera_shake(work, &sdx, &sdy);
     // The display list's commands, each moved back towards the previous flip by (1 - t):
     // the command's slot is looked up in the previous flip's list (its last record);
     // a slot present in both lists and within V2_SMOOTH_MAX_STEP is interpolated, any
@@ -420,30 +543,45 @@ static void compose_snapshot(const Snap& C, const Snap* P, double t, bool interp
     // still on the screen, as in the original; no ±1 px shimmer). At t = 1 every command
     // keeps its own position: the frame is the flip.
     static thread_local int16_t pos_x[V2_DRAWLIST_MAX], pos_y[V2_DRAWLIST_MAX];
+    static thread_local int dev_x[V2_DRAWLIST_MAX], dev_y[V2_DRAWLIST_MAX];
     for (int i = 0; i < C.draws.n; i++) {
         const V2DrawCmd& c = C.draws.cmd[i];
         pos_x[i] = c.x; pos_y[i] = c.y;
-        if (!interp) continue;
+        double xf = c.x, yf = c.y;   // the command's exact world position: its own, or moved back below
+        bool moved = false;
         // glyph cells and priority-tile repaints are map cells, not objects: they stay in the
         // world (moved only by the camera), their pseudo slots are no object record of the DS
-        if (c.type == V2_CMD_GLYPH || c.type == V2_CMD_FGTILE) continue;
-        // the page lists keep a slot's earlier commands while their residue lives: only the
-        // slot's LAST command is the object as it stands, the earlier ones stay where they are
-        { bool last = true; for (int k = i + 1; k < C.draws.n; k++) if (C.draws.cmd[k].slot == c.slot) { last = false; break; }
-          if (!last) continue; }
-        const V2DrawCmd* p = nullptr;
-        for (int j = P->draws.n - 1; j >= 0; j--) if (P->draws.cmd[j].slot == c.slot) { p = &P->draws.cmd[j]; break; }
-        if (!p) continue;
-        const int16_t ax = c.x, bx = p->x, ay = c.y, by = p->y;
-        if (ax == bx && ay == by) continue;
-        if (ax - bx > V2_SMOOTH_MAX_STEP || bx - ax > V2_SMOOTH_MAX_STEP ||
-            ay - by > V2_SMOOTH_MAX_STEP || by - ay > V2_SMOOTH_MAX_STEP) continue;   // spawn / teleport / wrap
-        const double xf = bx + (double)(ax - bx) * t, yf = by + (double)(ay - by) * t;
-        pos_x[i] = (int16_t)(vx + lround(xf - camx_f));
-        pos_y[i] = (int16_t)(vy + lround(yf - camy_f));
-        // the DS copy carries the same position (the V2_SMOOTH_DUMP lines read it)
-        wr16(work, c.slot + OBJ_SPRITE_X, pos_x[i]);
-        wr16(work, c.slot + OBJ_SPRITE_Y, pos_y[i]);
+        if (interp && c.type != V2_CMD_GLYPH && c.type != V2_CMD_FGTILE) {
+            // the page lists keep a slot's earlier commands while their residue lives: only the
+            // slot's LAST command is the object as it stands, the earlier ones stay where they are
+            bool last = true; for (int j = i + 1; j < C.draws.n; j++) if (C.draws.cmd[j].slot == c.slot) { last = false; break; }
+            const V2DrawCmd* p = nullptr;
+            if (last) for (int j = P->draws.n - 1; j >= 0; j--) if (P->draws.cmd[j].slot == c.slot) { p = &P->draws.cmd[j]; break; }
+            if (p) {
+                const int16_t ax = c.x, bx = p->x, ay = c.y, by = p->y;
+                if ((ax != bx || ay != by) &&
+                    !(ax - bx > V2_SMOOTH_MAX_STEP || bx - ax > V2_SMOOTH_MAX_STEP ||
+                      ay - by > V2_SMOOTH_MAX_STEP || by - ay > V2_SMOOTH_MAX_STEP)) {   // else spawn / teleport / wrap
+                    xf = bx + (double)(ax - bx) * t; yf = by + (double)(ay - by) * t;
+                    moved = true;
+                }
+            }
+        }
+        if (moved) {
+            pos_x[i] = (int16_t)(vx + lround(xf - camx_f));
+            pos_y[i] = (int16_t)(vy + lround(yf - camy_f));
+            // the DS copy carries the same position (the V2_SMOOTH_DUMP lines read it)
+            wr16(work, c.slot + OBJ_SPRITE_X, pos_x[i]);
+            wr16(work, c.slot + OBJ_SPRITE_Y, pos_y[i]);
+        }
+        // the sub-pixel position: the distance to the exact camera rounded once at k x (a
+        // camera-locked sprite stays still, as on the flat frame); a command that does not move
+        // has a whole world position and lands exactly where the shifted background puts that
+        // point (round((x - cam) k) = x k - round(cam k), the background's device origin)
+        if (L) {
+            dev_x[i] = (int)lround((xf - camx_f) * (double)k) - sdx * k;
+            dev_y[i] = (int)lround((yf - camy_f) * (double)k) - sdy * k;
+        }
     }
     // parallax autoscroll accumulators (units of 1/1792 px): lerp unless wrapped
     uint32_t acc[2] = { C.par_acc_x, C.par_acc_y };
@@ -475,8 +613,11 @@ static void compose_snapshot(const Snap& C, const Snap* P, double t, bool interp
                     sub <= 0xFE ? rd16(P->ds, sub + OBJ_SPRITE_Y) : 0, sub <= 0xFE ? rd16(C.ds, sub + OBJ_SPRITE_Y) : 0, sub <= 0xFE ? rd16(work, sub + OBJ_SPRITE_Y) : 0);
         }
     }
-    compose_map(C, pos_x, pos_y, acc, work, out);
-    memcpy(hud, C.hud, sizeof C.hud);
+    if (!L || out_too) {
+        compose_map(C, pos_x, pos_y, acc, work, out);
+        memcpy(hud, C.hud, sizeof C.hud);
+    }
+    if (L) compose_layers(C, dev_x, dev_y, acc, k, fx, fy, work, hud, badges, L);
     *w = C.w;
     *rows = C.rows > 176 ? C.rows : 0;
 }
@@ -491,8 +632,11 @@ bool v2_present_compose(V2PresentFrame* out) {
     v2_options_ensure_loaded();
     static uint8_t s_work[DS_SIZE], s_out[V2_FB_MAX_W * 240], s_hud[320 * 64];
     static V2DisplayBadge s_badges[3];
+    static V2PresentLayers s_L;
     static int s_w = 320, s_rows = 0;
-    static uint32_t s_seq = 0; static bool s_interp = true, s_have = false;
+    static uint32_t s_seq = 0; static bool s_interp = true, s_have = false; static int s_k = -1;
+    // the stand V2_KX_SELFTEST: the flat frame composed beside the layers (render_v2.cpp compares the two)
+    static int kx_test = -1; if (kx_test < 0) kx_test = getenv("V2_KX_SELFTEST") ? 1 : 0;
     const int local = g_v2_local_player;   // UX stage 8 step 2: a client's own camera (players 2..3)
     const bool smooth_on = smooth_wanted();
     int ci = -1, pi = -1;
@@ -523,15 +667,22 @@ bool v2_present_compose(V2PresentFrame* out) {
             interp = true;
         }
     }
-    if (!(s_have && !interp && !s_interp && C.seq == s_seq)) {
-        compose_snapshot(C, interp ? &P : nullptr, t, interp, local, s_work, s_out, s_hud, s_badges, &s_w, &s_rows);
-        s_seq = C.seq; s_interp = interp; s_have = true;
+    // the sub-pixel presentation (render_v2.h V2PresentLayers): the window's integer scale for
+    // this frame's width — 0 = the flat frame (the option off, a chunk screen, no renderer)
+    const int k = (v2_options.subpixel.load() && C.tile_frame) ? v2_present_scale_k(C.w) : 0;
+    if (!(s_have && !interp && !s_interp && C.seq == s_seq && k == s_k)) {
+        compose_snapshot(C, interp ? &P : nullptr, t, interp, local, s_work, s_out, s_hud, s_badges, &s_w, &s_rows,
+                         k > 0 ? &s_L : nullptr, k, kx_test != 0);
+        s_seq = C.seq; s_interp = interp; s_have = true; s_k = k;
     }
+    const bool layers = k > 0 && s_L.k > 0;
     g_effective = interp;
     v2_smooth_last_t = (float)t;
     v2_smooth_last_w = s_w;
     v2_smooth_last_reason = 0;
-    out->map = s_out; out->w = s_w; out->rows = s_rows; out->hud = s_hud; out->badges = s_badges; out->smooth = interp;
+    v2_stats.kx.store(layers ? k : 0, std::memory_order_relaxed);
+    out->map = (layers && !kx_test) ? nullptr : s_out; out->w = s_w; out->rows = s_rows; out->hud = s_hud; out->badges = s_badges; out->smooth = interp;
+    out->layers = layers ? &s_L : nullptr;
     return true;
 }
 
@@ -543,6 +694,6 @@ bool v2_flip_frame_for_dump(uint8_t* map, uint8_t* hud, V2DisplayBadge* badges, 
     int ci;
     { std::lock_guard<std::mutex> lock(g_mx); ci = g_cur_i; }
     if (ci < 0 || !g_pool[ci].valid) return false;
-    compose_snapshot(g_pool[ci], nullptr, 1.0, false, -1, work, map, hud, badges, w, rows);
+    compose_snapshot(g_pool[ci], nullptr, 1.0, false, -1, work, map, hud, badges, w, rows, nullptr, 0, false);
     return true;
 }

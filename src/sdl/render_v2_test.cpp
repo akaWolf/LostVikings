@@ -21,6 +21,8 @@ extern struct myDrawInfoS_orig* myDrawInfo;
 
 // Функция callback вызывается каждый кадр рендер-потоком
 int v2_present_w = 320;   // UX stage 9 step 4: the width of the frame in stableBuffer (read by v2_present_frame)
+const V2PresentLayers* v2_present_layers_cur = nullptr;   // render_v2.h: the sub-pixel layers of the frame being presented (nullptr: the flat frame)
+bool v2_present_ref_valid = false;                        // render_v2.h: stableBuffer holds the flat frame beside the layers (V2_KX_SELFTEST)
 void render_callback_v2(void* state)
 {
     static bool palette_copied = false;
@@ -58,9 +60,14 @@ void render_callback_v2(void* state)
     const uint8_t* frame_src; int FW; int fs_rows; const uint8_t* hud_src; const V2DisplayBadge* badge_src; bool smooth;
 #ifdef V2_ONLY
     static uint8_t black[V2_FB_MAX_W * 240];
-    V2PresentFrame pf;
+    V2PresentFrame pf; pf.layers = nullptr;
+    // the sub-pixel presentation (render_v2.h V2PresentLayers): a tile frame comes as layers for
+    // updateDraw_v2's GPU composition and no 1x frame (frame_src nullptr: the copies and the 1x
+    // dumps below are skipped) — unless the selftest asked for the flat frame beside them
     if (v2_present_compose(&pf)) { frame_src = pf.map; FW = pf.w; fs_rows = pf.rows; hud_src = pf.hud; badge_src = pf.badges; smooth = pf.smooth; }
     else { frame_src = black; FW = 320; fs_rows = 0; hud_src = black; badge_src = nullptr; smooth = false; }
+    v2_present_layers_cur = pf.layers;
+    v2_present_ref_valid = pf.layers != nullptr && frame_src != nullptr;
     v2_display_w = FW; v2_display_fullscreen = fs_rows;   // the presenter owns these in the game build (updateDraw_v2 reads the rows)
 #else
     extern uint8_t v2_display_hud_buf[];
@@ -89,7 +96,7 @@ void render_callback_v2(void* state)
             if (e && *e) { snprintf(dir, sizeof dir, "%s", e); char* c = strrchr(dir, ':');
                            if (c && sscanf(c + 1, "%d-%d", &from, &to) == 2) { *c = 0; dump = 1; } }
         }
-        if (dump == 1 && v2_dbg_pre_vm_iter >= from && v2_dbg_pre_vm_iter <= to && n < 4000) {
+        if (dump == 1 && frame_src && v2_dbg_pre_vm_iter >= from && v2_dbg_pre_vm_iter <= to && n < 4000) {
             extern int v2_smooth_last_reason;   // the file name tells whether the presenter composed the frame itself (sm) or showed the flip (tick<reason>)
             char path[560]; snprintf(path, sizeof path, "%s/pf_%04d_f%d_%u_%s%d.ppm", dir, n, v2_dbg_pre_vm_iter, (unsigned)SDL_GetTicks(),
                                      smooth ? "sm" : "tick", v2_smooth_last_reason);
@@ -111,7 +118,7 @@ void render_callback_v2(void* state)
         if (dump < 0) { dd = getenv("V2_SMOOTH_DUMP"); dump = (dd && *dd) ? 1 : 0;
                         const char* f0 = getenv("V2_SMOOTH_DUMP_FROM"); if (f0 && *f0) from = atoi(f0); }
         // v2_dbg_pre_vm_iter: file-scope extern (top of file)
-        if (dump == 1 && v2_dbg_pre_vm_iter >= from && n < 48) {
+        if (dump == 1 && frame_src && v2_dbg_pre_vm_iter >= from && n < 48) {
             extern int v2_smooth_last_reason;
             char path[512]; snprintf(path, sizeof path, "%s/pf_%02d_f%d_t%.2f_%s%d_%u.ppm", dd, n, v2_dbg_pre_vm_iter,
                                      smooth ? v2_smooth_last_t : -1.0f, smooth ? "sm" : "tick", v2_smooth_last_reason,
@@ -126,6 +133,7 @@ void render_callback_v2(void* state)
             n++;
         }
     }
+    if (!frame_src) return;   // the layers alone: nothing to lay out in stableBuffer (updateDraw_v2 composes them)
     // Copy viewport (rows 0-175) from the chosen frame under lock
     {
         std::lock_guard<std::mutex> lock(v2_display_mutex);

@@ -220,6 +220,7 @@ uint32_t tempDrawBuffer_v2[RENDER_WIDTH_V2*RENDER_HEIGHT_V2];
 static_assert(RENDER_WIDTH_V2 == V2_FB_MAX_W, "the presenter's row stride must hold the widest frame");
 #include "v2_ui.h"
 extern int v2_dbg_pre_vm_iter;   // game-frame counter (v2_vm.cpp), C++ linkage — declared once at file scope (clang rejects block externs inside extern "C" functions)
+extern int v2_smooth_last_reason;   // v2_smooth.cpp: why the presenter showed what it showed (the dump names) — file scope: a block extern inside the anonymous namespace below would get internal linkage
 
 struct myDrawInfoS_v2* myDrawInfo_v2 = nullptr;
 SDL_Window* myWindow_v2 = NULL;
@@ -295,6 +296,54 @@ static bool v2_present_hq(int filter, int PW, int H, double s, int* k_out) {
     return true;
 }
 
+// the picture's place in the window for a canvas cw x ch: the largest fit (whole multiples only
+// under INT.SCALE), centred; FILTER NONE = the raster itself, 1:1. *s_out = the scale used.
+static SDL_Rect v2_present_dst(int cw, int ch, int filter, bool integer, int* W, int* Hout, double* s_out) {
+    *W = 0; *Hout = 0;
+    SDL_GetRendererOutputSize(myRenderer_v2, W, Hout);
+    double s = (*W > 0 && *Hout > 0) ? ((double)*W / cw < (double)*Hout / ch ? (double)*W / cw : (double)*Hout / ch) : 1.0;
+    if (integer) { s = (double)(int)s; if (s < 1.0) s = 1.0; }
+    const int dw = (int)(cw * s + 0.5), dh = (int)(ch * s + 0.5);
+    SDL_Rect dst = { (*W - dw) / 2, (*Hout - dh) / 2, dw, dh };
+    if (filter == 5) dst = SDL_Rect{ (*W - cw) / 2, (*Hout - ch) / 2, cw, ch };   // NONE: the raster itself, 1:1
+    *s_out = s;
+    return dst;
+}
+// V2_PRESENT_SHOT=<path.ppm>[:<call>] or <path>:f<game frame> dumps the composed output once (UX
+// stage 8: a shot at a known point of a replay); kx = the sub-pixel presentation's k (0 = flat)
+static void v2_present_shot(const SDL_Rect& dst, int filter, bool integer, int border, int H, int kx) {
+    static int shot = -1, at = 1, at_frame = -1, calls = 0; static const char* path = nullptr; static char pbuf[512];
+    if (shot < 0) {
+        const char* e = getenv("V2_PRESENT_SHOT");
+        shot = (e && *e) ? 0 : 2;
+        if (shot == 0) { snprintf(pbuf, sizeof pbuf, "%s", e); char* c = strrchr(pbuf, ':');
+                         if (c && c[1]) { if (c[1] == 'f') at_frame = atoi(c + 2); else at = atoi(c + 1); *c = 0; } path = pbuf; }
+    }
+    calls++;
+    if (shot == 0 && (at_frame >= 0 ? v2_dbg_pre_vm_iter >= at_frame : calls >= at)) {
+        int W = 0, Hout = 0; SDL_GetRendererOutputSize(myRenderer_v2, &W, &Hout);
+        std::vector<uint8_t> px((size_t)W * Hout * 3);
+        if (SDL_RenderReadPixels(myRenderer_v2, NULL, SDL_PIXELFORMAT_RGB24, px.data(), W * 3) == 0) {
+            FILE* f = fopen(path, "wb");
+            if (f) { fprintf(f, "P6\n%d %d\n255\n", W, Hout); fwrite(px.data(), 1, px.size(), f); fclose(f); }
+            fprintf(stderr, "V2-PRESENT-SHOT: %s %dx%d picture %dx%d at (%d,%d) filter=%d int=%d border=%d H=%d kx=%d\n",
+                    path, W, Hout, dst.w, dst.h, dst.x, dst.y, filter, (int)integer, border, H, kx);
+        }
+        shot = 1;
+    }
+}
+// the end of a present: the presenter's work since its latch (v2_vsync_latch_sleep sizes the
+// margin by it), the present itself, the display's vsync handed to the game
+static void v2_present_end(void) {
+    if (g_latch_ticks) {
+        const double w = (double)(SDL_GetPerformanceCounter() - g_latch_ticks) / (double)SDL_GetPerformanceFrequency() * 1000.0;
+        g_work_ema_ms = g_work_ema_ms > 0.0 ? g_work_ema_ms * 0.9 + w * 0.1 : w;
+        v2_stats.presenter_ms_x100.store((int)(g_work_ema_ms * 100.0 + 0.5), std::memory_order_relaxed);
+    }
+    SDL_RenderPresent(myRenderer_v2);
+    v2_vsync_on_present();   // the display's vsync -> the game's (see the module above)
+}
+
 static void v2_present_frame(int H) {
     const int PW = v2_present_w;
     const int filter = v2_options.filter.load();
@@ -308,14 +357,9 @@ static void v2_present_frame(int H) {
     }
     if (!myTexture_v2) return;
     SDL_UpdateTexture(myTexture_v2, NULL, tempDrawBuffer_v2, RENDER_WIDTH_V2 * sizeof(uint32_t));
-    int W = 0, Hout = 0;
-    SDL_GetRendererOutputSize(myRenderer_v2, &W, &Hout);
-    const int cw = PW, ch = H;   // the canvas: the frame's width x the 240-row raster (H is always SCREEN_HEIGHT_V2)
-    double s = (W > 0 && Hout > 0) ? ((double)W / cw < (double)Hout / ch ? (double)W / cw : (double)Hout / ch) : 1.0;
-    if (integer) { s = (double)(int)s; if (s < 1.0) s = 1.0; }
-    const int dw = (int)(cw * s + 0.5), dh = (int)(ch * s + 0.5);
-    SDL_Rect dst = { (W - dw) / 2, (Hout - dh) / 2, dw, dh };
-    if (filter == 5) dst = SDL_Rect{ (W - cw) / 2, (Hout - ch) / 2, cw, ch };   // NONE: the raster itself, 1:1
+    int W = 0, Hout = 0; double s = 1.0;
+    // the canvas: the frame's width x the 240-row raster (H is always SCREEN_HEIGHT_V2)
+    const SDL_Rect dst = v2_present_dst(PW, H, filter, integer, &W, &Hout, &s);
     SDL_Rect src = { 0, 0, PW, H };
     SDL_SetRenderDrawColor(myRenderer_v2, 0, 0, 0, 255);
     SDL_RenderClear(myRenderer_v2);
@@ -352,34 +396,244 @@ static void v2_present_frame(int H) {
         if (v2_present_hq(filter, PW, H, s, &k)) { SDL_RenderCopy(myRenderer_v2, g_hq_tex, NULL, &dst); drawn = true; }
     }
     if (!drawn) SDL_RenderCopy(myRenderer_v2, myTexture_v2, &src, &dst);
-    {
-        static int shot = -1, at = 1, at_frame = -1, calls = 0; static const char* path = nullptr; static char pbuf[512];
-        if (shot < 0) {
-            const char* e = getenv("V2_PRESENT_SHOT");
-            shot = (e && *e) ? 0 : 2;
-            // <path>[:<presenter call>] or <path>:f<game frame> (UX stage 8: a shot at a known point of a replay)
-            if (shot == 0) { snprintf(pbuf, sizeof pbuf, "%s", e); char* c = strrchr(pbuf, ':');
-                             if (c && c[1]) { if (c[1] == 'f') at_frame = atoi(c + 2); else at = atoi(c + 1); *c = 0; } path = pbuf; }
+    v2_present_shot(dst, filter, integer, border, H, 0);
+    v2_present_end();
+}
+
+// ============================================================================
+// Sub-pixel presentation (2026-09-15, SUBPIXEL < OFF | ON >, render_v2.h V2PresentLayers): a
+// tile frame arrives as 1x layers and is composed here on the GPU into a k x render target —
+// every layer's art scaled by the integer k (nearest: a game pixel is a k x k block), every
+// layer placed at a device pixel, i.e. at 1/k of a game pixel. The work stays that of a 1x
+// frame: the layers' pixels go through the palette into one streaming atlas texture (the
+// coverage is the alpha), one SDL_RenderCopy per layer or command, then the target reaches the
+// window as the flat frame would (FILTER NEAREST / NONE sample it nearest, the rest linear — the
+// SHARP look; xBRZ and HQX need the 1x frame and are not applied). The overlay (F1 menu, STATS,
+// toasts) is drawn into a transparent 1x texture stretched over the picture. Debug:
+// V2_KX_SELFTEST=1 reads the target back and compares it with the flat frame scaled by k (composed
+// beside the layers then, laid out in stableBuffer) — 0 differing pixels expected while nothing
+// is interpolated; V2_PRESENT_DUMP writes the target (RGB) instead of the 1x canvas.
+// ============================================================================
+namespace {
+constexpr int KX_ATLAS_W = 2048, KX_ATLAS_H = 1024;
+SDL_Texture* g_kx_atlas = nullptr;                  // RGBA8888 streaming, nearest, blended
+std::vector<uint32_t> g_kx_stage;                   // the atlas's staging pixels (the rows used are uploaded)
+SDL_Texture* g_kx_target = nullptr; int g_kx_tw = 0, g_kx_th = 0, g_kx_tlin = -1;
+SDL_Texture* g_kx_overlay = nullptr;                // the 1x overlay, RENDER_WIDTH_V2 x RENDER_HEIGHT_V2, blended
+uint8_t g_kx_hud[V2_FB_MAX_W * 64];                // the HUD band laid out (indexed)
+bool g_kx_failed = false;                           // a texture could not be created: the flat frame from then on
+// the shelf packer over the atlas: the layers of one frame left to right, a new shelf when the row is full
+int g_pk_x = 0, g_pk_y = 0, g_pk_h = 0, g_pk_used_w = 0, g_pk_used_h = 0;
+struct KxOp { SDL_Rect src, dst, clip; bool clipped, blend; };
+std::vector<KxOp> g_kx_ops;
+void kx_pack_reset(void) { g_pk_x = g_pk_y = g_pk_h = g_pk_used_w = g_pk_used_h = 0; g_kx_ops.clear(); }
+bool kx_pack(int w, int h, int* x, int* y) {
+    if (w > KX_ATLAS_W || h > KX_ATLAS_H) return false;
+    if (g_pk_x + w > KX_ATLAS_W) { g_pk_y += g_pk_h; g_pk_x = 0; g_pk_h = 0; }
+    if (g_pk_y + h > KX_ATLAS_H) return false;
+    *x = g_pk_x; *y = g_pk_y; g_pk_x += w; if (h > g_pk_h) g_pk_h = h;
+    if (g_pk_x > g_pk_used_w) g_pk_used_w = g_pk_x;
+    if (g_pk_y + h > g_pk_used_h) g_pk_used_h = g_pk_y + h;
+    return true;
+}
+// the queued copies drawn from the atlas (its used area uploaded first; an opaque layer — the
+// background, the HUD band — is copied without blending, a covered one blended), then the packer
+// starts over — a frame whose layers outgrow the atlas is drawn in several rounds, in order
+void kx_flush(void) {
+    if (!g_kx_ops.empty()) {
+        const SDL_Rect up = { 0, 0, g_pk_used_w, g_pk_used_h };
+        SDL_UpdateTexture(g_kx_atlas, &up, g_kx_stage.data(), KX_ATLAS_W * (int)sizeof(uint32_t));
+        int blend = -1;
+        for (const KxOp& op : g_kx_ops) {
+            if ((int)op.blend != blend) { blend = op.blend; SDL_SetTextureBlendMode(g_kx_atlas, blend ? SDL_BLENDMODE_BLEND : SDL_BLENDMODE_NONE); }
+            SDL_RenderSetClipRect(myRenderer_v2, op.clipped ? &op.clip : NULL);
+            SDL_RenderCopy(myRenderer_v2, g_kx_atlas, &op.src, &op.dst);
         }
-        calls++;
-        if (shot == 0 && (at_frame >= 0 ? v2_dbg_pre_vm_iter >= at_frame : calls >= at)) {
-            std::vector<uint8_t> px((size_t)W * Hout * 3);
-            if (SDL_RenderReadPixels(myRenderer_v2, NULL, SDL_PIXELFORMAT_RGB24, px.data(), W * 3) == 0) {
-                FILE* f = fopen(path, "wb");
-                if (f) { fprintf(f, "P6\n%d %d\n255\n", W, Hout); fwrite(px.data(), 1, px.size(), f); fclose(f); }
-                fprintf(stderr, "V2-PRESENT-SHOT: %s %dx%d picture %dx%d at (%d,%d) filter=%d int=%d border=%d H=%d\n",
-                        path, W, Hout, dst.w, dst.h, dst.x, dst.y, filter, (int)integer, border, H);
+        SDL_RenderSetClipRect(myRenderer_v2, NULL);
+    }
+    kx_pack_reset();
+}
+// a layer into the atlas through the palette (coverage 0 = transparent) and its copy queued at
+// its device rectangle, scaled by k, under the given clip
+void kx_layer(const V2PresentLayer& L, const Uint32* lut, int k, const SDL_Rect* clip) {
+    if (!L.px || L.w <= 0 || L.h <= 0) return;
+    int ax = 0, ay = 0;
+    if (!kx_pack(L.w, L.h, &ax, &ay)) { kx_flush(); if (!kx_pack(L.w, L.h, &ax, &ay)) return; }   // larger than the atlas: no layer is (at most 520 x 249)
+    for (int y = 0; y < L.h; y++) {
+        const uint8_t* p = L.px + (size_t)y * L.stride;
+        const uint8_t* c = L.cov ? L.cov + (size_t)y * L.stride : nullptr;
+        uint32_t* o = g_kx_stage.data() + (size_t)(ay + y) * KX_ATLAS_W + ax;
+        if (c) for (int x = 0; x < L.w; x++) o[x] = c[x] ? lut[p[x]] : 0u;
+        else   for (int x = 0; x < L.w; x++) o[x] = lut[p[x]];
+    }
+    KxOp op; op.src = SDL_Rect{ ax, ay, L.w, L.h }; op.dst = SDL_Rect{ L.dx, L.dy, L.w * k, L.h * k };
+    op.clipped = clip != nullptr; op.clip = clip ? *clip : SDL_Rect{ 0, 0, 0, 0 }; op.blend = L.cov != nullptr;
+    g_kx_ops.push_back(op);
+}
+SDL_Texture* kx_texture(int access, int w, int h, SDL_ScaleMode mode, bool blend) {
+    SDL_Texture* t = SDL_CreateTexture(myRenderer_v2, SDL_PIXELFORMAT_RGBA8888, access, w, h);
+    if (t) { SDL_SetTextureScaleMode(t, mode); if (blend) SDL_SetTextureBlendMode(t, SDL_BLENDMODE_BLEND); }
+    return t;
+}
+// the palette mapped once per present (256 SDL_MapRGBA calls, alpha 255: the atlas is blended by
+// the coverage), then a table lookup per pixel
+void kx_palette_lut(Uint32 lut[256]) {
+    for (int c = 0; c < 256; c++) { const SDL_Color& sc = myDrawInfo_v2->drawPalette[c]; lut[c] = SDL_MapRGBA(myFormat_v2, sc.r, sc.g, sc.b, 255); }
+}
+// V2_KX_SELFTEST / V2_PRESENT_DUMP on the k x target (called while it is the render target): one
+// readback, RGB24. The selftest's reference is the flat frame in stableBuffer (rows 0..175 the
+// map, the HUD band laid out below, or a full-screen scene's rows) through the same palette,
+// each game pixel a k x k block; every differing device pixel is counted, the first 20 differing
+// presents are reported one by one, a summary every 100 presents.
+void kx_debug(const V2PresentLayers& L, int TW, int TH, int k) {
+    static int selftest = -1; if (selftest < 0) selftest = getenv("V2_KX_SELFTEST") ? 1 : 0;
+    static int dump = -1; static char dir[480]; static int from = 0, to = -1, dn = 0;
+    if (dump < 0) {
+        const char* e = getenv("V2_PRESENT_DUMP"); dump = 0;
+        if (e && *e) { snprintf(dir, sizeof dir, "%s", e); char* c = strrchr(dir, ':');
+                       if (c && sscanf(c + 1, "%d-%d", &from, &to) == 2) { *c = 0; dump = 1; } }
+    }
+    const bool want_dump = dump == 1 && v2_dbg_pre_vm_iter >= from && v2_dbg_pre_vm_iter <= to && dn < 4000;
+    if (!selftest && !want_dump) return;
+    static std::vector<uint8_t> rb; rb.resize((size_t)TW * TH * 3);
+    if (SDL_RenderReadPixels(myRenderer_v2, NULL, SDL_PIXELFORMAT_RGB24, rb.data(), TW * 3) != 0) return;
+    if (want_dump) {
+        char path[560]; snprintf(path, sizeof path, "%s/pf_%04d_f%d_%u_%s%d_kx%d.ppm", dir, dn, v2_dbg_pre_vm_iter, (unsigned)SDL_GetTicks(),
+                                 v2_smooth_effective() ? "sm" : "tick", v2_smooth_last_reason, k);
+        if (FILE* f = fopen(path, "wb")) { fprintf(f, "P6\n%d %d\n255\n", TW, TH); fwrite(rb.data(), 1, rb.size(), f); fclose(f); }
+        dn++;
+    }
+    if (selftest && v2_present_ref_valid) {
+        static int n = 0, ndiff = 0, shown = 0; static long long px_diff = 0;
+        n++;
+        const uint8_t* ref = myDrawInfo_v2->stableBuffer;
+        int diff = 0, fx0 = -1, fy0 = -1; uint8_t g0[3] = { 0, 0, 0 }; SDL_Color w0 = { 0, 0, 0, 0 };
+        for (int y = 0; y < TH; y++) {
+            const uint8_t* rrow = ref + (size_t)(y / k) * RENDER_WIDTH_V2;
+            const uint8_t* g = rb.data() + (size_t)y * TW * 3;
+            for (int x = 0; x < TW; x++) {
+                const SDL_Color& c = myDrawInfo_v2->drawPalette[rrow[x / k]];
+                if (g[x * 3] != c.r || g[x * 3 + 1] != c.g || g[x * 3 + 2] != c.b) {
+                    if (!diff) { fx0 = x; fy0 = y; g0[0] = g[x * 3]; g0[1] = g[x * 3 + 1]; g0[2] = g[x * 3 + 2]; w0 = c; }
+                    diff++;
+                }
             }
-            shot = 1;
+        }
+        if (diff) {
+            ndiff++; px_diff += diff;
+            if (shown < 20) { shown++; fprintf(stderr, "V2-KX-SELFTEST present=%d f%d k=%d W=%d rows=%d smooth=%d diff=%d first=(%d,%d) got=%02X%02X%02X want=%02X%02X%02X\n",
+                                              n, v2_dbg_pre_vm_iter, k, L.w, L.rows, v2_smooth_effective() ? 1 : 0, diff, fx0, fy0, g0[0], g0[1], g0[2], w0.r, w0.g, w0.b); }
+        }
+        if (n % 100 == 0) fprintf(stderr, "V2-KX-SELFTEST-SUM presents=%d differing=%d px=%lld k=%d\n", n, ndiff, px_diff, k);
+    }
+}
+}  // namespace
+
+int v2_present_scale_k(int cw) {   // render_v2.h: the k for a frame cw wide — FILTER SHARP's pre-scale of the same window
+#ifdef HEADLESS
+    (void)cw; return 0;   // no presentation: the flat path (its buffers feed the tests)
+#else
+    if (!myRenderer_v2 || g_kx_failed) return 0;
+    const int filter = v2_options.filter.load();
+    if (filter == 5) return 1;   // NONE: the raster 1:1
+    int W = 0, Hout = 0; double s = 1.0;
+    v2_present_dst(cw, RENDER_HEIGHT_V2, filter, v2_options.integer_scale.load(), &W, &Hout, &s);
+    if (W <= 0 || Hout <= 0) return 0;
+    int k = (int)s; if (k < s) k++; if (k < 1) k = 1; if (k > 8) k = 8;
+    return k;
+#endif
+}
+
+static void v2_present_layers(const V2PresentLayers& L) {
+    // debug: V2_SMOOTH_TIME=1 — this path's own cost per present, avg/max every 2 s, split into
+    // `target` (the palette, the layers into the atlas and the copies into the target; the
+    // selftest's / dump's readback when on) and `window` (the target and the overlay into the
+    // window) — the first is mostly this thread's own work, the second the renderer's
+    static int kx_time = -1; if (kx_time < 0) kx_time = getenv("V2_SMOOTH_TIME") ? 1 : 0;
+    const uint64_t kx_t0 = kx_time ? SDL_GetPerformanceCounter() : 0;
+    uint64_t kx_t1 = kx_t0;
+    struct KxTime { uint64_t t0; const uint64_t* t1; int on; ~KxTime() { if (!on) return;
+        static double acc = 0.0, acc_t = 0.0, mx = 0.0; static int n = 0; static uint32_t last_ms = 0;
+        const double f = (double)SDL_GetPerformanceFrequency() / 1000.0;
+        const double ms = (double)(SDL_GetPerformanceCounter() - t0) / f, ms_t = (double)(*t1 - t0) / f;
+        acc += ms; acc_t += ms_t; if (ms > mx) mx = ms; n++;
+        const uint32_t now = SDL_GetTicks(); if (last_ms == 0) last_ms = now;
+        if (now - last_ms >= 2000) { fprintf(stderr, "V2-KX-TIME presents=%d avg=%.2fms (target %.2f, window %.2f) max=%.2fms\n", n, n ? acc / n : 0.0, n ? acc_t / n : 0.0, n ? (acc - acc_t) / n : 0.0, mx);
+                                     acc = 0.0; acc_t = 0.0; mx = 0.0; n = 0; last_ms = now; } } } kx_timer{ kx_t0, &kx_t1, kx_time };
+    const int k = L.k, W = L.w, TW = W * k, TH = RENDER_HEIGHT_V2 * k;
+    const int filter = v2_options.filter.load();
+    const bool integer = v2_options.integer_scale.load();
+    const int border = v2_options.border.load();
+    const int want_lin = (filter == 0 || filter == 5) ? 0 : 1;   // how the target is sampled into the window
+    if (!g_kx_atlas) { g_kx_atlas = kx_texture(SDL_TEXTUREACCESS_STREAMING, KX_ATLAS_W, KX_ATLAS_H, SDL_ScaleModeNearest, true); g_kx_stage.assign((size_t)KX_ATLAS_W * KX_ATLAS_H, 0u); }
+    if (!g_kx_overlay) g_kx_overlay = kx_texture(SDL_TEXTUREACCESS_STREAMING, RENDER_WIDTH_V2, RENDER_HEIGHT_V2, SDL_ScaleModeLinear, true);
+    if (!g_kx_target || g_kx_tw != TW || g_kx_th != TH || g_kx_tlin != want_lin) {
+        if (g_kx_target) SDL_DestroyTexture(g_kx_target);
+        g_kx_target = kx_texture(SDL_TEXTUREACCESS_TARGET, TW, TH, want_lin ? SDL_ScaleModeLinear : SDL_ScaleModeNearest, false);
+        g_kx_tw = TW; g_kx_th = TH; g_kx_tlin = want_lin;
+    }
+    if (!g_kx_atlas || !g_kx_overlay || !g_kx_target) {
+        if (!g_kx_failed) fprintf(stderr, "render_v2: the sub-pixel presentation cannot create its textures (%s) — the flat frame from now on\n", SDL_GetError());
+        g_kx_failed = true;   // v2_present_scale_k returns 0: the next frame comes flat
+        v2_present_end();
+        return;
+    }
+    SDL_SetTextureScaleMode(g_kx_overlay, want_lin ? SDL_ScaleModeLinear : SDL_ScaleModeNearest);
+    Uint32 lut[256]; kx_palette_lut(lut);
+    const SDL_Color& idx0 = myDrawInfo_v2->drawPalette[0];   // the flat frame shows index 0 where nothing is painted (below a scene's rows)
+    // the layers into the target: the background under the map clip; the commands, the priority
+    // layer and the text under the sprite clip; the HUD band below the map
+    SDL_SetRenderTarget(myRenderer_v2, g_kx_target);
+    SDL_SetRenderDrawColor(myRenderer_v2, idx0.r, idx0.g, idx0.b, 255);
+    SDL_RenderClear(myRenderer_v2);
+    kx_pack_reset();
+    const SDL_Rect map_clip = { 0, 0, TW, L.map_h * k }, spr_clip = { 0, 0, TW, L.clip_h * k };
+    kx_layer(L.bg, lut, k, &map_clip);
+    for (int i = 0; i < L.prio_after; i++) kx_layer(L.cmd[i], lut, k, &spr_clip);
+    if (L.prio.px) kx_layer(L.prio, lut, k, &spr_clip);
+    for (int i = L.prio_after; i < L.n_cmd; i++) kx_layer(L.cmd[i], lut, k, &spr_clip);
+    kx_layer(L.ui, lut, k, &spr_clip);
+    if (!L.rows) {   // the HUD band: the 320-px art centred, the wall on the wings, the badges (v2_layout_hud_band)
+        v2_layout_hud_band(g_kx_hud, V2_FB_MAX_W, W, L.hud, L.badges);
+        const V2PresentLayer hb = { g_kx_hud, nullptr, W, 64, V2_FB_MAX_W, 0, 176 * k };
+        kx_layer(hb, lut, k, nullptr);
+    }
+    kx_flush();
+    kx_debug(L, TW, TH, k);
+    if (kx_time) kx_t1 = SDL_GetPerformanceCounter();
+    SDL_SetRenderTarget(myRenderer_v2, NULL);
+    // the target to the window, where the flat frame would go
+    int Wo = 0, Ho = 0; double s = 1.0;
+    const SDL_Rect dst = v2_present_dst(W, RENDER_HEIGHT_V2, filter, integer, &Wo, &Ho, &s);
+    SDL_SetRenderDrawColor(myRenderer_v2, 0, 0, 0, 255);
+    SDL_RenderClear(myRenderer_v2);
+    if (border == 1) {   // GLOW: the picture decimated to 40 x 30, drawn linear over the whole output, dimmed
+        if (!g_glow_tex) {
+            g_glow_tex = v2_make_texture(SDL_TEXTUREACCESS_TARGET, 40, 30, 1);
+            if (g_glow_tex) SDL_SetTextureColorMod(g_glow_tex, 72, 72, 72);
+        }
+        if (g_glow_tex) {
+            SDL_SetRenderTarget(myRenderer_v2, g_glow_tex);
+            SDL_RenderCopy(myRenderer_v2, g_kx_target, NULL, NULL);
+            SDL_SetRenderTarget(myRenderer_v2, NULL);
+            SDL_RenderCopy(myRenderer_v2, g_glow_tex, NULL, NULL);
         }
     }
-    if (g_latch_ticks) {   // the presenter's work since its latch: v2_vsync_latch_sleep sizes the margin by it
-        const double w = (double)(SDL_GetPerformanceCounter() - g_latch_ticks) / (double)SDL_GetPerformanceFrequency() * 1000.0;
-        g_work_ema_ms = g_work_ema_ms > 0.0 ? g_work_ema_ms * 0.9 + w * 0.1 : w;
-        v2_stats.presenter_ms_x100.store((int)(g_work_ema_ms * 100.0 + 0.5), std::memory_order_relaxed);
+    SDL_RenderCopy(myRenderer_v2, g_kx_target, NULL, &dst);
+    // the overlay: the 1x RGBA buffer cleared to transparent, the menu / STATS / toast drawn into
+    // it (the boxes darken by alpha), stretched over the picture as the flat frame carries it —
+    // uploaded and drawn only when something was drawn (the ordinary frame has no overlay)
+    {
+        memset(tempDrawBuffer_v2, 0, sizeof tempDrawBuffer_v2);
+        const int content_h = L.rows ? L.rows : 240;
+        if (v2_ui_draw(tempDrawBuffer_v2, RENDER_WIDTH_V2, content_h, myFormat_v2, true)) {
+            SDL_UpdateTexture(g_kx_overlay, NULL, tempDrawBuffer_v2, RENDER_WIDTH_V2 * (int)sizeof(uint32_t));
+            const SDL_Rect osrc = { 0, 0, W, RENDER_HEIGHT_V2 };
+            SDL_RenderCopy(myRenderer_v2, g_kx_overlay, &osrc, &dst);
+        }
     }
-    SDL_RenderPresent(myRenderer_v2);
-    v2_vsync_on_present();   // the display's vsync -> the game's (see the module above)
+    v2_present_shot(dst, filter, integer, border, RENDER_HEIGHT_V2, k);
+    v2_present_end();
 }
 uint16_t input_keys_v2 = 0;
 bool need_quit_v2 = false;  // Не используется, но оставим для совместимости
@@ -434,6 +688,11 @@ void updateDraw_v2()
               vsum, rsum, dsum, v2_vga_crtc, v2_vga_pan);
     }
   }
+
+  // the sub-pixel presentation (render_v2.h V2PresentLayers): the frame arrived as layers — they
+  // are composed on the GPU there, the overlay drawn over the picture inside (V2_UI_SHOT below
+  // belongs to the flat path)
+  if (v2_present_layers_cur) { v2_present_layers(*v2_present_layers_cur); return; }
 
   // the palette mapped once per present (256 SDL_MapRGBA calls), then a table lookup per
   // pixel — the per-pixel call sat on the presenter's critical path after the vsync latch

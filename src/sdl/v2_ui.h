@@ -25,6 +25,7 @@ struct V2Options {
     std::atomic<int>  pacing{0};             // 2026-09-11: 0 VSYNC (the game's vsync = the display's, render_v2.cpp), 1 VRR (no vsync wait, one present per flip, the display follows the game)
     std::atomic<int>  stats{0};              // 2026-09-11: the STATS overlay (v2_stats.h)
     std::atomic<int>  sound_mode{0};         // 0 PC (OPL3, the original), 1 SNES (UX10: the SNES DE music/effects, next level), 2 SC55 (UX11: Nuked-SC55 on the driver's MIDI events), 3 MT32 (UX11: the game's MT-32 driver on Munt)
+    std::atomic<bool> subpixel{true};        // 2026-09-15: SUBPIXEL — a tile frame composed as layers on the GPU at the window's integer scale k, every layer at 1/k of a game pixel (render_v2.h V2PresentLayers); off = the flat frame
 };
 extern V2Options v2_options;
 void v2_options_ensure_loaded();        // cwd/v2_options.cfg, once
@@ -37,7 +38,10 @@ const char* v2_locale_code_at(int i);
 
 // render thread
 bool v2_ui_handle_event(const SDL_Event* e);            // true = consumed
-void v2_ui_draw(uint32_t* rgba, int w, int h, SDL_PixelFormat* fmt);
+// transparent: the buffer is a transparent overlay (the sub-pixel presentation draws it over the
+// picture on the GPU) — the boxes darken by alpha instead of reading the pixels beneath.
+// Returns true when anything was drawn (the STATS box, the menu, a toast).
+bool v2_ui_draw(uint32_t* rgba, int w, int h, SDL_PixelFormat* fmt, bool transparent = false);
 void v2_ui_toast(const char* text);                     // ~1.5 s message
 
 // game thread <- render thread

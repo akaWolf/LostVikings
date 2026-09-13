@@ -45,6 +45,7 @@ void v2_options_ensure_loaded() {
             else if (!strcmp(key, "smooth")) v2_options.smooth = (val >= 0 && val <= 2) ? val : 1;   // 0 NONE, 1 AUTO (an old cfg's ON = the new default), 2 ON
             else if (!strcmp(key, "console_finale")) v2_options.console_finale = val != 0;
             else if (!strcmp(key, "filter")) v2_options.filter = (val >= 0 && val <= 5) ? val : 1;   // out of range: the default, SHARP
+            else if (!strcmp(key, "subpixel")) v2_options.subpixel = val != 0;   // 2026-09-15: the sub-pixel presentation (render_v2.h V2PresentLayers)
             else if (!strcmp(key, "integer_scale")) v2_options.integer_scale = val != 0;
             // (square_pixels — the step-3 ASPECT toggle — is gone, 2026-09-06: the
             // canvas is always the 320x240 raster; an old cfg's key is ignored here)
@@ -78,6 +79,7 @@ void v2_options_save() {
     fprintf(f, "filter=%d\ninteger_scale=%d\nborder=%d\nsound=%d\nwide=%d\n", v2_options.filter.load(), (int)v2_options.integer_scale.load(), v2_options.border.load(), v2_options.sound_mode.load(), v2_options.wide.load());
     fprintf(f, "audio_buffer=%d\npacing=%d\nstats=%d\n", v2_options.audio_buffer.load(), v2_options.pacing.load(), (int)v2_options.stats.load());
     fprintf(f, "music_volume=%d\nsfx_volume=%d\n", v2_options.music_volume.load(), v2_options.sfx_volume.load());
+    fprintf(f, "subpixel=%d\n", (int)v2_options.subpixel.load());
     if (v2_options_sc55_roms[0]) fprintf(f, "sc55_roms=%s\n", v2_options_sc55_roms);
     if (v2_options_mt32_roms[0]) fprintf(f, "mt32_roms=%s\n", v2_options_mt32_roms);
     fclose(f);
@@ -153,10 +155,13 @@ static void put_text(uint32_t* rgba, int w, int h, SDL_PixelFormat* fmt, int x, 
                 }
     }
 }
+static bool g_ui_transparent = false;   // v2_ui_draw(transparent): the buffer is an overlay blended over the picture on the GPU
 static void darken_box(uint32_t* rgba, int w, int h, SDL_PixelFormat* fmt, int x0, int y0, int bw, int bh) {
+    const uint32_t veil = SDL_MapRGBA(fmt, 0, 0, 0, 192);   // three quarters black over the picture — what the r/4 below does to the pixel beneath
     for (int y = y0; y < y0 + bh && y < h; y++)
         for (int x = x0; x < x0 + bw && x < w; x++) {
             if (x < 0 || y < 0) continue;
+            if (g_ui_transparent) { rgba[y * w + x] = veil; continue; }
             Uint8 r, g, b, a;
             SDL_GetRGBA(rgba[y * w + x], fmt, &r, &g, &b, &a);
             rgba[y * w + x] = SDL_MapRGBA(fmt, r / 4, g / 4, b / 4, 255);
@@ -164,7 +169,9 @@ static void darken_box(uint32_t* rgba, int w, int h, SDL_PixelFormat* fmt, int x
 }
 
 // ------------------------------------------------------------------- menu --
-enum Item { IT_PARALLAX, IT_SCENES, IT_BALANCE, IT_LANG, IT_SMOOTH, IT_FINALE, IT_FILTER, IT_INTEGER, IT_BORDER, IT_WIDE, IT_SOUND,
+enum Item { IT_PARALLAX, IT_SCENES, IT_BALANCE, IT_LANG, IT_SMOOTH, IT_FINALE, IT_FILTER,
+            IT_SUBPIXEL,                                                   // 2026-09-15: SUBPIXEL [ON/OFF] — the layers on the GPU at 1/k (render_v2.h V2PresentLayers)
+            IT_INTEGER, IT_BORDER, IT_WIDE, IT_SOUND,
             IT_MUSICVOL, IT_SFXVOL,                                        // 2026-09-11: MUSIC VOL / SFX VOL (0..100 %, step 10)
             IT_AUDIOBUF, IT_PACING, IT_STATS,                              // 2026-09-11: the audio device buffer, PACING < VSYNC | VRR >, the STATS overlay
             IT_NET_PLAYERS, IT_NET_DELAY, IT_NET_HOST, IT_NET_JOIN,      // UX stage 8 tails: the co-op lobby
@@ -200,6 +207,7 @@ static void activate() {
     case IT_SMOOTH:   v2_options.smooth = (v2_options.smooth.load() + 1) % 3; v2_options_save(); break;
     case IT_FINALE:   if (net_locked()) break; v2_options.console_finale = !v2_options.console_finale.load(); v2_options_save(); v2_ui_toast("FINALE: NEXT LOAD"); break;
     case IT_FILTER:   v2_options.filter = filter_step(v2_options.filter.load(), 1); v2_options_save(); break;
+    case IT_SUBPIXEL: v2_options.subpixel = !v2_options.subpixel.load(); v2_options_save(); break;
     case IT_INTEGER:  v2_options.integer_scale = !v2_options.integer_scale.load(); v2_options_save(); break;
     case IT_BORDER:   v2_options.border = (v2_options.border.load() + 1) % 2; v2_options_save(); break;
     case IT_WIDE:     if (net_locked()) break; v2_options.wide = (v2_options.wide.load() + 1) % 3; v2_options_save(); v2_ui_toast("WIDE: NEXT LEVEL"); break;
@@ -222,7 +230,7 @@ static void activate() {
 }
 static void adjust(int d) {
     switch (cursor) {
-    case IT_PARALLAX: case IT_SCENES: case IT_BALANCE: case IT_FINALE: case IT_INTEGER: activate(); break;
+    case IT_PARALLAX: case IT_SCENES: case IT_BALANCE: case IT_FINALE: case IT_SUBPIXEL: case IT_INTEGER: activate(); break;
     case IT_SMOOTH:   v2_options.smooth = (v2_options.smooth.load() + d + 3) % 3; v2_options_save(); break;
     case IT_SOUND:    v2_options.sound_mode = (v2_options.sound_mode.load() + d + 4) % 4; v2_options_save(); break;
     case IT_FILTER:   v2_options.filter = filter_step(v2_options.filter.load(), d); v2_options_save(); break;
@@ -288,7 +296,9 @@ bool v2_ui_handle_event(const SDL_Event* e) {
     return true;
 }
 
-void v2_ui_draw(uint32_t* rgba, int w, int h, SDL_PixelFormat* fmt) {
+bool v2_ui_draw(uint32_t* rgba, int w, int h, SDL_PixelFormat* fmt, bool transparent) {
+    g_ui_transparent = transparent;
+    bool drew = false;
     // debug: V2_UI_TEST=<frame> opens the menu by itself after that many
     // presented frames (headless/dummy-video review of the overlay)
     { static int test = -2, frames = 0; frames++;
@@ -305,7 +315,7 @@ void v2_ui_draw(uint32_t* rgba, int w, int h, SDL_PixelFormat* fmt) {
         static const char* const SMOOTH_NAMES[3] = { "NONE", "AUTO", "ON" };
         if (v2_stats.vsync_locked.load()) snprintf(st[m++], 48, "VSYNC LOCK ON %.2f HZ  PRESENT %.2f MS", v2_stats.display_hz_x100.load() / 100.0, v2_stats.present_ms_x100.load() / 100.0);
         else snprintf(st[m++], 48, "NO VSYNC LOCK  TIMER 60 HZ  PRESENT %.2f MS", v2_stats.present_ms_x100.load() / 100.0);
-        snprintf(st[m++], 48, "PACING %s  SMOOTH %s %s", v2_options.pacing.load() ? "VRR" : "VSYNC", SMOOTH_NAMES[v2_options.smooth.load() % 3], v2_smooth_effective() ? "ON" : "OFF");
+        snprintf(st[m++], 48, "PACING %s  SMOOTH %s %s  KX %d", v2_options.pacing.load() ? "VRR" : "VSYNC", SMOOTH_NAMES[v2_options.smooth.load() % 3], v2_smooth_effective() ? "ON" : "OFF", v2_stats.kx.load());   // KX = the sub-pixel presentation's k (0 = the flat frame)
         snprintf(st[m++], 48, "SUBFRAMES %d/FRAME  DROPS %u  DOUBLES %u  LATE %u", v2_stats.subframes_per_frame.load(), (unsigned)v2_stats.flip_drops.load(), (unsigned)v2_stats.flip_doubles.load(), (unsigned)v2_stats.present_late.load());
         snprintf(st[m++], 48, "FRAME %.1f MS  WORK %.1f MS  SLOW %u", v2_stats.frame_ms_x100.load() / 100.0, v2_stats.work_ms_x100.load() / 100.0, (unsigned)v2_stats.slow_frames.load());
         snprintf(st[m++], 48, "PRESENTER %.2f MS AFTER LATCH", v2_stats.presenter_ms_x100.load() / 100.0);   // its own work before the present (sizes the latch margin)
@@ -316,6 +326,7 @@ void v2_ui_draw(uint32_t* rgba, int w, int h, SDL_PixelFormat* fmt) {
         int x0 = v2_present_w - bw - 4; if (x0 < 0) x0 = 0;
         darken_box(rgba, w, h, fmt, x0, y0, bw, bh);
         for (int i = 0; i < m; i++) put_text(rgba, w, h, fmt, x0 + 5, y0 + 3 + i * 9, st[i], i == 0 ? YELLOW : WHITE);
+        drew = true;
     }
     if (v2_ui_menu_open.load()) {
         char lines[28][48]; int n = 0;          // title + up to 22 items (debug mode) + the network status
@@ -333,7 +344,13 @@ void v2_ui_draw(uint32_t* rgba, int w, int h, SDL_PixelFormat* fmt) {
           if (v2_vsync_locked()) snprintf(lines[n++], 44, "SMOOTH    < %s >%s %.0f HZ", SMOOTH_NAMES[sm], sm == 1 ? (v2_smooth_effective() ? " ON " : " OFF") : "", v2_vsync_display_hz());
           else snprintf(lines[n++], 44, "SMOOTH    < %s >%s NO VSYNC", SMOOTH_NAMES[sm], sm == 1 ? " OFF" : ""); }
         snprintf(lines[n++], 40, "FINALE    [%s]", v2_options.console_finale.load() ? "SNES" : "PC ");
-        snprintf(lines[n++], 40, "FILTER    < %s >", FILTER_NAMES[v2_options.filter.load() % 6]);
+        { // under SUBPIXEL the picture is the k x target: LINEAR, XBRZ and HQX (they want the 1x frame) show as SHARP does
+          const int fl = v2_options.filter.load() % 6;
+          snprintf(lines[n++], 44, "FILTER    < %s >%s", FILTER_NAMES[fl], (v2_options.subpixel.load() && fl >= 2 && fl <= 4) ? "  (SUBPIXEL: SHARP)" : ""); }
+        // the k of the frame shown (0 while a chunk screen — the title, the menus — is up: those are the flat page)
+        { const int kx = v2_stats.kx.load();
+          if (v2_options.subpixel.load() && kx) snprintf(lines[n++], 40, "SUBPIXEL  [ON ]  K=%d", kx);
+          else snprintf(lines[n++], 40, "SUBPIXEL  [%s]", v2_options.subpixel.load() ? "ON " : "OFF"); }
         snprintf(lines[n++], 40, "INT.SCALE [%s]", v2_options.integer_scale.load() ? "ON " : "OFF");
         snprintf(lines[n++], 40, "BORDER    < %s >", BORDER_NAMES[v2_options.border.load() % 2]);
         { static const char* const WIDE_NAMES[3] = { "OFF  ", "16:10", "16:9 " };
@@ -371,10 +388,13 @@ void v2_ui_draw(uint32_t* rgba, int w, int h, SDL_PixelFormat* fmt) {
             if (cur) put_text(rgba, w, h, fmt, x0 + 3, y0 + 4 + i * 9, ">", YELLOW);
             put_text(rgba, w, h, fmt, x0 + 10, y0 + 4 + i * 9, lines[i], (i == 0 || i == n - 1) ? GREY : (cur ? YELLOW : WHITE));
         }
+        drew = true;
     }
     if (!toast_text.empty() && SDL_GetTicks() < toast_until) {
         int len = (int)toast_text.size();
         darken_box(rgba, w, h, fmt, 8, h - 20, len * 6 + 8, 13);
         put_text(rgba, w, h, fmt, 12, h - 17, toast_text.c_str(), YELLOW);
+        drew = true;
     }
+    return drew;
 }

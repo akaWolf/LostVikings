@@ -99,6 +99,14 @@ extern thread_local uint8_t*        v2_tls_out;
 extern thread_local const uint8_t*  v2_tls_fs;
 extern thread_local const uint32_t* v2_tls_par_acc;   // {acc_x, acc_y} of the parallax autoscroll
 extern thread_local bool            v2_tls_presenter; // passes run outside the VM frame gate
+// Sub-pixel presentation (2026-09-15, V2PresentLayers below): the layer being composed carries a
+// coverage plane the pixel put marks (same stride as the out buffer; nullptr = none), and the
+// world passes paint one tile beyond the frame (the layer's margin: it is shown shifted left/up
+// by the camera's fraction). v2_clip_h is the per-frame sprite / text clip height of this
+// thread's passes — v2_draw_tiles sets it (176, 187 on a 200-row scene, 224; +1 with the margin).
+extern thread_local uint8_t*        v2_tls_cov;
+extern thread_local int             v2_tls_kx_margin;
+extern thread_local int             v2_clip_h;
 extern "C" int v2_view_rows(void);           // v2_vm.cpp: 176 / 200 (LVX scene) / 224 (LVX_TALL224 level)
 void v2_smooth_capture(void);                 // game thread, at the page flip
 // (the presenter's frame comes from v2_present_compose below since 2026-09-15; v2_smooth_render is gone)olated frame
@@ -439,8 +447,59 @@ struct V2PresentFrame {
     const uint8_t* hud;              // 320 x 64 indexed HUD art (HUD layout only)
     const V2DisplayBadge* badges;    // the 3 co-op badges (HUD layout only)
     bool smooth;                     // an interpolation between the two newest flips
+    const struct V2PresentLayers* layers;   // sub-pixel presentation: a tile frame as layers (then `map` is nullptr unless the selftest asked for both)
 };
 extern bool v2_present_compose(V2PresentFrame* out);   // false: no snapshot captured yet (paint black)
+
+// Sub-pixel presentation (2026-09-15, SUBPIXEL < OFF | ON >): a tile frame composed as 1x LAYERS
+// the presenter draws on the GPU into a k x render target (render_v2.cpp) — k = the window's
+// integer scale (as FILTER SHARP pre-scales), the art of every layer scaled by k (nearest: a game
+// pixel is a k x k block), every layer placed at a device pixel, i.e. at 1/k of a game pixel: the
+// background at the exact camera's fraction, each display-list command at its own 1/k position.
+// The interpolation under SMOOTH then moves in 1/k steps; at t = 1 every position is whole and
+// the picture is the flat frame scaled by k, pixel for pixel (the stand V2_KX_SELFTEST). The
+// passes are the flat frame's (v2_render_funcs.cpp under the thread-local overrides), only split
+// by what moves separately: the background (the tile pass with the parallax beneath and the
+// background-VGA readout, one tile of margin right and below), each command alone in a bitmap of
+// its extent with a coverage plane (v2_raster_cmd_bitmap), the priority layer of a parallax
+// level (the console layer's priority-1 cells and the map's flagged tiles over the sprites,
+// v2_draw_flagged_tiles), the text plane and the CJK overlay (screen-anchored, no shift).
+struct V2PresentLayer {
+    const uint8_t* px;    // 1x indexed pixels, `stride` bytes per row (nullptr: no layer)
+    const uint8_t* cov;   // coverage per pixel (nullptr: opaque)
+    int w, h, stride;
+    int dx, dy;           // the layer's top-left in device pixels of the k x target
+};
+struct V2PresentLayers {
+    int k;                // the integer scale (0: not composed — a chunk screen, the flat path)
+    int w;                // the frame's width in game pixels (the canvas is w x 240)
+    int rows;             // 0 = HUD layout (176 map rows + the band), else 200 / 224 map rows shown
+    int map_h;            // the map rows shown: 176 / 200 / 224 (the world layers' clip)
+    int clip_h;           // the sprite / text clip: 176 / 187 / 224 (v2_draw_tiles' v2_clip_h)
+    V2PresentLayer bg;    // opaque, at (-fx, -fy): the camera's fraction in device pixels
+    V2PresentLayer prio;  // the priority layer (px nullptr when the level has none), at (-fx, -fy)
+    int n_cmd;            // the display list's commands as bitmaps, in draw order
+    const V2PresentLayer* cmd;
+    int prio_after;       // the commands [0, prio_after) go under the priority layer, the rest over it (= n_cmd without one)
+    V2PresentLayer ui;    // the text plane's cells (when they are not page commands) and the CJK overlay, at (0, 0)
+    const uint8_t* hud;   // 320 x 64 HUD art (HUD layout only)
+    const V2DisplayBadge* badges;
+};
+// render_v2.cpp: the k the presenter composes a frame `cw` wide at in the current window (the
+// integer scale FILTER SHARP would pre-scale by; 1 under FILTER NONE) — 0 when the sub-pixel
+// path cannot run (no renderer, the headless build, its textures failed)
+extern int v2_present_scale_k(int cw);
+// v2_render_funcs.cpp: command i of a list rasterised alone at (0, 0) of a w x h bitmap (its
+// extent, v2_cmd_extent_of) with a coverage plane — v2_draw_list's raster minus the frame clip
+extern void v2_raster_cmd_bitmap(const V2DrawList& L, int i, uint8_t* px, uint8_t* cov, int w, int h);
+extern void v2_cmd_extent_of(const V2DrawCmd& c, int* w, int* h);
+// v2_render_funcs.cpp: the shake fold of the DS's camera — x_eff - viewport per axis, the whole
+// pixels the sprite raster subtracts beyond the viewport (v2_draw_list: world - x_eff)
+extern void v2_camera_shake(const uint8_t* ds, int* dx, int* dy);
+// render_v2_test.cpp: the layers of the frame being presented (nullptr: the flat frame in
+// stableBuffer), and whether stableBuffer holds the flat frame beside them (the selftest's reference)
+extern const V2PresentLayers* v2_present_layers_cur;
+extern bool v2_present_ref_valid;
 // the flip dump's frame (game thread): the newest snapshot composed at t = 1 into the caller's buffers
 extern bool v2_flip_frame_for_dump(uint8_t* map, uint8_t* hud, V2DisplayBadge* badges, int* w, int* rows);
 // the HUD band as presented: the 320-px art centred on a wide frame, the stone wall mirrored
