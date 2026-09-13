@@ -370,6 +370,21 @@ boots, SDL dummy drivers work, the replay parser handles `empty.inp`, no
 segfault during init, and the dump dir is created. With `DATA.DAT`
 present the same scripts exercise real gameplay.
 
+Benches of the V2_ONLY build (the windowed binary under SDL's dummy
+drivers; they need what the feature needs):
+
+```sh
+bash tests/locale_box.sh                      # the language banks reach the level dialogues: the first box of
+                                              # level 0 in en/ru/ja against tests/golden_locale/ (needs content/;
+                                              # UPDATE=1 retakes the goldens, LANGS="..." picks languages)
+bash tests/mt32_dump.sh                       # the MT-32 world: its MIDI stream against the level's MT-32 track
+bash tests/wide_canon.sh                      # the wide view: the canon replays at 320 px, byte for byte
+```
+
+The canon runs without a language bank and without the audio thread or
+the presenter, so these three are the regression tests of the
+translations, the MT-32 world and the wide view; they do not run in CI.
+
 More detail: `tests/README.md` and `HEADLESS_MODE_ANALYSIS.md`.
 
 ---
