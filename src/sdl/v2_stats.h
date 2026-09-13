@@ -10,6 +10,7 @@ struct V2Stats {
     // presenter (render_v2.cpp)
     std::atomic<int>      vsync_locked{0};        // the game's vsync follows the display
     std::atomic<int>      display_hz_x100{0};     // the refresh the lock runs on
+    std::atomic<int>      measured_hz_x100{0};    // 2026-09-15: the refresh measured over the long window (0 until it settles)
     std::atomic<int>      present_ms_x100{0};     // measured interval between presents
     std::atomic<int>      presenter_ms_x100{0};   // the presenter's own work between its vsync latch and the present call (sizes the latch margin)
     std::atomic<uint32_t> present_late{0};        // presents that took more than 1.5 refreshes

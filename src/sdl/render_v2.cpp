@@ -66,6 +66,27 @@ unsigned g_present_n = 0;              // presents measured so far (the lock wai
 const unsigned VS_WARMUP = 32;         // presents before the lock may engage (~0.5 s at 60 Hz)
 std::atomic<bool> g_vs_locked{false};  // present blocks on a plausible refresh: the game waits on it
 std::atomic<int>  g_vs_hz_x100{0};     // the effective refresh x 100 (menu, SMOOTH AUTO)
+// The refresh measured over a long window (2026-09-15): the mode's rate from SDL is a whole number
+// (60 for a 59.94 Hz panel) and the 10-present average above is too noisy for a tenth of a per
+// cent — so the period is estimated as sum(dt) / sum(n) over the presents seen, n = the whole
+// refreshes an interval spans (a present that missed one counts as two: the grid is unhurt; a
+// stall of more than three is left out), halved past 4096 refreshes so a slow drift still
+// registers, reset when the display mode changes. Trusted from 256 refreshes (~4 s at 60 Hz).
+double   g_meas_sum_ms = 0.0;          // sum of the intervals taken
+unsigned g_meas_n = 0;                 // refreshes they span
+double   g_meas_mode_hz = -1.0;        // the mode the sums belong to
+double   g_meas_hz = 0.0;              // the estimate (0 = not settled)
+bool     g_meas_said = false;          // the log line printed
+const unsigned MEAS_TRUST = 256, MEAS_CAP = 4096;
+// the game runs at the display's own rate — one game vsync per k refreshes — when the refresh is
+// within RATE_TOL of 60 k (the user's bound: half a per cent of speed, inaudible in the music,
+// which ticks on the audio clock anyway); farther off, the 60 Hz schedule on the refreshes
+const double RATE_TOL = 0.005;
+static bool vs_exact_divider(double hz, int* k_out) {
+    const int k = (int)(hz / 60.0 + 0.5);
+    if (k_out) *k_out = k;
+    return k >= 1 && fabs(hz - 60.0 * k) <= RATE_TOL * 60.0 * k;
+}
 }
 static void v2_vsync_query_display(SDL_Window* w) {
     SDL_DisplayMode m; const int di = w ? SDL_GetWindowDisplayIndex(w) : -1;
@@ -82,7 +103,27 @@ static void v2_vsync_on_present(void) {
         if (dt > 0.5 && dt < 200.0 && !stall) { g_present_ema_ms = g_present_ema_ms > 0.0 ? g_present_ema_ms * 0.9 + dt * 0.1 : dt; g_present_n++; }
         // STATS: a present that took more than 1.5 refreshes missed one (the lock on)
         if (g_vs_locked.load(std::memory_order_relaxed) && g_present_ema_ms > 0.0 && dt > 1.5 * g_present_ema_ms) v2_stats.present_late.fetch_add(1, std::memory_order_relaxed);
+        // the long-window period estimate (the note at the top)
+        if (g_meas_mode_hz != g_display_hz) { g_meas_mode_hz = g_display_hz; g_meas_sum_ms = 0.0; g_meas_n = 0; g_meas_hz = 0.0; g_meas_said = false; }
+        if (v2_present_vsync && dt > 0.5 && dt < 200.0) {
+            const double per = g_meas_n >= 64 ? g_meas_sum_ms / g_meas_n : (g_display_hz > 0.0 ? 1000.0 / g_display_hz : g_present_ema_ms);
+            const double q = per > 0.0 ? dt / per : 0.0;
+            long n = lround(q);
+            // the refreshes an interval spans: a blocking present returns on a refresh, so a real
+            // display's intervals sit within a quarter period of a whole number (a missed refresh
+            // is two whole ones); an interval that fits no whole number is one present of a
+            // timer-made vsync (SDL's software renderer on the dummy driver hands out 25 ms
+            // sleeps) and counts as one — there the truth is the plain mean, and counting such an
+            // interval as two refreshes read 61.7 Hz for a 60 Hz pacer
+            if (fabs(q - (double)n) > 0.25) n = 1;
+            if (n >= 1 && n <= 3 && q < 3.5) {
+                g_meas_sum_ms += dt; g_meas_n += (unsigned)n;
+                if (g_meas_n > MEAS_CAP) { g_meas_sum_ms *= 0.5; g_meas_n /= 2; }
+            }
+            g_meas_hz = g_meas_n >= MEAS_TRUST ? 1000.0 / (g_meas_sum_ms / g_meas_n) : 0.0;
+        }
     }
+    v2_stats.measured_hz_x100.store((int)(g_meas_hz * 100.0 + 0.5), std::memory_order_relaxed);
     g_present_last = now;
     v2_stats.present_ms_x100.store((int)(g_present_ema_ms * 100.0 + 0.5), std::memory_order_relaxed);
     // the effective refresh: the mode's rate when the measured interval agrees with it, else the
@@ -95,19 +136,30 @@ static void v2_vsync_on_present(void) {
         // or plainly different (a compositor presenting at its own rate)
         const double meas = 1000.0 / g_present_ema_ms;
         hz = (g_display_hz > 0.0 && fabs(1000.0 / g_display_hz - g_present_ema_ms) < 0.35 * g_present_ema_ms) ? g_display_hz : meas;
+        // the long-window measurement, once settled and near that choice, is the true refresh
+        // (59.94 where the mode says 60): the divider and SMOOTH AUTO decide by it
+        if (g_meas_hz > 0.0 && fabs(g_meas_hz - hz) < 0.35 * hz) hz = g_meas_hz;
     }
     const bool locked = v2_present_vsync && hz > 0.0;
     if (locked != g_vs_locked.load(std::memory_order_relaxed)) {
         g_vs_locked.store(locked, std::memory_order_release);
         fprintf(stderr, "render_v2: vsync lock %s (display mode %.0f Hz, present interval %.2f ms)\n", locked ? "ON" : "OFF", g_display_hz, g_present_ema_ms);
     }
+    if (locked && g_meas_hz > 0.0 && !g_meas_said) {
+        int k = 0; const bool exact = vs_exact_divider(hz, &k);
+        g_meas_said = true;
+        if (exact) fprintf(stderr, "render_v2: refresh measured %.3f Hz over %u refreshes (mode %.0f Hz): the game runs at the display's rate, one vsync per %d refresh%s (%+.2f %% of 60 Hz)\n",
+                           g_meas_hz, g_meas_n, g_display_hz, k, k == 1 ? "" : "es", (hz / k / 60.0 - 1.0) * 100.0);
+        else fprintf(stderr, "render_v2: refresh measured %.3f Hz over %u refreshes (mode %.0f Hz): no divider within %.1f %% of 60 Hz — the 60 Hz schedule on the refreshes\n",
+                     g_meas_hz, g_meas_n, g_display_hz, RATE_TOL * 100.0);
+    }
     g_vs_hz_x100.store((int)(hz * 100.0 + 0.5), std::memory_order_relaxed);
     v2_stats.vsync_locked.store(locked ? 1 : 0, std::memory_order_relaxed);
     v2_stats.display_hz_x100.store((int)(hz * 100.0 + 0.5), std::memory_order_relaxed);
     if (!locked) return;
-    // the 60 Hz schedule on the refreshes: an exact divider for the multiples of 60 (0.5 Hz tolerance), the measured ratio otherwise
+    // the 60 Hz schedule on the refreshes: an exact divider within RATE_TOL of a multiple of 60 (the game at the display's rate), the measured ratio otherwise
     double step = 60.0 / hz;
-    { const int k = (int)(hz / 60.0 + 0.5); if (k >= 1 && fabs(hz - 60.0 * k) < 0.5) step = 1.0 / k; }
+    { int k = 0; if (vs_exact_divider(hz, &k)) step = 1.0 / k; }
     bool fire = false;
     { std::lock_guard<std::mutex> lk(g_vs_mx);
       g_vs_acc += step;
@@ -162,8 +214,7 @@ double v2_vsync_display_hz(void) { return g_vs_hz_x100.load(std::memory_order_re
 // SMOOTH AUTO: interpolate only where the 60 Hz schedule is uneven on this display
 bool v2_vsync_auto_smooth(void) {
     if (!g_vs_locked.load(std::memory_order_acquire)) return false;
-    const double hz = v2_vsync_display_hz(); const int k = (int)(hz / 60.0 + 0.5);
-    return !(k >= 1 && fabs(hz - 60.0 * k) < 0.5);
+    return !vs_exact_divider(v2_vsync_display_hz(), nullptr);   // no exact divider: the uneven schedule is what SMOOTH evens out
 }
 
 // ---------------------------------------------------------------------------

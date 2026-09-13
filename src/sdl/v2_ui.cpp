@@ -319,7 +319,12 @@ bool v2_ui_draw(uint32_t* rgba, int w, int h, SDL_PixelFormat* fmt, bool transpa
         extern bool v2_smooth_effective(void);
         char st[8][48]; int m = 0;
         static const char* const SMOOTH_NAMES[3] = { "NONE", "AUTO", "ON" };
-        if (v2_stats.vsync_locked.load()) snprintf(st[m++], 48, "VSYNC LOCK ON %.2f HZ  PRESENT %.2f MS", v2_stats.display_hz_x100.load() / 100.0, v2_stats.present_ms_x100.load() / 100.0);
+        // MEAS = the refresh measured over the long window (render_v2.cpp; -- until it settles)
+        if (v2_stats.vsync_locked.load()) {
+            const int mh = v2_stats.measured_hz_x100.load();
+            if (mh) snprintf(st[m++], 48, "LOCK ON %.2f HZ  MEAS %.2f HZ  PRESENT %.2f MS", v2_stats.display_hz_x100.load() / 100.0, mh / 100.0, v2_stats.present_ms_x100.load() / 100.0);
+            else snprintf(st[m++], 48, "LOCK ON %.2f HZ  MEAS --  PRESENT %.2f MS", v2_stats.display_hz_x100.load() / 100.0, v2_stats.present_ms_x100.load() / 100.0);
+        }
         else snprintf(st[m++], 48, "NO VSYNC LOCK  TIMER 60 HZ  PRESENT %.2f MS", v2_stats.present_ms_x100.load() / 100.0);
         snprintf(st[m++], 48, "PACING %s  SMOOTH %s %s  KX %d", v2_options.pacing.load() ? "VRR" : "VSYNC", SMOOTH_NAMES[v2_options.smooth.load() % 3], v2_smooth_effective() ? "ON" : "OFF", v2_stats.kx.load());   // KX = the sub-pixel presentation's k (0 = the flat frame)
         snprintf(st[m++], 48, "SUBFRAMES %d/FRAME  DROPS %u  DOUBLES %u  LATE %u", v2_stats.subframes_per_frame.load(), (unsigned)v2_stats.flip_drops.load(), (unsigned)v2_stats.flip_doubles.load(), (unsigned)v2_stats.present_late.load());
