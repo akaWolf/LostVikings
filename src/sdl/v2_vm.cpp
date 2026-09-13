@@ -1339,6 +1339,7 @@ extern "C" int      v2_ail_boot(uint8_t*, uint8_t*, uint32_t, uint16_t, uint32_t
 extern "C" uint16_t v2_ail_seq_start(uint8_t*, uint8_t*, uint32_t, uint16_t,
                                      uint16_t, uint16_t, uint16_t);
 extern "C" void     v2_ail_seq_stop_slot(uint8_t*, uint16_t);
+extern "C" void     v2_ail_seq_set_volume(uint8_t*, uint16_t, uint16_t);   // 2026-09-11: MUSIC VOL / SFX VOL — fnB1(handle, pct, 0), the game build only
 extern "C" void     v2_ail_music_fade(uint8_t*);
 extern "C" uint16_t v2_ail_sfx_play(uint8_t*, uint8_t*, uint32_t, uint16_t, uint16_t);
 extern "C" void     v2_ail_sfx_stop_seq(uint8_t*, uint16_t);
@@ -1430,6 +1431,14 @@ static void v2_music_play_176bd_v2(uint8_t* s, uint16_t bx_seg) {
             uint16_t h = v2_ail_seq_start(s, v2_vm_shadow_sound, V2_SOUND_SHADOW_SIZE,
                                           ail_ds, bx_seg, /*seq*/0, /*si*/0);
             v2_id_music = (h != 0xFFFF) ? (int)h : 0;
+#ifdef V2_ONLY
+            // MUSIC VOL (2026-09-11): the sequence volume of the track just started;
+            // nothing at 100 %, so the default keeps the original's call stream
+            { const int p = v2_options.music_volume.load();
+              { static int tr = -1; if (tr < 0) { const char* e = getenv("V2_VOL_TRACE"); tr = (e && e[0] == '1') ? 1 : 0; }
+                if (tr) fprintf(stderr, "V2-VOL: music start handle %04X, MUSIC VOL %d%%\n", h, p); }
+              if (h != 0xFFFF && p != 100) v2_ail_seq_set_volume(s, h, (uint16_t)(p < 0 ? 0 : p > 100 ? 100 : p)); }
+#endif
             return;
         }
         // native boot failed → no audible fallback anymore (#79)
@@ -9266,6 +9275,23 @@ static void v2_ui_service(uint8_t* s) {
         }
         v2_sc55_service();   // the boot gate: channel state replayed once the module's firmware is up
         v2_mt32_service();   // the MT-32 world on/off
+        // MUSIC VOL (2026-09-11): a change of the setting reaches the music playing now — the
+        // AIL music handle is the slot-0 word [990C] (FFFF = no music registered; the driver
+        // no-ops that itself), the SNES engine gets a command for its music track. SFX VOL
+        // applies to every effect at its start (v2_ail_sfx_play, the SNES glue). The game build
+        // only: test mode keeps the AIL call parity of #85 (nothing beyond the original's calls).
+#ifdef V2_ONLY
+        { static int last_mv = -1;
+          const int mv = v2_options.music_volume.load();
+          if (mv != last_mv) {
+              if (last_mv >= 0) {
+                  const uint16_t h = *(const uint16_t*)(s + 0x990C);
+                  if (h != 0xFFFF) v2_ail_seq_set_volume(s, h, (uint16_t)(mv < 0 ? 0 : mv > 100 ? 100 : mv));
+                  if (v2_snes_sound_enabled()) v2_snes_snd_set_music_volume((uint8_t)(mv < 0 ? 0 : mv > 100 ? 100 : mv));
+              }
+              last_mv = mv;
+          } }
+#endif
     }
     // options: parallax on/off at runtime (display lane), interludes on/off
     static int last_par = -1;

@@ -238,7 +238,13 @@ vsync wait, and the display follows the game's 60 Hz. AUDIO BUF < 256 |
 the present interval, sub-frames per game frame with dropped and
 repeated ones, the game frame's wall time and work, and the audio
 buffer with its underruns — the numbers to quote when motion or sound
-misbehaves.
+misbehaves. MUSIC VOL and SFX VOL (`music_volume=` / `sfx_volume=`,
+0..100 in steps of 10) scale the music and the effects separately in
+every sound mode — through the game's own driver (the sequence volume
+of the AIL player, which the SC-55 and the MT-32 inherit) and through
+the console engine's track volumes in SNES mode; at 100 the original's
+sound calls are untouched, and a change reaches the music playing at
+once.
 
 The twelve languages are Blizzard's translations from the Blizzard
 Arcade Collection and are not in the repository either: copy

@@ -28,6 +28,7 @@ void v2_snes_snd_play_music(uint8_t id);             // op 213 ($C314): function
 void v2_snes_snd_fade_music(uint8_t id);             // op 214 ($C330): function 4 (id, 0x80) when music is on
 void v2_snes_snd_set_music_on(bool on);              // the console's $0302 (music enabled)
 void v2_snes_snd_set_sfx_on(bool on);                // the console's $0304 (effects enabled)
+void v2_snes_snd_set_music_volume(uint8_t pct);      // 2026-09-11: MUSIC VOL changed — the playing music track's volume follows (its start volume x pct / 100)
 void v2_snes_snd_menu_open();                        // $8435 / $EF1A: the pause menu / inventory opens — $890A stops the looping effects (remembering them in $19D5), then SFX 0xE7
 void v2_snes_snd_menu_close();
 int  v2_snes_sfx_map(int pc_id);                     // the PC effect number's console sequence id (chunk 0x317), 0 = none                       // $84AC / $EF75: the menu closes — $8943 restarts the remembered effects (not on the quit exit)

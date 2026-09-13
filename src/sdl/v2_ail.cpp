@@ -47,6 +47,7 @@
 #include "v2_ds_layout.h"
 #include "v2_gamestate.h"
 #include "v2_mt32.h"        // UX stage 11: the MT-32 world (a second driver instance fed with the same calls)
+#include "v2_ui.h"          // 2026-09-11: SFX VOL (v2_options.sfx_volume) applied after every effect's start
 
 // ---------------------------------------------------------------------------
 // v2_ail_interp.cpp C API
@@ -617,6 +618,34 @@ extern "C" void v2_ail_music_fade(uint8_t* s) {
 // The handle lands in [si-66F4] inside the start chain (176bd eip 0x76DA).
 // Returns the driver handle, 0xFFFF when dropped/muted.
 // ---------------------------------------------------------------------------
+// ---------------------------------------------------------------------------
+// MUSIC VOL / SFX VOL (2026-09-11, the game build only): the driver keeps a
+// sequence volume as a percentage ([state+0x24], 0x64 after the registration)
+// and cascades it into every channel's volume controller (2E8A: ch * pct / 100,
+// clamped at 127); fnB1(handle, pct, 0) sets it at once — the call the game's
+// own music fade uses (sub_178f1, target 0 over 1000 ms). The option issues it
+// right after a sequence starts (the music in v2_music_play_176bd_v2, every
+// effect below) and again on the playing music when the setting changes; at
+// 100 % nothing is issued, so the default keeps the original's call stream
+// byte for byte. The MT-32 world mirrors the call through its ring, so the
+// SC-55 and MT-32 outputs follow. Never in test mode (the call parity of #85).
+// ---------------------------------------------------------------------------
+static int vol_trace_on() { static int on = -1; if (on < 0) { const char* e = getenv("V2_VOL_TRACE"); on = (e && e[0] == '1') ? 1 : 0; } return on; }
+extern "C" void v2_ail_seq_set_volume(uint8_t* s, uint16_t handle, uint16_t pct) {
+    if (!g_booted || handle == 0xFFFF) return;
+    uint16_t a[4] = { rdw(s, DS_98E6_DRV), handle, pct, 0 };
+    sh_call(0xB1, a, 4);    // sub_1C7BD, instant (ms = 0)
+    if (vol_trace_on()) fprintf(stderr, "V2-VOL: fnB1 handle %04X -> %u%% (slot0 %04X)\n", handle, pct, rdw(s, 0x990C));
+}
+static uint16_t v2_ail_sfx_started(uint8_t* s, uint16_t h) {
+#ifdef V2_ONLY
+    const int p = v2_options.sfx_volume.load();
+    if (h != 0xFFFF && p != 100) v2_ail_seq_set_volume(s, h, (uint16_t)(p < 0 ? 0 : p > 100 ? 100 : p));
+#else
+    (void)s;
+#endif
+    return h;
+}
 extern "C" uint16_t v2_ail_sfx_play(uint8_t* s, uint8_t* snd, uint32_t snd_size,
                                     uint16_t ds_val, uint16_t ax_seq) {
     if (!g_booted) return 0xFFFF;
@@ -627,14 +656,14 @@ extern "C" uint16_t v2_ail_sfx_play(uint8_t* s, uint8_t* snd, uint32_t snd_size,
         uint16_t handle = rdw(s, (uint16_t)(si - 0x66F4));
         if (handle == 0xFFFF) {
             wrw(s, (uint16_t)(si - 0x66EA), ax_seq);            // eip 0x77D2
-            return v2_ail_seq_start(s, snd, snd_size, ds_val, sfx_seg, ax_seq, (uint16_t)si);
+            return v2_ail_sfx_started(s, v2_ail_seq_start(s, snd, snd_size, ds_val, sfx_seg, ax_seq, (uint16_t)si));
         }
         uint16_t a[2] = { drv, handle };
         uint16_t status = sh_call(0xAE, a, 2);      // eip 0x77EC status
         if (status == 1) continue;                              // eip 0x77F6 playing
         sh_call(0x98, a, 2);                        // eip 0x7806 release
         wrw(s, (uint16_t)(si - 0x66EA), ax_seq);                // eip 0x7811
-        return v2_ail_seq_start(s, snd, snd_size, ds_val, sfx_seg, ax_seq, (uint16_t)si);
+        return v2_ail_sfx_started(s, v2_ail_seq_start(s, snd, snd_size, ds_val, sfx_seg, ax_seq, (uint16_t)si));
     }
     return 0xFFFF;
 }

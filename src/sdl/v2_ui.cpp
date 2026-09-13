@@ -55,6 +55,8 @@ void v2_options_ensure_loaded() {
             else if (!strcmp(key, "audio_buffer")) v2_options.audio_buffer = (val == 256 || val == 512 || val == 1024) ? val : 512;
             else if (!strcmp(key, "pacing")) v2_options.pacing = (val >= 0 && val <= 1) ? val : 0;
             else if (!strcmp(key, "stats")) v2_options.stats = val != 0;
+            else if (!strcmp(key, "music_volume")) v2_options.music_volume = (val >= 0 && val <= 100) ? val : 100;
+            else if (!strcmp(key, "sfx_volume")) v2_options.sfx_volume = (val >= 0 && val <= 100) ? val : 100;
         }
     }
     fclose(f);
@@ -75,6 +77,7 @@ void v2_options_save() {
     fprintf(f, "parallax=%d\nscenes=%d\nsnes_balance=%d\nlanguage=%s\nsmooth=%d\nconsole_finale=%d\n", (int)v2_options.parallax.load(), (int)v2_options.scenes.load(), (int)v2_options.snes_balance.load(), v2_locale_code_at(v2_options.language.load()), (int)v2_options.smooth.load(), (int)v2_options.console_finale.load());
     fprintf(f, "filter=%d\ninteger_scale=%d\nborder=%d\nsound=%d\nwide=%d\n", v2_options.filter.load(), (int)v2_options.integer_scale.load(), v2_options.border.load(), v2_options.sound_mode.load(), v2_options.wide.load());
     fprintf(f, "audio_buffer=%d\npacing=%d\nstats=%d\n", v2_options.audio_buffer.load(), v2_options.pacing.load(), (int)v2_options.stats.load());
+    fprintf(f, "music_volume=%d\nsfx_volume=%d\n", v2_options.music_volume.load(), v2_options.sfx_volume.load());
     if (v2_options_sc55_roms[0]) fprintf(f, "sc55_roms=%s\n", v2_options_sc55_roms);
     if (v2_options_mt32_roms[0]) fprintf(f, "mt32_roms=%s\n", v2_options_mt32_roms);
     fclose(f);
@@ -162,6 +165,7 @@ static void darken_box(uint32_t* rgba, int w, int h, SDL_PixelFormat* fmt, int x
 
 // ------------------------------------------------------------------- menu --
 enum Item { IT_PARALLAX, IT_SCENES, IT_BALANCE, IT_LANG, IT_SMOOTH, IT_FINALE, IT_FILTER, IT_INTEGER, IT_BORDER, IT_WIDE, IT_SOUND,
+            IT_MUSICVOL, IT_SFXVOL,                                        // 2026-09-11: MUSIC VOL / SFX VOL (0..100 %, step 10)
             IT_AUDIOBUF, IT_PACING, IT_STATS,                              // 2026-09-11: the audio device buffer, PACING < VSYNC | VRR >, the STATS overlay
             IT_NET_PLAYERS, IT_NET_DELAY, IT_NET_HOST, IT_NET_JOIN,      // UX stage 8 tails: the co-op lobby
             IT_LEVEL, IT_SAVE, IT_LOAD, IT_COUNT };
@@ -200,6 +204,8 @@ static void activate() {
     case IT_BORDER:   v2_options.border = (v2_options.border.load() + 1) % 2; v2_options_save(); break;
     case IT_WIDE:     if (net_locked()) break; v2_options.wide = (v2_options.wide.load() + 1) % 3; v2_options_save(); v2_ui_toast("WIDE: NEXT LEVEL"); break;
     case IT_SOUND:    v2_options.sound_mode = (v2_options.sound_mode.load() + 1) % 4; v2_options_save(); { const int m = v2_options.sound_mode.load(); v2_ui_toast(m == 1 ? "SOUND: SNES (NEXT LEVEL)" : m == 2 ? "SOUND: SC-55" : m == 3 ? "SOUND: MT-32" : "SOUND: PC"); } break;
+    case IT_MUSICVOL: v2_options.music_volume = (v2_options.music_volume.load() + 10) % 110; v2_options_save(); break;
+    case IT_SFXVOL:   v2_options.sfx_volume = (v2_options.sfx_volume.load() + 10) % 110; v2_options_save(); break;
     case IT_AUDIOBUF: { const int b = v2_options.audio_buffer.load(); v2_options.audio_buffer = (b == 256) ? 512 : (b == 512) ? 1024 : 256; v2_options_save(); v2_ui_toast("AUDIO BUF: NEXT START"); break; }
     case IT_PACING:   v2_options.pacing = (v2_options.pacing.load() + 1) % 2; v2_options_save(); break;
     case IT_STATS:    v2_options.stats = !v2_options.stats.load(); v2_options_save(); break;
@@ -223,6 +229,8 @@ static void adjust(int d) {
     case IT_BORDER:   v2_options.border = (v2_options.border.load() + d + 2) % 2; v2_options_save(); break;
     case IT_WIDE:     if (net_locked()) break; v2_options.wide = (v2_options.wide.load() + d + 3) % 3; v2_options_save(); v2_ui_toast("WIDE: NEXT LEVEL"); break;
     case IT_LANG: { if (net_locked()) break; int n = v2_locale_count(); if (n > 1) { v2_options.language = (v2_options.language.load() + d + n) % n; v2_options_save(); } break; }
+    case IT_MUSICVOL: { int v = v2_options.music_volume.load() + 10 * d; v2_options.music_volume = v < 0 ? 0 : v > 100 ? 100 : v; v2_options_save(); break; }
+    case IT_SFXVOL:   { int v = v2_options.sfx_volume.load() + 10 * d; v2_options.sfx_volume = v < 0 ? 0 : v > 100 ? 100 : v; v2_options_save(); break; }
     case IT_AUDIOBUF: { const int b = v2_options.audio_buffer.load(); v2_options.audio_buffer = d > 0 ? ((b == 256) ? 512 : (b == 512) ? 1024 : 256) : ((b == 1024) ? 512 : (b == 512) ? 256 : 1024); v2_options_save(); v2_ui_toast("AUDIO BUF: NEXT START"); break; }
     case IT_PACING: case IT_STATS: activate(); break;
     case IT_NET_PLAYERS: activate(); break;
@@ -312,6 +320,8 @@ void v2_ui_draw(uint32_t* rgba, int w, int h, SDL_PixelFormat* fmt) {
           snprintf(lines[n++], 40, "WIDE      < %s >", WIDE_NAMES[v2_options.wide.load() % 3]); }
         { static const char* const SOUND_NAMES[4] = { "PC  ", "SNES", "SC55", "MT32" };
           snprintf(lines[n++], 40, "SOUND     < %s >", SOUND_NAMES[v2_options.sound_mode.load() % 4]); }
+        snprintf(lines[n++], 40, "MUSIC VOL < %3d%% >", v2_options.music_volume.load());
+        snprintf(lines[n++], 40, "SFX VOL   < %3d%% >", v2_options.sfx_volume.load());
         snprintf(lines[n++], 40, "AUDIO BUF < %d >%s", v2_options.audio_buffer.load(),
                  v2_stats.audio_samples.load() && v2_stats.audio_samples.load() != v2_options.audio_buffer.load() ? " (NEXT START)" : "");
         snprintf(lines[n++], 40, "PACING    < %s >", v2_options.pacing.load() ? "VRR  " : "VSYNC");

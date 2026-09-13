@@ -37,7 +37,7 @@ static uint8_t g_levels[256];                         // [set][entry mode][exit 
 static bool g_assets_ok = false;
 
 // ------------------------------------------------------- game -> sound --
-enum CmdKind : uint8_t { CMD_LEVEL_START = 1, CMD_LEVEL_EXIT, CMD_SFX, CMD_STOP, CMD_PARAM, CMD_MUSIC, CMD_FADE, CMD_MUSIC_ON, CMD_SFX_ON, CMD_MENU_OPEN, CMD_MENU_CLOSE };
+enum CmdKind : uint8_t { CMD_LEVEL_START = 1, CMD_LEVEL_EXIT, CMD_SFX, CMD_STOP, CMD_PARAM, CMD_MUSIC, CMD_FADE, CMD_MUSIC_ON, CMD_SFX_ON, CMD_MUSIC_VOL, CMD_MENU_OPEN, CMD_MENU_CLOSE };
 struct Cmd { uint8_t kind; uint8_t a; uint16_t b; };
 enum { CMD_RING = 256 };
 static Cmd g_cmd[CMD_RING];
@@ -437,13 +437,39 @@ static void glue_load_set(uint8_t set) {
     if (err) fprintf(stderr, "V2-SNESSND: load set %02X failed (%d)\n", set, err);
 }
 // $00:8832: music for the set; $00:88B1: the silent song when music is off
+// MUSIC VOL / SFX VOL (2026-09-11): the volumes the console's glue passes to the engine
+// (function 3's volume byte: the music table $885F, the effects' own values, the menu's
+// 0xE7 at 0x60, the ambient restarts of $898B) scaled by the option; at 100 % untouched.
+// An effect never goes below 1 (the engine starts the track at vol - 1: 0 would wrap).
+static uint16_t vol_scaled(uint16_t vol, int pct) {
+    if (pct >= 100) return vol;
+    if (pct < 0) pct = 0;
+    int v = (int)((vol * pct + 50) / 100);
+    if (v < 1 && vol > 0) v = 1;
+    return (uint16_t)v;
+}
+static int g_music_vol_base = 0;   // the unscaled start volume of the music track playing (for a live MUSIC VOL change)
 static void glue_play_music_for_set(uint8_t set) {
     glue_load_set(set);
     if (E->music_on) {
         uint8_t id = (set == 7) ? 1 : set;
         E->last_music_id = id;
-        int err = fn_play(id, 0xFFFF, MUSIC_VOL[id < 10 ? id : 9]);
+        g_music_vol_base = MUSIC_VOL[id < 10 ? id : 9];
+        int err = fn_play(id, 0xFFFF, vol_scaled((uint16_t)g_music_vol_base, v2_options.music_volume.load()));
         if (err) fprintf(stderr, "V2-SNESSND: play music %02X failed (%d)\n", id, err);
+    }
+}
+// MUSIC VOL changed while a track plays: the track gets its volume the way function 3 gives a
+// fresh track its volume — a one-step fade up from v - 1 to v (+0x14, +0x16, step +0x12 = 1.0,
+// state +0x10 = 0): the next tick ($8B2A, tick_fades) sends `07 t 20 v v` to the SPC and idles
+// the fade. A track fading out (function 4, state 1) is on its way out and is left alone.
+static void snes_music_volume_live(int pct) {
+    if (!E->music_on || g_music_vol_base <= 0) return;
+    const uint16_t v = vol_scaled((uint16_t)g_music_vol_base, pct);
+    for (int t = 0; t < 4; t++) if (tr16(t, 0) == (uint16_t)E->last_music_id) {
+        if (tr16(t, 0x10) == 1) continue;
+        trw16(t, 0x14, (uint16_t)((v - 1) << 8)); trw16(t, 0x16, (uint16_t)(v << 8)); trw16(t, 0x12, 0x0100); trw16(t, 0x10, 0);
+        if (snd_trace_on()) fprintf(stderr, "V2-SNESSND-TRACE: t%u music volume %d%% -> %02X\n", E->frame_no, pct, v);
     }
 }
 // $00:87E1 (+ dispatch $8804 by mode) — mode 0 play, 1 nothing, 2 fade (function 4 of the last music, 0x80), 3 load only
@@ -472,12 +498,12 @@ static void glue_stop_ambient() {                     // $890A
 static void glue_restart_ambient() {                  // $8943
     if (!E->sfx_on) return;                           // $0304
     for (int i = 0; i < 8; i++)                       // $8955: bit set -> function 3 (id, FFFF, $898B[X])
-        if (E->ambient_mask & (1 << i)) fn_play(AMBIENT_IDS[i], 0xFFFF, AMBIENT_VOL[i]);
+        if (E->ambient_mask & (1 << i)) fn_play(AMBIENT_IDS[i], 0xFFFF, vol_scaled(AMBIENT_VOL[i], v2_options.sfx_volume.load()));
 }
 static void glue_menu_open() {                        // $843A-$8440 / $EF26-$EF44
     if (snd_trace_on()) fprintf(stderr, "V2-SNESSND-TRACE: t%u menu open (depth %d)\n", E->frame_no, E->menu_depth);
     if (E->menu_depth++ == 0) glue_stop_ambient();
-    if (E->sfx_on) fn_play(0xE7, 0xFFFF, 0x60);      // $88D4 -> $88E5 (function 3 when $0304)
+    if (E->sfx_on) fn_play(0xE7, 0xFFFF, vol_scaled(0x60, v2_options.sfx_volume.load()));      // $88D4 -> $88E5 (function 3 when $0304)
 }
 static void glue_menu_close() {                       // $84AC / $EF75
     if (snd_trace_on()) fprintf(stderr, "V2-SNESSND-TRACE: t%u menu close (depth %d, mask %02X)\n", E->frame_no, E->menu_depth, E->ambient_mask);
@@ -503,10 +529,11 @@ static void handle(const Cmd& c) {
     switch (c.kind) {
     case CMD_LEVEL_START: glue_level_start(c.b); break;
     case CMD_LEVEL_EXIT:  glue_level_exit(c.b); break;
-    case CMD_SFX:         if (E->sfx_on) fn_play(c.a, 0xFFFF, c.b); break;      // $88E5
+    case CMD_SFX:         if (E->sfx_on) fn_play(c.a, 0xFFFF, vol_scaled(c.b, v2_options.sfx_volume.load())); break;      // $88E5 (SFX VOL)
     case CMD_STOP:        if (E->sfx_on) fn_param(c.a, 0xFFFF); break;          // $88F9
     case CMD_PARAM:       if (E->sfx_on) fn_param(c.a, c.b); break;
-    case CMD_MUSIC:       if (E->music_on) { E->last_music_id = c.a; fn_play(c.a, 0xFFFF, 0x30); } break;   // $C314
+    case CMD_MUSIC:       if (E->music_on) { E->last_music_id = c.a; g_music_vol_base = 0x30; fn_play(c.a, 0xFFFF, vol_scaled(0x30, v2_options.music_volume.load())); } break;   // $C314 (MUSIC VOL)
+    case CMD_MUSIC_VOL:   snes_music_volume_live((int)c.a); break;                // MUSIC VOL changed on the game thread
     case CMD_FADE:        if (E->music_on) fn_param(c.a, 0x0080); break;        // $C330
     case CMD_MUSIC_ON:    E->music_on = c.a != 0; break;
     case CMD_SFX_ON:      E->sfx_on = c.a != 0; break;
@@ -614,6 +641,7 @@ static inline bool live() { return g_thread_on.load(std::memory_order_acquire); 
 void v2_snes_snd_level_start(uint16_t level)       { if (live()) push(CMD_LEVEL_START, 0, level); }
 void v2_snes_snd_level_exit(uint16_t level)        { if (live()) push(CMD_LEVEL_EXIT, 0, level); }
 void v2_snes_snd_play_sfx(uint8_t id, uint8_t vol) { if (live()) push(CMD_SFX, id, vol); }
+void v2_snes_snd_set_music_volume(uint8_t pct) { if (live()) push(CMD_MUSIC_VOL, pct, 0); }
 void v2_snes_snd_stop_sfx(uint8_t id)              { if (live()) push(CMD_STOP, id, 0xFFFF); }
 void v2_snes_snd_sfx_param(uint8_t id, uint16_t v) { if (live()) push(CMD_PARAM, id, v); }
 void v2_snes_snd_play_music(uint8_t id)            { if (live()) push(CMD_MUSIC, id, 0); }

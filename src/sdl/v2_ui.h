@@ -19,6 +19,8 @@ struct V2Options {
     std::atomic<bool> integer_scale{false};  // whole multiples of the 320x240 (or 320xH) canvas only
     std::atomic<int>  border{0};             // 0 BLACK, 1 GLOW (the frame blurred and dimmed behind the picture)
     std::atomic<int>  wide{0};               // UX9 step 4: 0 OFF (the 320-px raster), 1 16:10, 2 16:9 — the view width of the next level (v2_wide_view_width)
+    std::atomic<int>  music_volume{100};     // 2026-09-11: MUSIC VOL 0..100 % — the AIL sequence volume (fnB1) of the music, the SNES track volume
+    std::atomic<int>  sfx_volume{100};       // 2026-09-11: SFX VOL 0..100 % — the same for the effects; 100 = the original's call stream untouched
     std::atomic<int>  audio_buffer{512};     // 2026-09-11: the SDL audio device buffer in frames (256 / 512 / 1024), applied at the next start
     std::atomic<int>  pacing{0};             // 2026-09-11: 0 VSYNC (the game's vsync = the display's, render_v2.cpp), 1 VRR (no vsync wait, one present per flip, the display follows the game)
     std::atomic<int>  stats{0};              // 2026-09-11: the STATS overlay (v2_stats.h)
