@@ -297,6 +297,25 @@ void v2_ui_draw(uint32_t* rgba, int w, int h, SDL_PixelFormat* fmt) {
     const uint32_t WHITE = SDL_MapRGBA(fmt, 255, 255, 255, 255);
     const uint32_t YELLOW = SDL_MapRGBA(fmt, 255, 230, 80, 255);
     const uint32_t GREY = SDL_MapRGBA(fmt, 160, 160, 160, 255);
+    // STATS overlay (2026-09-11): the pacing, the sub-frame delivery and the audio health, top
+    // right — painted first, so the options menu below draws over it when both are up
+    if (v2_options.stats.load()) {
+        extern bool v2_smooth_effective(void);
+        char st[8][48]; int m = 0;
+        static const char* const SMOOTH_NAMES[3] = { "NONE", "AUTO", "ON" };
+        if (v2_stats.vsync_locked.load()) snprintf(st[m++], 48, "VSYNC LOCK ON %.2f HZ  PRESENT %.2f MS", v2_stats.display_hz_x100.load() / 100.0, v2_stats.present_ms_x100.load() / 100.0);
+        else snprintf(st[m++], 48, "NO VSYNC LOCK  TIMER 60 HZ  PRESENT %.2f MS", v2_stats.present_ms_x100.load() / 100.0);
+        snprintf(st[m++], 48, "PACING %s  SMOOTH %s %s", v2_options.pacing.load() ? "VRR" : "VSYNC", SMOOTH_NAMES[v2_options.smooth.load() % 3], v2_smooth_effective() ? "ON" : "OFF");
+        snprintf(st[m++], 48, "SUBFRAMES %d/FRAME  DROPS %u  DOUBLES %u  LATE %u", v2_stats.subframes_per_frame.load(), (unsigned)v2_stats.flip_drops.load(), (unsigned)v2_stats.flip_doubles.load(), (unsigned)v2_stats.present_late.load());
+        snprintf(st[m++], 48, "FRAME %.1f MS  WORK %.1f MS  SLOW %u", v2_stats.frame_ms_x100.load() / 100.0, v2_stats.work_ms_x100.load() / 100.0, (unsigned)v2_stats.slow_frames.load());
+        snprintf(st[m++], 48, "AUDIO %d @ %d  UNDERRUNS %u  CLIP %u  CB OVER %u", v2_stats.audio_samples.load(), v2_stats.audio_rate.load(), (unsigned)v2_stats.audio_underruns.load(), (unsigned)v2_stats.audio_clips.load(), (unsigned)v2_stats.audio_cb_overruns.load());
+        extern int v2_present_w;   // render_v2_test.cpp: the frame's width (w is the buffer's stride)
+        int maxlen = 0; for (int i = 0; i < m; i++) maxlen = maxlen > (int)strlen(st[i]) ? maxlen : (int)strlen(st[i]);
+        const int bw = maxlen * 6 + 10, bh = m * 9 + 6, y0 = 4;
+        int x0 = v2_present_w - bw - 4; if (x0 < 0) x0 = 0;
+        darken_box(rgba, w, h, fmt, x0, y0, bw, bh);
+        for (int i = 0; i < m; i++) put_text(rgba, w, h, fmt, x0 + 5, y0 + 3 + i * 9, st[i], i == 0 ? YELLOW : WHITE);
+    }
     if (v2_ui_menu_open.load()) {
         char lines[28][48]; int n = 0;          // title + up to 22 items (debug mode) + the network status
         snprintf(lines[n++], 40, "OPTIONS  (F1/ESC CLOSE)");
@@ -351,24 +370,6 @@ void v2_ui_draw(uint32_t* rgba, int w, int h, SDL_PixelFormat* fmt) {
             if (cur) put_text(rgba, w, h, fmt, x0 + 3, y0 + 4 + i * 9, ">", YELLOW);
             put_text(rgba, w, h, fmt, x0 + 10, y0 + 4 + i * 9, lines[i], (i == 0 || i == n - 1) ? GREY : (cur ? YELLOW : WHITE));
         }
-    }
-    // STATS overlay (2026-09-11): the pacing, the sub-frame delivery and the audio health, top right
-    if (v2_options.stats.load()) {
-        extern bool v2_smooth_effective(void);
-        char st[8][48]; int m = 0;
-        static const char* const SMOOTH_NAMES[3] = { "NONE", "AUTO", "ON" };
-        if (v2_stats.vsync_locked.load()) snprintf(st[m++], 48, "VSYNC LOCK ON %.2f HZ  PRESENT %.2f MS", v2_stats.display_hz_x100.load() / 100.0, v2_stats.present_ms_x100.load() / 100.0);
-        else snprintf(st[m++], 48, "NO VSYNC LOCK  TIMER 60 HZ  PRESENT %.2f MS", v2_stats.present_ms_x100.load() / 100.0);
-        snprintf(st[m++], 48, "PACING %s  SMOOTH %s %s", v2_options.pacing.load() ? "VRR" : "VSYNC", SMOOTH_NAMES[v2_options.smooth.load() % 3], v2_smooth_effective() ? "ON" : "OFF");
-        snprintf(st[m++], 48, "SUBFRAMES %d/FRAME  DROPS %u  DOUBLES %u  LATE %u", v2_stats.subframes_per_frame.load(), (unsigned)v2_stats.flip_drops.load(), (unsigned)v2_stats.flip_doubles.load(), (unsigned)v2_stats.present_late.load());
-        snprintf(st[m++], 48, "FRAME %.1f MS  WORK %.1f MS  SLOW %u", v2_stats.frame_ms_x100.load() / 100.0, v2_stats.work_ms_x100.load() / 100.0, (unsigned)v2_stats.slow_frames.load());
-        snprintf(st[m++], 48, "AUDIO %d @ %d  UNDERRUNS %u  CLIP %u  CB OVER %u", v2_stats.audio_samples.load(), v2_stats.audio_rate.load(), (unsigned)v2_stats.audio_underruns.load(), (unsigned)v2_stats.audio_clips.load(), (unsigned)v2_stats.audio_cb_overruns.load());
-        extern int v2_present_w;   // render_v2_test.cpp: the frame's width (w is the buffer's stride)
-        int maxlen = 0; for (int i = 0; i < m; i++) maxlen = maxlen > (int)strlen(st[i]) ? maxlen : (int)strlen(st[i]);
-        const int bw = maxlen * 6 + 10, bh = m * 9 + 6, y0 = 4;
-        int x0 = v2_present_w - bw - 4; if (x0 < 0) x0 = 0;
-        darken_box(rgba, w, h, fmt, x0, y0, bw, bh);
-        for (int i = 0; i < m; i++) put_text(rgba, w, h, fmt, x0 + 5, y0 + 3 + i * 9, st[i], i == 0 ? YELLOW : WHITE);
     }
     if (!toast_text.empty() && SDL_GetTicks() < toast_until) {
         int len = (int)toast_text.size();
