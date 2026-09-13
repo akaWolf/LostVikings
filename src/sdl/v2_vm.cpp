@@ -61,18 +61,10 @@ extern "C" void v2_gs_dump_text(const uint8_t*, const char*);         // named-f
 #include "v2_hash_hot.h"   // (IV) -O2 island for the replay-verify hash kernels
 extern int v2_dbg_pre_vm_iter;   // game-frame counter (v2_vm.cpp), C++ linkage — declared once at file scope (clang rejects block externs inside extern "C" functions)
 extern "C" void headless_golden_dump(void);   // direction V: end-state snapshot at clean exits (all builds; v2_gamestate.cpp)
-// UX plan stage 0: LVX trailer flags (defined with the LVX loader below;
-// used by the scroll-limit mirror above it).
-enum { LVX_FULLSCREEN = 0x0001, LVX_CAMLOCK = 0x0002, LVX_TRIO = 0x0004,
-       LVX_NOGATE = 0x0008,     // no sub_10813 off-screen input gate (Genesis scene recordings)
-       LVX_ALT = 0x0010,        // UX stage 7: an ALTERNATIVE head for a canonical slot (SNES balance)
-       LVX_PALTICK3 = 0x0020,   // the palette-animation timers tick once per 3 console frames
-                                // (the Genesis scenes; v2_pal_ui_cycle_101be accumulator)
-       LVX_CONSOLE = 0x0040,    // UX stage 9: an ALTERNATIVE head gated by the CONSOLE FINALE option
-                                // (the SNES finale's BG2 dragon layer + crowd on slot 0x2F)
-       LVX_TALL224 = 0x0080 };  // UX stage 9: the level is viewed 224 rows tall without a HUD band,
-                                // like the console's finale (map rows 16..239): scroll limit,
-                                // camera centring and the object activation edges use 224
+// UX plan stage 0: LVX trailer flags (LVX_FULLSCREEN .. LVX_TALL224) — v2_lvx.h,
+// shared with the presenter (the LVX loader is below; the scroll-limit mirror
+// above it reads them).
+#include "v2_lvx.h"
 // UX stage 9: the view height of the loaded level in px — 0xB0 (176, the
 // orig VGA split) on every canonical level, 224 on an LVX_TALL224 variant.
 // Set by v2_load_template; read by sub_113b0/113d8 and the sprite culling.
@@ -6654,7 +6646,14 @@ static uint16_t v2_load_anims_116ae(uint8_t* s, uint16_t di) {
 //   TEST byte_2AA9A,0xFF; JZ ret.
 //   di=[0x3C2]; CMP di,6; JGE clear            (SIGNED: 0xFFFF=-1 enters bounds)
 //   ax=[di+0x173D]-[0x44]+0x0C; JS clear        (sign of the 16-bit wrap result)
-//   ax=[0x44]+0x14C-[di+0x173D]; JS clear
+//   ax=[0x44]+0x14C-[di+0x173D]; JS clear        (0x14C = W + 0x0C with W = 0x140: the
+//                                                 window is a formula of the view width, like
+//                                                 every other viewport window — WIDE takes
+//                                                 v2_view_w + 0x0C; 2026-09-18: with the 0x14C
+//                                                 constant a viking standing in the last W - 320
+//                                                 px of a wide level was on screen but past the
+//                                                 gate — the camera's limit is map - W — so its
+//                                                 input was cleared for good: Baleog on STRT)
 //   if ([0x46]!=0): same pair on [di+0x1765] with +0x0C / +0xB0
 //   -> loc_107A2. clear: [0x3B6]=0; [0x3B8]=0; ret.
 // loc_107A2: prev-viking blink clear on switch ([0x3C4]!=[0x3C2], signed <6,
@@ -6699,7 +6698,7 @@ static void v2_viking_blink_10813(uint8_t* shadow) {
         ObjMem av{shadow, active};                                   // active viking object
         int16_t vx = (int16_t)av.u16(OBJ_WORLD_X); // world X (64K wrap)
         int16_t wx = (int16_t)v2gs(shadow).viewport_x();                       // word_28524
-        if ((int16_t)(vx - wx + 0x0C) >= 0 && (int16_t)(wx + 0x14C - vx) >= 0) {
+        if ((int16_t)(vx - wx + 0x0C) >= 0 && (int16_t)(wx + (v2_view_w + 0x0C) - vx) >= 0) {   // 0x14C = W + 0x0C
             uint16_t wy = v2gs(shadow).viewport_y(); // word_28526
             if (wy == 0) {
                 on_screen = true; // CMP,0; JZ loc_1085F
@@ -11154,7 +11153,7 @@ static void v2_anim_queue_1406d(uint8_t* shadow) {
             // Quadrant clip mask (orig dx, 0x40A2-0x40D3): 8=UL 4=UR 2=LL 1=LR.
             uint16_t clip = 0;
             if (ax_x < 8)      clip |= 0x0A;                   // 0x40a5 JNC / OR dx,0Ah
-            if (ax_x > 0x158)  clip |= 0x05;                   // 0x40ad JBE / OR dx,5
+            if (ax_x > (uint16_t)(v2_view_w + 0x18)) clip |= 0x05;   // 0x40ad JBE / OR dx,5 (0x158 = W + 0x18)
             // Viewport Y bounds (0x40B8-0x40C2): JA 0xD0 → skip.
             uint16_t ax_y = (uint16_t)(pos_y - v2gs(shadow).viewport_y() + 0x10);
             if (ax_y > 0xD0) break;

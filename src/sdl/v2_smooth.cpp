@@ -64,6 +64,7 @@
 // and its presenter shows the published page.
 #include "render_v2.h"
 #include "v2_ds_layout.h"
+#include "v2_lvx.h"         // the LVX trailer flags: a scene slot's camera is the script's (CAMERA SMOOTH)
 #include "v2_ui.h"
 #include "v2_coop.h"        // UX stage 8 step 2: the local player's camera; the badges' owners
 #include "v2_stats.h"       // the STATS overlay's sub-frame counters
@@ -844,7 +845,18 @@ static bool compose_snapshot(const Snap& C, const Snap* P, double t, bool interp
             const uint16_t vk = own_cam ? C.coop_active[local] : (uint16_t)rd16(C.ds, DS_ACTIVE_VIKING);
             double T[2] = { Lt[0], Lt[1] };
             const bool has_vk = vk <= 0xFE && (vk & 1) == 0 && rd16(C.ds, (uint16_t)(vk + OBJ_CODE_SEG)) != 0;
-            if (has_vk && !rd16(C.ds, DS_SCROLL_LOCK_X)) {
+            // Interactive play only: the camera the presenter leads and leashes is the player's.
+            // A scene — the attract / intro / transition mode word 0x8000 (the vikings walk on a
+            // demo stream), an LVX scene slot (the Genesis interludes: pinned camera, full screen,
+            // the trio choreography), the PC's own scene slots 37..47 (logos, title, the intro
+            // ship, the finale) — is the script's: its camera pans are part of the choreography,
+            // so the presentation camera IS the exact logical camera there (2026-09-18: with the
+            // leash the intro's vikings walked up to 32 px off their scripted screen positions).
+            const uint16_t level = (uint16_t)rd16(C.ds, DS_LEVEL);
+            const bool interactive = rd16(C.ds, DS_GAME_MODE_AC) != 0x8000 &&
+                                     !(v2_lvx_flags(level) & LVX_SCENE_FLAGS) &&
+                                     !(level >= 37 && level < 48);
+            if (has_vk && interactive && !rd16(C.ds, DS_SCROLL_LOCK_X)) {
                 const MotionHist* hv = mhist_touch((int)vk, C.ds);
                 const double ox = obj_exact(hv, 0, C.subframe);
                 const double vpf = (double)(int16_t)(hv->W[0] - hv->XP[0]) + (double)(hv->F[0] - hv->Fprev[0]) / 256.0;   // px per game frame
@@ -856,7 +868,8 @@ static bool compose_snapshot(const Snap& C, const Snap* P, double t, bool interp
             double dt = g_cam_valid ? (double)(now - g_cam_last) / (double)SDL_GetPerformanceFrequency() : 0.0;
             if (dt < 0.0) dt = 0.0; if (dt > 0.05) dt = 0.05;
             g_cam_last = now;
-            if (!g_cam_valid || fabs(Lt[0] - g_cam_p[0]) > CAM_SNAP || fabs(Lt[1] - g_cam_p[1]) > CAM_SNAP) { g_cam_p[0] = T[0]; g_cam_p[1] = T[1]; g_cam_valid = true; }
+            if (!interactive) { g_cam_p[0] = Lt[0]; g_cam_p[1] = Lt[1]; g_cam_valid = true; }   // a scene: the logical camera, no approach, no leash
+            else if (!g_cam_valid || fabs(Lt[0] - g_cam_p[0]) > CAM_SNAP || fabs(Lt[1] - g_cam_p[1]) > CAM_SNAP) { g_cam_p[0] = T[0]; g_cam_p[1] = T[1]; g_cam_valid = true; }
             else { const double a = 1.0 - exp(-dt / CAM_TAU); g_cam_p[0] += (T[0] - g_cam_p[0]) * a; g_cam_p[1] += (T[1] - g_cam_p[1]) * a; }
             // the leash to the exact logical camera (the dead zone's half-widths), the level's limits
             int leash = 0;
