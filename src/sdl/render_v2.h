@@ -500,6 +500,25 @@ extern void v2_camera_shake(const uint8_t* ds, int* dx, int* dy);
 // stableBuffer), and whether stableBuffer holds the flat frame beside them (the selftest's reference)
 extern const V2PresentLayers* v2_present_layers_cur;
 extern bool v2_present_ref_valid;
+
+// MOTION < ORIGINAL | EXACT > (2026-09-15, v2_smooth.cpp): the exact trajectories of the objects'
+// sprites in the presentation. The engine keeps an object's position as a 16.8 number — the whole
+// OBJ_WORLD_X and the fraction byte OBJ_FRAC_X (P = W + F / 256, two's complement across the pair;
+// sub_1386b adds the 8.8 velocity once per game frame after saving OBJ_X_PREV = the previous
+// whole position; the collision snaps clear F) — and moves the sub-sprites, which are what the
+// display list draws, towards the new whole position in three whole-pixel steps, one per render
+// (sub_12fc6 / 12fcb / 12fd0: t0(d), t1(d), t2(d) of d = W - X_PREV, summing to d; 8 -> 3, 3, 2;
+// 1 -> 1, 0, 0). EXACT replaces those steps by the exact trajectory: at sub-frame r of a frame a
+// sprite's position is the engine's plus F_prev / 256 + r v / 3 - sum of the steps applied so far,
+// v = d + (F - F_prev) / 256 — a straight line from P(n-1) to P(n) sampled at the thirds, and at
+// r = 3 exactly P(n) + the sprite's offset. F_prev (the previous frame's fraction, which the engine
+// does not keep) comes from the presenter's per-object history; where the chain breaks (a spawn, a
+// teleport, a snap) the fraction is taken as unchanged. The exact positions are the endpoints of the
+// SMOOTH interpolation and the 1/k positions of SUBPIXEL; the flat frame rounds them. The game
+// state, the flip dump (the oracle against the test build) and the canon are untouched; the camera
+// keeps the engine's steps until the presentation camera (the next step).
+extern int v2_flip_subframe(void);                        // v2_vm.cpp: 1..3 inside render1..3, else 0 (the game thread, at the flip)
+extern int16_t v2_subsprite_delta_fn(int type, int16_t d); // v2_vm.cpp: the catch-up step of render1 / 2 / 3 (type 0 / 1 / 2) for a whole step d
 // the flip dump's frame (game thread): the newest snapshot composed at t = 1 into the caller's buffers
 extern bool v2_flip_frame_for_dump(uint8_t* map, uint8_t* hud, V2DisplayBadge* badges, int* w, int* rows);
 // the HUD band as presented: the 320-px art centred on a wide frame, the stone wall mirrored

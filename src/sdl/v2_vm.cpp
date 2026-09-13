@@ -8203,6 +8203,12 @@ static int16_t v2_delta_122f3(int16_t d) {
     return (int16_t)(d / 3);                            // CWD; IDIV
 }
 
+// render_v2.h (the presenter's MOTION EXACT): the catch-up delta of sub-frame `type` (0 / 1 / 2 =
+// render1 / 2 / 3) for a whole step d — the three sum to d
+int16_t v2_subsprite_delta_fn(int type, int16_t d) {
+    return type == 0 ? v2_delta_1227e(d) : type == 1 ? v2_delta_122c0(d) : v2_delta_122f3(d);
+}
+
 // sub_12fe5: per-object sub-sprite catch-up. Gates ([di+1355h]!=0,
 // [di+1AD5h]!=0, (tx|ty)!=0) then the DO-WHILE slot loop
 // (v2_subsprite_delta_apply). Orig computes the Y delta FIRST (through
@@ -23862,6 +23868,14 @@ static std::thread v2_game_thread;
 
 // Hang detector: tracks current phase + last progress timestamp
 static std::atomic<int> v2_current_phase{-1};       // phase v2 thread is processing right now
+static std::atomic<int> v2_last_render_sub{0};      // the last render phase entered: 1..3 (render_v2.h MOTION EXACT)
+// render_v2.h (the presenter's MOTION EXACT): the sub-frame of the flip being captured — the last
+// render phase entered (1..3): a flip in render1..3 carries its own, a flip after it (post_flip1..3
+// flips again for the HUD, a blocking loop) the sub-frame whose catch-up step the sub-sprites stand
+// at; 0 before the first render (the frame's end, as far as the presenter is concerned)
+int v2_flip_subframe(void) {
+    return v2_last_render_sub.load(std::memory_order_relaxed);
+}
 static std::atomic<uint64_t> v2_last_progress_ms{0}; // last time signal_phase OR phase_complete advanced
 static std::thread v2_hang_detector_thread;
 static std::atomic<bool> v2_hang_detector_quit{false};
@@ -23890,6 +23904,9 @@ static void v2_run_phase(int phase, uint16_t ds) {
 
         // Track for hang detector
         v2_current_phase.store(phase, std::memory_order_relaxed);
+        if (phase == V2_PHASE_RENDER1) v2_last_render_sub.store(1, std::memory_order_relaxed);   // the sub-frame the flips report (v2_flip_subframe)
+        else if (phase == V2_PHASE_RENDER2) v2_last_render_sub.store(2, std::memory_order_relaxed);
+        else if (phase == V2_PHASE_RENDER3) v2_last_render_sub.store(3, std::memory_order_relaxed);
         v2_last_progress_ms.store(SDL_GetTicks(), std::memory_order_relaxed);
         switch (phase) {
             case V2_PHASE_FRAME_BEGIN:  v2_phase_frame_begin(ds); break;

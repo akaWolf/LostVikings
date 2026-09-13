@@ -46,6 +46,7 @@ void v2_options_ensure_loaded() {
             else if (!strcmp(key, "console_finale")) v2_options.console_finale = val != 0;
             else if (!strcmp(key, "filter")) v2_options.filter = (val >= 0 && val <= 5) ? val : 1;   // out of range: the default, SHARP
             else if (!strcmp(key, "subpixel")) v2_options.subpixel = val != 0;   // 2026-09-15: the sub-pixel presentation (render_v2.h V2PresentLayers)
+            else if (!strcmp(key, "motion")) v2_options.motion = (val >= 0 && val <= 1) ? val : 1;   // 2026-09-15: MOTION < ORIGINAL | EXACT >
             else if (!strcmp(key, "integer_scale")) v2_options.integer_scale = val != 0;
             // (square_pixels — the step-3 ASPECT toggle — is gone, 2026-09-06: the
             // canvas is always the 320x240 raster; an old cfg's key is ignored here)
@@ -79,7 +80,7 @@ void v2_options_save() {
     fprintf(f, "filter=%d\ninteger_scale=%d\nborder=%d\nsound=%d\nwide=%d\n", v2_options.filter.load(), (int)v2_options.integer_scale.load(), v2_options.border.load(), v2_options.sound_mode.load(), v2_options.wide.load());
     fprintf(f, "audio_buffer=%d\npacing=%d\nstats=%d\n", v2_options.audio_buffer.load(), v2_options.pacing.load(), (int)v2_options.stats.load());
     fprintf(f, "music_volume=%d\nsfx_volume=%d\n", v2_options.music_volume.load(), v2_options.sfx_volume.load());
-    fprintf(f, "subpixel=%d\n", (int)v2_options.subpixel.load());
+    fprintf(f, "subpixel=%d\nmotion=%d\n", (int)v2_options.subpixel.load(), v2_options.motion.load());
     if (v2_options_sc55_roms[0]) fprintf(f, "sc55_roms=%s\n", v2_options_sc55_roms);
     if (v2_options_mt32_roms[0]) fprintf(f, "mt32_roms=%s\n", v2_options_mt32_roms);
     fclose(f);
@@ -171,6 +172,7 @@ static void darken_box(uint32_t* rgba, int w, int h, SDL_PixelFormat* fmt, int x
 // ------------------------------------------------------------------- menu --
 enum Item { IT_PARALLAX, IT_SCENES, IT_BALANCE, IT_LANG, IT_SMOOTH, IT_FINALE, IT_FILTER,
             IT_SUBPIXEL,                                                   // 2026-09-15: SUBPIXEL [ON/OFF] — the layers on the GPU at 1/k (render_v2.h V2PresentLayers)
+            IT_MOTION,                                                     // 2026-09-15: MOTION < ORIGINAL | EXACT > — the sprites on their objects' exact trajectories
             IT_INTEGER, IT_BORDER, IT_WIDE, IT_SOUND,
             IT_MUSICVOL, IT_SFXVOL,                                        // 2026-09-11: MUSIC VOL / SFX VOL (0..100 %, step 10)
             IT_AUDIOBUF, IT_PACING, IT_STATS,                              // 2026-09-11: the audio device buffer, PACING < VSYNC | VRR >, the STATS overlay
@@ -208,6 +210,7 @@ static void activate() {
     case IT_FINALE:   if (net_locked()) break; v2_options.console_finale = !v2_options.console_finale.load(); v2_options_save(); v2_ui_toast("FINALE: NEXT LOAD"); break;
     case IT_FILTER:   v2_options.filter = filter_step(v2_options.filter.load(), 1); v2_options_save(); break;
     case IT_SUBPIXEL: v2_options.subpixel = !v2_options.subpixel.load(); v2_options_save(); break;
+    case IT_MOTION:   v2_options.motion = v2_options.motion.load() ? 0 : 1; v2_options_save(); break;
     case IT_INTEGER:  v2_options.integer_scale = !v2_options.integer_scale.load(); v2_options_save(); break;
     case IT_BORDER:   v2_options.border = (v2_options.border.load() + 1) % 2; v2_options_save(); break;
     case IT_WIDE:     if (net_locked()) break; v2_options.wide = (v2_options.wide.load() + 1) % 3; v2_options_save(); v2_ui_toast("WIDE: NEXT LEVEL"); break;
@@ -230,7 +233,7 @@ static void activate() {
 }
 static void adjust(int d) {
     switch (cursor) {
-    case IT_PARALLAX: case IT_SCENES: case IT_BALANCE: case IT_FINALE: case IT_SUBPIXEL: case IT_INTEGER: activate(); break;
+    case IT_PARALLAX: case IT_SCENES: case IT_BALANCE: case IT_FINALE: case IT_SUBPIXEL: case IT_MOTION: case IT_INTEGER: activate(); break;
     case IT_SMOOTH:   v2_options.smooth = (v2_options.smooth.load() + d + 3) % 3; v2_options_save(); break;
     case IT_SOUND:    v2_options.sound_mode = (v2_options.sound_mode.load() + d + 4) % 4; v2_options_save(); break;
     case IT_FILTER:   v2_options.filter = filter_step(v2_options.filter.load(), d); v2_options_save(); break;
@@ -351,6 +354,7 @@ bool v2_ui_draw(uint32_t* rgba, int w, int h, SDL_PixelFormat* fmt, bool transpa
         { const int kx = v2_stats.kx.load();
           if (v2_options.subpixel.load() && kx) snprintf(lines[n++], 40, "SUBPIXEL  [ON ]  K=%d", kx);
           else snprintf(lines[n++], 40, "SUBPIXEL  [%s]", v2_options.subpixel.load() ? "ON " : "OFF"); }
+        snprintf(lines[n++], 40, "MOTION    < %s >", v2_options.motion.load() ? "EXACT   " : "ORIGINAL");
         snprintf(lines[n++], 40, "INT.SCALE [%s]", v2_options.integer_scale.load() ? "ON " : "OFF");
         snprintf(lines[n++], 40, "BORDER    < %s >", BORDER_NAMES[v2_options.border.load() % 2]);
         { static const char* const WIDE_NAMES[3] = { "OFF  ", "16:10", "16:9 " };

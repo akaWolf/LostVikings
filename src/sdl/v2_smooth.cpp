@@ -116,6 +116,7 @@ struct Snap {
     uint8_t hud[320 * 64];      // the HUD art as the HUD mirrors left it at this flip
     int rows;                   // v2_view_rows at the flip: 176 (HUD band below), 200 (LVX scene), 224 (LVX_TALL224)
     uint32_t par_acc_x, par_acc_y;
+    int subframe;               // the flip's sub-frame: 1..3 in render1..3, 0 elsewhere (render_v2.h MOTION EXACT)
     uint64_t t;                 // SDL_GetPerformanceCounter at capture
     uint32_t seq;               // the fill's ordinal (the presenter's composition cache)
     bool valid, tile_frame, fullscreen;
@@ -182,6 +183,7 @@ static void fill(Snap& S, const uint8_t* s) {
     S.rows = v2_view_rows();
     S.par_acc_x = v2_parallax.acc_x;
     S.par_acc_y = v2_parallax.acc_y;
+    S.subframe = v2_flip_subframe();
     S.t = SDL_GetPerformanceCounter();
     S.fullscreen = v2_scene_fullscreen() != 0;
     S.w = v2_fbw;
@@ -478,9 +480,43 @@ static void compose_layers(const Snap& C, const int* dev_x, const int* dev_y, co
 // stand V2_KX_SELFTEST compares the two at t = 1; the flat frame then stands on the layers'
 // whole camera, which is the flip's own when nothing is interpolated); a chunk screen always
 // lands in `out` (L->k stays 0).
+// MOTION EXACT (render_v2.h): the presenter's per-object history — the whole position, the
+// previous whole position and the fraction of the frame last seen, and the fraction of the frame
+// before it (F_prev), per axis; stamped by the composition that updated it
+namespace {
+struct MotionHist { uint32_t stamp; bool valid; int16_t W[2], XP[2]; int F[2], Fprev[2]; };
+thread_local MotionHist g_mhist[0x80];   // per object slot (di / 2)
+thread_local uint32_t g_mhist_comp = 0;  // the composition counter
+// the sub-sprite catch-up steps applied by the renders up to sub-frame r (0 = none)
+inline int catchup_sum(int r, int d) { int s = 0; for (int i = 0; i < r && i < 3; i++) s += v2_subsprite_delta_fn(i, (int16_t)d); return s; }
+// the correction of a sprite's whole position at sub-frame r to the exact trajectory (render_v2.h):
+// F_prev / 256 + r v / 3 - the steps applied, v = d + (F - F_prev) / 256; r = 0 (a flip outside the
+// renders: the sprites stand at the last render's step) is taken as the frame's end, where the
+// correction is F / 256 whatever F_prev
+inline double exact_delta(int r, int d, int F, int Fprev) {
+    if (r <= 0 || r > 3) r = 3;
+    const double v = (double)d + (double)(F - Fprev) / 256.0;
+    return (double)Fprev / 256.0 + (double)r * v / 3.0 - (double)catchup_sum(r, d);
+}
+// the object whose sub-sprite range holds `slot` (the catch-up's gates: a live object with
+// sub-sprites), -1 for none
+int owner_of(const uint8_t* ds, uint16_t slot) {
+    const uint16_t n = (uint16_t)rd16(ds, DS_OBJ_COUNT);
+    for (uint16_t di = 0; di < n && di < 0x100; di += 2) {
+        if (rd16(ds, (uint16_t)(di + OBJ_CODE_SEG)) == 0) continue;
+        if (rd16(ds, (uint16_t)(di + OBJ_SUB_COUNT)) == 0) continue;
+        const uint16_t s0 = (uint16_t)rd16(ds, (uint16_t)(di + OBJ_SUB_SLOT)), s1 = (uint16_t)rd16(ds, (uint16_t)(di + OBJ_SUB_END));
+        if (slot >= s0 && slot < s1) return (int)di;
+    }
+    return -1;
+}
+}  // namespace
+
+// One frame from a snapshot: see the note above. exact = MOTION EXACT (render_v2.h): the sprite
+// commands at their exact positions (the presenter only; the flip dump keeps the engine's).
 static void compose_snapshot(const Snap& C, const Snap* P, double t, bool interp, int local,
                              uint8_t* work, uint8_t* out, uint8_t* hud, V2DisplayBadge* badges, int* w, int* rows,
-                             V2PresentLayers* L, int k, bool out_too) {
+                             V2PresentLayers* L, int k, bool out_too, bool exact) {
     memcpy(badges, C.badge, sizeof C.badge);
     if (L) L->k = 0;
     if (!C.tile_frame) {
@@ -544,6 +580,10 @@ static void compose_snapshot(const Snap& C, const Snap* P, double t, bool interp
     // keeps its own position: the frame is the flip.
     static thread_local int16_t pos_x[V2_DRAWLIST_MAX], pos_y[V2_DRAWLIST_MAX];
     static thread_local int dev_x[V2_DRAWLIST_MAX], dev_y[V2_DRAWLIST_MAX];
+    // MOTION EXACT (render_v2.h): this composition's stamp for the history, the trace
+    if (exact) g_mhist_comp++;
+    static int mtrace = -1; if (mtrace < 0) mtrace = getenv("V2_MOTION_TRACE") ? 1 : 0;   // debug: the active viking's first sub-sprite per composition
+    const uint16_t trace_slot = mtrace ? (uint16_t)rd16(C.ds, (uint16_t)(rd16(C.ds, DS_ACTIVE_VIKING) + OBJ_SUB_SLOT)) : 0xFFFF;
     for (int i = 0; i < C.draws.n; i++) {
         const V2DrawCmd& c = C.draws.cmd[i];
         pos_x[i] = c.x; pos_y[i] = c.y;
@@ -551,21 +591,69 @@ static void compose_snapshot(const Snap& C, const Snap* P, double t, bool interp
         bool moved = false;
         // glyph cells and priority-tile repaints are map cells, not objects: they stay in the
         // world (moved only by the camera), their pseudo slots are no object record of the DS
-        if (interp && c.type != V2_CMD_GLYPH && c.type != V2_CMD_FGTILE) {
-            // the page lists keep a slot's earlier commands while their residue lives: only the
-            // slot's LAST command is the object as it stands, the earlier ones stay where they are
-            bool last = true; for (int j = i + 1; j < C.draws.n; j++) if (C.draws.cmd[j].slot == c.slot) { last = false; break; }
+        const bool sprite = c.type != V2_CMD_GLYPH && c.type != V2_CMD_FGTILE;
+        // the page lists keep a slot's earlier commands while their residue lives: only the
+        // slot's LAST command is the object as it stands, the earlier ones stay where they are
+        bool last = sprite && (interp || exact);
+        if (last) for (int j = i + 1; j < C.draws.n; j++) if (C.draws.cmd[j].slot == c.slot) { last = false; break; }
+        // MOTION EXACT: the correction of this command's own position (the newest flip) — the
+        // owner object's whole step, fraction and previous fraction (the history), the flip's sub-frame
+        double dxC = 0.0, dyC = 0.0; int own = -1; MotionHist* h = nullptr;
+        if (exact && last) {
+            own = owner_of(C.ds, c.slot);
+            if (own >= 0) {
+                h = &g_mhist[own >> 1];
+                const int16_t W[2] = { rd16(C.ds, (uint16_t)(own + OBJ_WORLD_X)), rd16(C.ds, (uint16_t)(own + OBJ_WORLD_Y)) };
+                const int16_t XP[2] = { rd16(C.ds, (uint16_t)(own + OBJ_X_PREV)), rd16(C.ds, (uint16_t)(own + OBJ_Y_PREV)) };
+                const int F[2] = { C.ds[(uint16_t)(own + OBJ_FRAC_X)], C.ds[(uint16_t)(own + OBJ_FRAC_Y)] };   // the byte the integrator adds to
+                if (h->stamp != g_mhist_comp) {   // once per composition: a new frame of this object shifts the history
+                    h->stamp = g_mhist_comp;
+                    // a new frame: the whole position, the previous whole position OR the fraction changed
+                    // (an object slower than a pixel per frame moves its fraction alone — d = 0, W = X_PREV)
+                    if (!h->valid || h->W[0] != W[0] || h->W[1] != W[1] || h->XP[0] != XP[0] || h->XP[1] != XP[1] || h->F[0] != F[0] || h->F[1] != F[1]) {
+                        const bool chain = h->valid && h->W[0] == XP[0] && h->W[1] == XP[1];   // the frame last seen is this frame's previous one
+                        for (int a = 0; a < 2; a++) { h->Fprev[a] = chain ? h->F[a] : F[a]; h->W[a] = W[a]; h->XP[a] = XP[a]; h->F[a] = F[a]; }
+                        h->valid = true;
+                    }
+                }
+                dxC = exact_delta(C.subframe, (int16_t)(W[0] - XP[0]), F[0], h->Fprev[0]);
+                dyC = exact_delta(C.subframe, (int16_t)(W[1] - XP[1]), F[1], h->Fprev[1]);
+                xf = c.x + dxC; yf = c.y + dyC;
+                moved = dxC != 0.0 || dyC != 0.0;
+            }
+        }
+        if (interp && last) {
             const V2DrawCmd* p = nullptr;
-            if (last) for (int j = P->draws.n - 1; j >= 0; j--) if (P->draws.cmd[j].slot == c.slot) { p = &P->draws.cmd[j]; break; }
+            for (int j = P->draws.n - 1; j >= 0; j--) if (P->draws.cmd[j].slot == c.slot) { p = &P->draws.cmd[j]; break; }
             if (p) {
                 const int16_t ax = c.x, bx = p->x, ay = c.y, by = p->y;
-                if ((ax != bx || ay != by) &&
+                // MOTION EXACT: the previous flip's own correction — in the same frame of the object
+                // (its whole and previous whole positions equal) the same F_prev; in an earlier frame
+                // its own fraction stands in (at its frame's end the correction is F / 256 anyway)
+                double dxP = 0.0, dyP = 0.0;
+                if (own >= 0) {
+                    const int16_t WP[2] = { rd16(P->ds, (uint16_t)(own + OBJ_WORLD_X)), rd16(P->ds, (uint16_t)(own + OBJ_WORLD_Y)) };
+                    const int16_t XPP[2] = { rd16(P->ds, (uint16_t)(own + OBJ_X_PREV)), rd16(P->ds, (uint16_t)(own + OBJ_Y_PREV)) };
+                    const int FP[2] = { P->ds[(uint16_t)(own + OBJ_FRAC_X)], P->ds[(uint16_t)(own + OBJ_FRAC_Y)] };
+                    const bool same = WP[0] == h->W[0] && WP[1] == h->W[1] && XPP[0] == h->XP[0] && XPP[1] == h->XP[1];
+                    dxP = exact_delta(P->subframe, (int16_t)(WP[0] - XPP[0]), FP[0], same ? h->Fprev[0] : FP[0]);
+                    dyP = exact_delta(P->subframe, (int16_t)(WP[1] - XPP[1]), FP[1], same ? h->Fprev[1] : FP[1]);
+                }
+                const double axf = c.x + dxC, bxf = p->x + dxP, ayf = c.y + dyC, byf = p->y + dyP;
+                if ((axf != bxf || ayf != byf) &&
                     !(ax - bx > V2_SMOOTH_MAX_STEP || bx - ax > V2_SMOOTH_MAX_STEP ||
                       ay - by > V2_SMOOTH_MAX_STEP || by - ay > V2_SMOOTH_MAX_STEP)) {   // else spawn / teleport / wrap
-                    xf = bx + (double)(ax - bx) * t; yf = by + (double)(ay - by) * t;
+                    xf = bxf + (axf - bxf) * t; yf = byf + (ayf - byf) * t;
                     moved = true;
                 }
             }
+        }
+        if (mtrace && c.slot == trace_slot && last) {
+            if (own >= 0 && h)
+                fprintf(stderr, "V2-MOTION f%d r%d t=%.2f slot=%02X own=%02X eng=%d,%d exact=%.3f,%.3f d=%d,%d F=%d,%d Fprev=%d,%d\n", v2_dbg_pre_vm_iter, C.subframe, interp ? t : 1.0,
+                        c.slot, own, c.x, c.y, xf, yf, (int)(int16_t)(h->W[0] - h->XP[0]), (int)(int16_t)(h->W[1] - h->XP[1]), h->F[0], h->F[1], h->Fprev[0], h->Fprev[1]);
+            else
+                fprintf(stderr, "V2-MOTION f%d r%d t=%.2f slot=%02X eng=%d,%d exact=%.3f,%.3f (no owner)\n", v2_dbg_pre_vm_iter, C.subframe, interp ? t : 1.0, c.slot, c.x, c.y, xf, yf);
         }
         if (moved) {
             pos_x[i] = (int16_t)(vx + lround(xf - camx_f));
@@ -670,10 +758,12 @@ bool v2_present_compose(V2PresentFrame* out) {
     // the sub-pixel presentation (render_v2.h V2PresentLayers): the window's integer scale for
     // this frame's width — 0 = the flat frame (the option off, a chunk screen, no renderer)
     const int k = (v2_options.subpixel.load() && C.tile_frame) ? v2_present_scale_k(C.w) : 0;
-    if (!(s_have && !interp && !s_interp && C.seq == s_seq && k == s_k)) {
+    const bool exact = v2_options.motion.load() == 1;   // MOTION EXACT (render_v2.h)
+    static bool s_exact = false;
+    if (!(s_have && !interp && !s_interp && C.seq == s_seq && k == s_k && exact == s_exact)) {
         compose_snapshot(C, interp ? &P : nullptr, t, interp, local, s_work, s_out, s_hud, s_badges, &s_w, &s_rows,
-                         k > 0 ? &s_L : nullptr, k, kx_test != 0);
-        s_seq = C.seq; s_interp = interp; s_have = true; s_k = k;
+                         k > 0 ? &s_L : nullptr, k, kx_test != 0, exact);
+        s_seq = C.seq; s_interp = interp; s_have = true; s_k = k; s_exact = exact;
     }
     const bool layers = k > 0 && s_L.k > 0;
     g_effective = interp;
@@ -694,6 +784,6 @@ bool v2_flip_frame_for_dump(uint8_t* map, uint8_t* hud, V2DisplayBadge* badges, 
     int ci;
     { std::lock_guard<std::mutex> lock(g_mx); ci = g_cur_i; }
     if (ci < 0 || !g_pool[ci].valid) return false;
-    compose_snapshot(g_pool[ci], nullptr, 1.0, false, -1, work, map, hud, badges, w, rows, nullptr, 0, false);
+    compose_snapshot(g_pool[ci], nullptr, 1.0, false, -1, work, map, hud, badges, w, rows, nullptr, 0, false, false);   // the engine's positions: the oracle against the test build's page
     return true;
 }

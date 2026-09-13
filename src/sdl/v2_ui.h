@@ -26,6 +26,7 @@ struct V2Options {
     std::atomic<int>  stats{0};              // 2026-09-11: the STATS overlay (v2_stats.h)
     std::atomic<int>  sound_mode{0};         // 0 PC (OPL3, the original), 1 SNES (UX10: the SNES DE music/effects, next level), 2 SC55 (UX11: Nuked-SC55 on the driver's MIDI events), 3 MT32 (UX11: the game's MT-32 driver on Munt)
     std::atomic<bool> subpixel{true};        // 2026-09-15: SUBPIXEL — a tile frame composed as layers on the GPU at the window's integer scale k, every layer at 1/k of a game pixel (render_v2.h V2PresentLayers); off = the flat frame
+    std::atomic<int>  motion{1};             // 2026-09-15: MOTION — 0 ORIGINAL (the engine's whole-pixel sub-frame steps), 1 EXACT (the sprites on the exact 16.8 trajectories of their objects; render_v2.h)
 };
 extern V2Options v2_options;
 void v2_options_ensure_loaded();        // cwd/v2_options.cfg, once
