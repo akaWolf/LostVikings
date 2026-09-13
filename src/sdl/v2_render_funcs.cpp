@@ -1008,7 +1008,11 @@ void v2_draw_tiles(uint16_t ds_val) {
                 // frame beyond 344 px — so the page's word (0xFFFE "wiped, black" included) does
                 // not apply there: the map tile does. (2026-09-12: the 16:10 frame showed black
                 // from column 344 on.)
-                if (ovr && col_vis < 0x2B && row_vis < (v2_view_rows() == 224 ? 0x1E : 0x19)) {
+                // Of the 43 painted columns the original ever shows 41 (320 px = 40 cells, 41 with
+                // a pel pan); columns 41 and 42 are slack the scroll painters do not keep in every
+                // path (level 2 in 16:10: cells 41..42 of a row still 0xFFFE from the wipe — a black
+                // 16x8 block at the ladder's foot), so the page's word is trusted for columns 0..40.
+                if (ovr && col_vis < 0x29 && row_vis < (v2_view_rows() == 224 ? 0x1E : 0x19)) {
                     const uint16_t w = ovr[tile_map_off >> 1];
                     if (w == 0xFFFE) {
                         for (int row = 0; row < 8; row++) {
@@ -2282,7 +2286,11 @@ void v2_draw_flagged_tiles(uint16_t ds_val) {
                 // frame beyond 344 px — so the page's word (0xFFFE "wiped, black" included) does
                 // not apply there: the map tile does. (2026-09-12: the 16:10 frame showed black
                 // from column 344 on.)
-                if (ovr && col_vis < 0x2B && row_vis < (v2_view_rows() == 224 ? 0x1E : 0x19)) {
+                // Of the 43 painted columns the original ever shows 41 (320 px = 40 cells, 41 with
+                // a pel pan); columns 41 and 42 are slack the scroll painters do not keep in every
+                // path (level 2 in 16:10: cells 41..42 of a row still 0xFFFE from the wipe — a black
+                // 16x8 block at the ladder's foot), so the page's word is trusted for columns 0..40.
+                if (ovr && col_vis < 0x29 && row_vis < (v2_view_rows() == 224 ? 0x1E : 0x19)) {
                     const uint16_t w = ovr[tile_map_off >> 1];
                     if (w == 0xFFFE) continue;          // black cell: nothing painted there yet
                     if (w != 0xFFFF) tile_entry = w;
