@@ -264,6 +264,31 @@ extern void v2_draw_viewport_chunk(uint16_t chunk_seg, uint16_t plane_size);
 // pre-165aa position on scroll frames while flames took the post-update one).
 extern void v2_draw_sprites_late(uint16_t ds_val);
 
+// The display list of a sub-frame (2026-09-11): one record per object the sprite layers
+// drew, in draw order — the early layer (every active object at the sub_1de05 point) and
+// the late layer (exactly the objects the sub_1dd9c mirror dispatched, in its order; the
+// mirror reports them through v2_late_list_begin/add and v2_draw_sprites_late consumes
+// that list instead of re-deriving the pass's decisions from the state after the pass).
+// The presenter composes its frames from this list — the same commands, the same order,
+// only the positions shifted for the interpolation — never from a re-derivation of what
+// the passes decided (the late set is a function of the pass, not of the DS after it).
+struct V2DrawCmd {
+    uint16_t slot;      // object slot (di)
+    uint16_t flags;     // [slot+0x44D] at draw time (type bits 0-2, hflip bit 9)
+    int16_t  x, y;      // world position drawn ([slot+0x64D]/[0x74D])
+    uint16_t seg, off;  // sprite data segment / 1-based offset
+    uint16_t strips;    // [slot+0xC4D] (type 2: strips per plane)
+    uint8_t  late;      // 0 = early layer, 1 = late layer
+    uint8_t  type;      // flags & 7
+};
+struct V2DrawList { int n; V2DrawCmd cmd[256]; };
+extern V2DrawList v2_frame_draws;                  // the game thread's list of the sub-frame being composed
+extern void v2_late_list_begin(void);              // sub_1dd9c mirror: a pass starts (the late set is being decided)
+extern void v2_late_list_add(uint16_t slot);       // sub_1dd9c mirror: this object's type handler ran
+// Draw the list's commands in order, command i at world position (pos_x[i], pos_y[i])
+// (the caller's interpolated positions; the command's own x/y when nothing moves).
+extern void v2_draw_list(const V2DrawList& L, const int16_t* pos_x, const int16_t* pos_y);
+
 // Single-tile redraw for dirty-rect (sub_1de05 inner loop) — exact orig sub_1689e equivalent
 extern void v2_draw_single_tile(uint16_t ds_val, uint16_t fs_offset, int abs_row, int abs_col);
 // Refresh static intro/menu chunk_bg backup from current v2_render_buf (call after

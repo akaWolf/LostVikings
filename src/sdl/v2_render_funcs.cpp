@@ -355,6 +355,11 @@ void v2_chunk_bg_update_from_render() {
 uint8_t v2_dac_shadow[768] = {};
 
 extern "C" void v2_publish_dac_palette(void);  // defined below (#87)
+// the orig side's draw info (render.cpp), by its leading member only — the V2_VGA_DUMP
+// forensics below writes its VGA memory next to the shadow VGA (same layout)
+struct v2_real_drawinfo_fwd { uint8_t drawBuffer[65536 * 4]; };
+extern struct v2_real_drawinfo_fwd* myDrawInfo;
+static void v2_dbg_role_bases(const uint8_t* sh, uint16_t rb[3]);   // below v2_effective_camera
 
 void v2_swap_render_buf() {
 #ifdef V2_RENDER_FROM_SHADOW
@@ -407,6 +412,68 @@ void v2_swap_render_buf() {
         extern uint8_t v2_vga[65536 * 4];
         if (!v2_vga_fetch_page(v2_display_buf, 320 * 176))
             memcpy(v2_display_buf, v2_render_buf, 320 * 240);
+        // debug: V2_LINCMP=1 — test mode: the linear composition buffer (what the game build
+        // presents) against the shadow-VGA page of the same flip (the orig's screen), map rows
+        // 0..175; one line per differing flip, a summary at exit
+        {
+            static int on = -1; static long flips = 0, bad = 0, badpx = 0; static int lastf = -1;
+            if (on < 0) { on = getenv("V2_LINCMP") ? 1 : 0;
+                          if (on) atexit([]() { fprintf(stderr, "V2-LINCMP-SUMMARY flips=%ld differing=%ld px=%ld\n", flips, bad, badpx); }); }
+            if (on == 1 && v2_fbw == 320) {
+                flips++;
+                int cnt = 0, x0 = 320, x1 = -1, y0 = 176, y1 = -1;
+                for (int y = 0; y < 176; y++) for (int x = 0; x < 320; x++)
+                    if (v2_display_buf[y * 320 + x] != v2_render_buf[y * 320 + x]) { cnt++; if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y; }
+                if (cnt) { bad++; badpx += cnt;
+                    if (v2_dbg_pre_vm_iter != lastf || bad < 200) { lastf = v2_dbg_pre_vm_iter;
+                        extern uint8_t* v2_vm_get_shadow_ds(); const uint8_t* sh = v2_vm_get_shadow_ds();
+                        fprintf(stderr, "V2-LINCMP f%d diff=%d bbox=%d..%d,%d..%d lvl=%04X flags=%02X\n", v2_dbg_pre_vm_iter, cnt, x0, x1, y0, y1,
+                                sh ? *(const uint16_t*)(sh + DS_LEVEL) : 0, sh ? sh[DS_LEVEL_FLAGS] : 0); } }
+            }
+        }
+        // debug: V2_VGA_DUMP=<dir>:<from>-<to> writes the whole shadow VGA (64K x 4 planes,
+        // linear = addr*4+plane) at every flip of the game-frame range, with the page roles
+        // and the CRTC start — page-level forensics (which page holds what)
+        {
+            static int dump = -1; static char dir[480]; static int from = 0, to = -1, n = 0;
+            if (dump < 0) {
+                const char* e = getenv("V2_VGA_DUMP"); dump = 0;
+                if (e && *e) { snprintf(dir, sizeof dir, "%s", e); char* c = strrchr(dir, ':');
+                               if (c && sscanf(c + 1, "%d-%d", &from, &to) == 2) { *c = 0; dump = 1; } }
+            }
+            if (dump == 1 && v2_dbg_pre_vm_iter >= from && v2_dbg_pre_vm_iter <= to && n < 2000) {
+                extern uint32_t v2_vga_crtc; extern uint8_t v2_vga_pan;
+                extern uint8_t* v2_vm_get_shadow_ds(); const uint8_t* sh = v2_vm_get_shadow_ds();
+                char path[560]; snprintf(path, sizeof path, "%s/vga_%04d_f%d.bin", dir, n, v2_dbg_pre_vm_iter);
+                FILE* f = fopen(path, "wb");
+                if (f) { fwrite(v2_vga, 1, sizeof(v2_vga), f); fclose(f); }
+                // the orig side's VGA memory (the m2c drawBuffer, same layout) next to it
+                { if (myDrawInfo) {
+                      snprintf(path, sizeof path, "%s/real_%04d_f%d.bin", dir, n, v2_dbg_pre_vm_iter);
+                      FILE* g = fopen(path, "wb");
+                      if (g) { fwrite(myDrawInfo->drawBuffer, 1, sizeof(v2_vga), g); fclose(g); } } }
+                if (sh) {
+                    // the window base of each page role by the sub_16775 formula (v2_page_flip_16775), and
+                    // the FS words of the cells V2_FLIP_CELLS=<col>,<row>,<w>,<h> (tile cells) — the dirty bits
+                    uint16_t rb[3]; v2_dbg_role_bases(sh, rb);
+                    char cells[640] = "";
+                    { static int c0 = -1, r0 = 0, cw = 0, ch = 0; static int init = 0;
+                      if (!init) { init = 1; const char* e = getenv("V2_FLIP_CELLS"); if (e) sscanf(e, "%d,%d,%d,%d", &c0, &r0, &cw, &ch); }
+                      if (c0 >= 0) { int p = 0;
+                          for (int rr = 0; rr < ch && p < 600; rr++) {
+                              const uint16_t rowbase = *(const uint16_t*)(sh + (uint16_t)((r0 + rr) * 2 - LUT_ROW_BASE));
+                              for (int cc = 0; cc < cw && p < 600; cc++) {
+                                  const uint32_t off = (uint32_t)(rowbase + c0 + cc) * 2u;
+                                  extern uint8_t v2_vm_shadow_fs[];
+                                  const uint16_t w = off + 1 < 0x10000u ? *(const uint16_t*)(v2_vm_shadow_fs + off) : 0xFFFF;
+                                  p += snprintf(cells + p, sizeof(cells) - p, " %04X", w);
+                              } } } }
+                    fprintf(stderr, "V2-VGADUMP n=%d f%d draw=%04X shown=%04X bg=%04X crtc=%04X pan=%u base00=%04X base34=%04X base68=%04X cells%s\n", n, v2_dbg_pre_vm_iter,
+                            *(const uint16_t*)(sh + 0x92F7), *(const uint16_t*)(sh + 0x92F9), *(const uint16_t*)(sh + 0x92FB), v2_vga_crtc, v2_vga_pan, rb[0], rb[1], rb[2], cells);
+                }
+                n++;
+            }
+        }
         extern uint8_t v2_display_hud_buf[];
         for (int y = 0; y < 64; y++)
             memcpy(v2_display_hud_buf + y * 320, v2_vga + (uint32_t)(y * 0x56) * 4u, 320);
@@ -435,6 +502,32 @@ void v2_swap_render_buf() {
                            if (c && sscanf(c + 1, "%d-%d", &from, &to) == 2) { *c = 0; dump = 1; } }
         }
         if (dump == 1 && v2_dbg_pre_vm_iter >= from && v2_dbg_pre_vm_iter <= to && n < 6000) {
+            // V2_FLIP_OBJ=<slot>[,<slot>...] (up to 4): each object's sprite flags / redraw byte [114D] /
+            // erase byte [114E] / sprite position / the CUR ([D4D]) and OLD ([F4D]) rects of the dirty
+            // logic at this flip — plus the camera (ds:44/46) and the tile-window origin (ds:257F/2581)
+            { static int fo[4] = {-2, -1, -1, -1}; static int nfo = 0;
+              if (fo[0] == -2) { fo[0] = -1; const char* e = getenv("V2_FLIP_OBJ");
+                  while (e && *e && nfo < 4) { fo[nfo++] = (int)strtol(e, 0, 0); const char* c = strchr(e, ','); e = c ? c + 1 : nullptr; } }
+              if (nfo > 0) { extern uint8_t* v2_vm_get_shadow_ds(); const uint8_t* sh = v2_vm_get_shadow_ds();
+                  if (sh) {
+                      // hash = FNV-1a of the whole shadow DS at this flip (the two builds' timelines compared flip by flip)
+                      uint32_t hsh = 2166136261u; for (uint32_t i = 0; i < 0x10000u; i++) { hsh ^= sh[i]; hsh *= 16777619u; }
+                      fprintf(stderr, "V2-FLIPCAM n=%d f%d cam=(%d,%d) win=(%d,%d) mode=%04X force=%02X dshash=%08X\n", n, v2_dbg_pre_vm_iter,
+                              *(const int16_t*)(sh + 0x44), *(const int16_t*)(sh + 0x46),
+                              *(const int16_t*)(sh + 0x257F), *(const int16_t*)(sh + 0x2581),
+                              *(const uint16_t*)(sh + DS_GAME_MODE_AC), sh[0x9568], hsh);
+                      // V2_FLIP_DSDUMP=<dir>: the whole shadow DS of this flip as <dir>/ds_<n>_f<frame>.bin
+                      { static const char* dd = nullptr; static int ddi = -1; if (ddi < 0) { dd = getenv("V2_FLIP_DSDUMP"); ddi = (dd && *dd) ? 1 : 0; }
+                        if (ddi == 1) { char p2[560]; snprintf(p2, sizeof p2, "%s/ds_%04d_f%d.bin", dd, n, v2_dbg_pre_vm_iter);
+                                        FILE* fd = fopen(p2, "wb"); if (fd) { fwrite(sh, 1, 0x10000, fd); fclose(fd); } } }
+                      for (int k = 0; k < nfo; k++) { const int o = fo[k]; if (o < 0) continue;
+                          fprintf(stderr, "V2-FLIPOBJ n=%d f%d obj=%02X flags=%04X dirty=%02X erase=%02X xy=(%d,%d) cur=(%d,%d) old=(%d,%d) strips=%u spr=%04X:%04X\n", n, v2_dbg_pre_vm_iter, o,
+                                  *(const uint16_t*)(sh + o + OBJ_SPRITE_FLAGS), sh[o + OBJ_DIRTY_MODE], sh[o + 0x114E],
+                                  *(const int16_t*)(sh + o + OBJ_SPRITE_X), *(const int16_t*)(sh + o + OBJ_SPRITE_Y),
+                                  *(const int16_t*)(sh + o + 0xD4D), *(const int16_t*)(sh + o + 0xE4D),
+                                  *(const int16_t*)(sh + o + 0xF4D), *(const int16_t*)(sh + o + 0x104D),
+                                  *(const uint16_t*)(sh + o + OBJ_STRIP_COUNT),
+                                  *(const uint16_t*)(sh + o + OBJ_SPRITE_SEG), *(const uint16_t*)(sh + o + OBJ_SPRITE_OFF)); } } } }
             char path[560]; snprintf(path, sizeof path, "%s/flip_%04d_f%d.ppm", dir, n, v2_dbg_pre_vm_iter);
             FILE* f = fopen(path, "wb");
             if (f) {
@@ -454,6 +547,25 @@ void v2_swap_render_buf() {
                 }
                 fclose(f);
             }
+#ifndef V2_ONLY
+            // test mode only: the linear composition buffer of the same flip next to the
+            // shadow-VGA page (<dir>/lin_<n>_f<frame>.ppm) — the two rendering models of
+            // one DS timeline side by side (the game build presents the linear buffer)
+            { char p2[560]; snprintf(p2, sizeof p2, "%s/lin_%04d_f%d.ppm", dir, n, v2_dbg_pre_vm_iter);
+              FILE* f2 = fopen(p2, "wb");
+              if (f2) {
+                  fprintf(f2, "P6\n320 240\n255\n");
+                  extern uint8_t v2_display_hud_buf[];
+                  for (int y = 0; y < 240; y++) for (int x = 0; x < 320; x++) {
+                      uint8_t idx = 0;
+                      if (y < 176) idx = v2_render_buf[y * v2_fbw + x];
+                      else idx = v2_display_hud_buf[(y - 176) * 320 + x];
+                      const uint8_t* c = v2_dac_shadow + idx * 3;
+                      fputc(c[0] << 2, f2); fputc(c[1] << 2, f2); fputc(c[2] << 2, f2);
+                  }
+                  fclose(f2);
+              } }
+#endif
             n++;
         }
     }
@@ -547,6 +659,17 @@ static V2Camera v2_effective_camera(const uint8_t* ds_base) {
     c.tile_shift_x = (int)(c.x_eff >> 3) - (int)(x_disp >> 3);
     c.tile_shift_y = (int)(c.y_eff >> 3) - (int)(y_disp >> 3);
     return c;
+}
+// debug (V2_VGA_DUMP): the window base of each page role (0 / 0x34 / 0x68) by the
+// sub_16775 formula — LUT[0x89F8 + role + (y>>3)*2] + LUT[0x8E58 + (y&7)*2] + (x>>2) + 8
+static void v2_dbg_role_bases(const uint8_t* sh, uint16_t rb[3]) {
+    V2Camera cam = v2_effective_camera(sh);
+    const int ye = (int)(int16_t)cam.y_eff, xe = (int)(int16_t)cam.x_eff;
+    for (int r = 0; r < 3; r++) {
+        const uint16_t role = (uint16_t)(r * 0x34);
+        rb[r] = (uint16_t)(*(const uint16_t*)(sh + (uint16_t)(0x89F8 + role + ((ye >> 3) * 2))) +
+                           *(const uint16_t*)(sh + (uint16_t)(0x8E58 + ((ye & 7) * 2))) + (xe >> 2) + 8);
+    }
 }
 
 // UX stage 2: the SNES parallax layer under the level tiles (display lane).
@@ -889,8 +1012,214 @@ static inline void v2_put_pixel(uint8_t* buf, int sx, int sy, uint8_t color) {
 }
 
 static void v2_draw_sprites_impl(uint16_t ds_val, int late_gate, int only_obj = -1);
-void v2_draw_sprites(uint16_t ds_val) { v2_draw_sprites_impl(ds_val, 0); }
+
+// ----------------------------------------------------------------------------
+// The display list (render_v2.h V2DrawList): every object the sprite layers of the
+// sub-frame draw is recorded here in draw order — the early layer resets the list, the
+// late layer appends. The presenter composes from this list (v2_draw_list), so what it
+// shows is what the passes drew, not a re-derivation of their decisions.
+// ----------------------------------------------------------------------------
+V2DrawList v2_frame_draws = { 0, {} };
+// The late set of the current pass, reported by the sub_1dd9c mirror (v2_late_sprites_1DD9C)
+// in its dispatch order: v2_draw_sprites_late draws exactly these slots. Valid from the
+// mirror's begin until the late layer consumed it; without a report (test mode's phase
+// order) the late layer falls back to its gate re-derivation below.
+static uint16_t g_late_slots[128];
+static int      g_late_n = 0;
+static bool     g_late_valid = false;
+void v2_late_list_begin(void) { g_late_n = 0; g_late_valid = true; }
+void v2_late_list_add(uint16_t slot) { if (g_late_valid && g_late_n < 128) g_late_slots[g_late_n++] = slot; }
+
+// Rasterise one sprite of the orig's three formats at screen (sx0, sy0) — the body every
+// sprite layer and the presenter's list replay share. Column formula: sx0 + N*4 + section
+// (normal) or sx0 + (sprite_w-1) - (N*4 + section) (hflip, flags bit 9).
+//   type 1 (seg003_648_proc, jpt_1CF4E): 8x8, 2 strips/section, 4 rows/strip, 2 bytes/row
+//   type 2 (loc_1d8a8, jpt_1DA02): dynamic, [0xC4D] strips/section, 1 row/strip, 8 bytes/row
+//   type 4 (sub_1d3b2, jpt_1d514): 16x16, 8 strips/section, 2 rows/strip, 4 bytes/row
+// Sprite data: sprite_off is the 1-based offset of the first data byte, the mask byte sits
+// at offset-1; each strip = 1 mask byte + 8 data bytes, 4 plane sections in a row.
+static void v2_raster_sprite(uint8_t* buf, int type, uint16_t flags, int sx0, int sy0,
+                             uint16_t sprite_seg, uint16_t sprite_off, int strips, int obj, uint16_t cur_lvl) {
+    if (!sprite_seg) return;
+    int num_strips, rows_per_strip, bytes_per_row;
+    if (type == 1) {
+        num_strips = 2; rows_per_strip = 4; bytes_per_row = 2;
+    } else if (type == 2) {
+        num_strips = strips;
+        if (num_strips <= 0) return;
+        rows_per_strip = 1; bytes_per_row = 8;
+    } else if (type == 4) {
+        num_strips = 8; rows_per_strip = 2; bytes_per_row = 4;
+    } else return;   // types 0,3,5,6,7: cs:0x0000, no renderer
+
+    // Horizontal flip: bit 9 (0x200) of flags. All three type renderers
+    // (seg003_648_proc, sub_1d3b2, loc_1d8a8) check this flag and branch to
+    // mirrored rendering paths.
+    bool hflip = (flags & 0x200) != 0;
+
+    // Coarse bounds check — sprite pixel size. (Display lane only; the
+    // byte-exact page channel is the shadow VGA in v2_vm.cpp.)
+    int sprite_h = num_strips * rows_per_strip;
+    int sprite_w = bytes_per_row * 4;  // 4 planes
+    if (sx0 >= v2_fbw || sx0 < -sprite_w || sy0 >= v2_clip_h || sy0 < -sprite_h) return;
+
+    // Sprite data: resolve segment to shadow buffer, add offset.
+    // sprite_off = 1-based offset to first data byte; mask at offset-1.
+#ifdef V2_RENDER_FROM_SHADOW
+    uint8_t* seg_base = v2_resolve_segment(sprite_seg);
+    if (!seg_base) return;
+    uint8_t* sprite = seg_base + sprite_off - 1;
+    if (!v2_tls_presenter) {
+        static int cmp_mismatch = 0;
+        // real-vs-shadow compare only meaningful when orig updates real
+        // memory (V2_ONLY: dynamic segments in the snapshot buffer stay 0).
+        if (v2_vm_get_real_ds() && cur_lvl < 38 && cmp_mismatch < 10) {
+            uint8_t* real_sprite = v2_m2c_base + ((uint32_t)sprite_seg << 4) + sprite_off - 1;
+            if (memcmp(sprite, real_sprite, 32) != 0) {
+                cmp_mismatch++;
+                printf("V2-SPRMIS: obj=%02x seg=%04x off=%04x shadow_ptr=%s\n",
+                       obj, sprite_seg, sprite_off,
+                       (seg_base != (v2_m2c_base + ((uint32_t)sprite_seg << 4))) ? "SHADOW" : "REAL_FALLBACK");
+                printf("  shd: %02x%02x%02x%02x %02x%02x%02x%02x\n",
+                       sprite[0],sprite[1],sprite[2],sprite[3],sprite[4],sprite[5],sprite[6],sprite[7]);
+                printf("  rea: %02x%02x%02x%02x %02x%02x%02x%02x\n",
+                       real_sprite[0],real_sprite[1],real_sprite[2],real_sprite[3],
+                       real_sprite[4],real_sprite[5],real_sprite[6],real_sprite[7]);
+            }
+        }
+    }
+#else
+    (void)obj; (void)cur_lvl;
+    uint32_t sprite_linear = ((uint32_t)sprite_seg << 4) + sprite_off - 1;
+    uint8_t* sprite = v2_m2c_base + sprite_linear;
+#endif
+
+    // sx(col) computes the screen x for a given data column.
+    auto sx = [&](int col) -> int {
+        return hflip ? sx0 + sprite_w - 1 - col : sx0 + col;
+    };
+
+    uint8_t* ptr = sprite;
+    for (int section = 0; section < 4; section++) {
+        int plane = section;
+        for (int strip = 0; strip < num_strips; strip++) {
+            uint8_t mask = ptr[0];
+            uint8_t* data = ptr + 1;
+            int base_y = sy0 + strip * rows_per_strip;
+
+            if (mask) {
+                if (type == 1) {
+                    // Type 1 (jpt_1CF4E): 4 rows × 2 bytes per row
+                    // Mask: 76→row0, 54→row1, 32→row2, 10→row3
+                    if (mask & 0x80) v2_put_pixel(buf, sx(0*4 + plane), base_y + 0, data[0]);
+                    if (mask & 0x40) v2_put_pixel(buf, sx(1*4 + plane), base_y + 0, data[1]);
+                    if (mask & 0x20) v2_put_pixel(buf, sx(0*4 + plane), base_y + 1, data[2]);
+                    if (mask & 0x10) v2_put_pixel(buf, sx(1*4 + plane), base_y + 1, data[3]);
+                    if (mask & 0x08) v2_put_pixel(buf, sx(0*4 + plane), base_y + 2, data[4]);
+                    if (mask & 0x04) v2_put_pixel(buf, sx(1*4 + plane), base_y + 2, data[5]);
+                    if (mask & 0x02) v2_put_pixel(buf, sx(0*4 + plane), base_y + 3, data[6]);
+                    if (mask & 0x01) v2_put_pixel(buf, sx(1*4 + plane), base_y + 3, data[7]);
+                } else if (type == 2) {
+                    // Type 2 (jpt_1DA02): 1 row × 8 bytes
+                    // Mask: bit7→data[0], ..., bit0→data[7]
+                    if (mask & 0x80) v2_put_pixel(buf, sx(0*4 + plane), base_y, data[0]);
+                    if (mask & 0x40) v2_put_pixel(buf, sx(1*4 + plane), base_y, data[1]);
+                    if (mask & 0x20) v2_put_pixel(buf, sx(2*4 + plane), base_y, data[2]);
+                    if (mask & 0x10) v2_put_pixel(buf, sx(3*4 + plane), base_y, data[3]);
+                    if (mask & 0x08) v2_put_pixel(buf, sx(4*4 + plane), base_y, data[4]);
+                    if (mask & 0x04) v2_put_pixel(buf, sx(5*4 + plane), base_y, data[5]);
+                    if (mask & 0x02) v2_put_pixel(buf, sx(6*4 + plane), base_y, data[6]);
+                    if (mask & 0x01) v2_put_pixel(buf, sx(7*4 + plane), base_y, data[7]);
+                } else { // type == 4
+                    // Type 4 (jpt_1d514): 2 rows × 4 bytes per row
+                    // Mask: 7654→row0, 3210→row1
+                    if (mask & 0x80) v2_put_pixel(buf, sx(0*4 + plane), base_y + 0, data[0]);
+                    if (mask & 0x40) v2_put_pixel(buf, sx(1*4 + plane), base_y + 0, data[1]);
+                    if (mask & 0x20) v2_put_pixel(buf, sx(2*4 + plane), base_y + 0, data[2]);
+                    if (mask & 0x10) v2_put_pixel(buf, sx(3*4 + plane), base_y + 0, data[3]);
+                    if (mask & 0x08) v2_put_pixel(buf, sx(0*4 + plane), base_y + 1, data[4]);
+                    if (mask & 0x04) v2_put_pixel(buf, sx(1*4 + plane), base_y + 1, data[5]);
+                    if (mask & 0x02) v2_put_pixel(buf, sx(2*4 + plane), base_y + 1, data[6]);
+                    if (mask & 0x01) v2_put_pixel(buf, sx(3*4 + plane), base_y + 1, data[7]);
+                }
+            }
+            ptr += 9;
+        }
+    }
+}
+
+// One object of a sprite layer: the trace, the display-list record, the rasterisation at
+// world - camera. late = which layer draws it (the record's tag, the trace's label).
+static void v2_draw_sprite_obj(uint8_t* buf, uint8_t* ds_base, const V2StateViewC& st,
+                               int viewport_x, int viewport_y, int obj, int late) {
+    uint16_t flags = *(uint16_t*)(ds_base + obj + OBJ_SPRITE_FLAGS);
+    int type = flags & 7;
+    // debug: V2_SPR_TRACE=<from>-<to> — every sprite draw of the game-frame range with its
+    // pass (early = the sub_1de05 point, late = the sub_1dd9c repaint), in draw order
+    { static int tr = -1; static int f0 = 0, f1 = -1;
+      if (tr < 0) { const char* e = getenv("V2_SPR_TRACE"); tr = 0; if (e && sscanf(e, "%d-%d", &f0, &f1) == 2) tr = 1; }
+      if (tr && !v2_tls_presenter && v2_dbg_pre_vm_iter >= f0 && v2_dbg_pre_vm_iter <= f1)
+          fprintf(stderr, "V2-SPRDRAW f%d %s obj=%02X fl=%04X t=%d xy=(%d,%d) seg=%04X off=%04X\n", v2_dbg_pre_vm_iter,
+                  late ? "late " : "early", obj, flags, type,
+                  *(int16_t*)(ds_base + obj + OBJ_SPRITE_X), *(int16_t*)(ds_base + obj + OBJ_SPRITE_Y),
+                  *(uint16_t*)(ds_base + obj + OBJ_SPRITE_SEG), *(uint16_t*)(ds_base + obj + OBJ_SPRITE_OFF)); }
+
+    {
+        static int spr_printed = 0;
+        uint16_t cur_lvl = st.level();
+        if (spr_printed < 15 && cur_lvl < 38) {
+            spr_printed++;
+            printf("V2-SPR[l%d]: obj=%02x fl=%04x t=%d xy=(%d,%d) seg=%04x off=%04x scr=(%d,%d)\n",
+                   cur_lvl, obj, flags, type,
+                   *(int16_t*)(ds_base + obj + OBJ_SPRITE_X),
+                   *(int16_t*)(ds_base + obj + OBJ_SPRITE_Y),
+                   *(uint16_t*)(ds_base + obj + OBJ_SPRITE_SEG),
+                   *(uint16_t*)(ds_base + obj + OBJ_SPRITE_OFF),
+                   viewport_x, viewport_y);
+        }
+    }
+
+    // Dispatch table at cs:0x15CB: only types 1, 2, 4 have renderers.
+    // Type 1 → cs:0x0648 (seg003_648_proc, 8×8)
+    // Type 2 → cs:0x1078 (loc_1d8a8, dynamic size)
+    // Type 4 → cs:0x0B82 (sub_1d3b2, 16×16)
+    // Types 0,3,5,6,7 → cs:0x0000 (not used)
+    if (type != 1 && type != 2 && type != 4) return;
+
+    int16_t world_x = *(int16_t*)(ds_base + obj + OBJ_SPRITE_X);
+    int16_t world_y = *(int16_t*)(ds_base + obj + OBJ_SPRITE_Y);
+    uint16_t sprite_off = *(uint16_t*)(ds_base + obj + OBJ_SPRITE_OFF);
+    uint16_t sprite_seg = *(uint16_t*)(ds_base + obj + OBJ_SPRITE_SEG);
+    if (!sprite_seg) return;
+    uint16_t strips = *(uint16_t*)(ds_base + obj + OBJ_STRIP_COUNT);
+    if (type == 2 && (int)strips <= 0) return;
+
+    // the display list: the game thread's layers record what they draw
+    if (!v2_tls_presenter && v2_frame_draws.n < 256) {
+        V2DrawCmd& c = v2_frame_draws.cmd[v2_frame_draws.n++];
+        c.slot = (uint16_t)obj; c.flags = flags; c.x = world_x; c.y = world_y;
+        c.seg = sprite_seg; c.off = sprite_off; c.strips = strips; c.late = (uint8_t)(late ? 1 : 0); c.type = (uint8_t)type;
+    }
+    v2_raster_sprite(buf, type, flags, world_x - viewport_x, world_y - viewport_y, sprite_seg, sprite_off, (int)strips, obj, st.level());
+}
+
+// the early layer opens the sub-frame's display list; the presenter never records
+void v2_draw_sprites(uint16_t ds_val) { if (!v2_tls_presenter) v2_frame_draws.n = 0; v2_draw_sprites_impl(ds_val, 0); }
 void v2_draw_sprites_late(uint16_t ds_val) { v2_draw_sprites_impl(ds_val, 1); }
+
+// The presenter: the list's commands in order, command i at world (pos_x[i], pos_y[i]).
+void v2_draw_list(const V2DrawList& L, const int16_t* pos_x, const int16_t* pos_y) {
+    if (!v2_m2c_base || !myDrawInfo_v2) return;
+    uint8_t* ds_base = v2_get_ds_base(0);                     // the presenter's snapshot DS (camera)
+    uint8_t* buf = v2_tls_out ? v2_tls_out : v2_render_buf;
+    V2Camera cam = v2_effective_camera(ds_base);
+    const int viewport_x = (int)(int16_t)cam.x_eff, viewport_y = (int)(int16_t)cam.y_eff;
+    for (int i = 0; i < L.n; i++) {
+        const V2DrawCmd& c = L.cmd[i];
+        const int x = pos_x ? pos_x[i] : c.x, y = pos_y ? pos_y[i] : c.y;
+        v2_raster_sprite(buf, c.type, c.flags, x - viewport_x, y - viewport_y, c.seg, c.off, (int)c.strips, c.slot, 0xFFFF);
+    }
+}
 
 // late_gate=1: repaint only what orig sub_1dd9c draws in this sub-frame —
 // gates evaluated BEFORE v2_late_sprites_1DD9C's DS effects (DEC of [obj+0x114D]) and
@@ -900,6 +1229,13 @@ void v2_draw_sprites_late(uint16_t ds_val) { v2_draw_sprites_impl(ds_val, 1); }
 // bit0 (seg003 eip 0x634: TEST word fs:[si],1) — set means this sub-frame's
 // sub_1c8f1 repaints the cell, so the sprite must be repainted over it.
 static void v2_draw_sprites_impl(uint16_t ds_val, int late_gate, int only_obj) {
+    // debug (V2_SPR_TRACE range): the layer's entry with its gates — a pass that draws nothing
+    // shows here as in_frame=0 (the blocking loops of the game build) or base=0
+    { static int tr = -1; static int f0 = 0, f1 = -1;
+      if (tr < 0) { const char* e = getenv("V2_SPR_TRACE"); tr = 0; if (e && sscanf(e, "%d-%d", &f0, &f1) == 2) tr = 1; }
+      if (tr && !v2_tls_presenter && v2_dbg_pre_vm_iter >= f0 && v2_dbg_pre_vm_iter <= f1)
+          fprintf(stderr, "V2-SPRPASS f%d %s in_frame=%d base=%d late_list=%d/%d\n", v2_dbg_pre_vm_iter, late_gate ? "late " : "early",
+                  (int)v2_vm_in_frame, (int)(v2_m2c_base != nullptr && myDrawInfo_v2 != nullptr), (int)g_late_valid, g_late_n); }
 #ifdef V2_RENDER_FROM_SHADOW
     if (!v2_vm_in_frame && !v2_tls_presenter) return;
 #endif
@@ -922,6 +1258,16 @@ static void v2_draw_sprites_impl(uint16_t ds_val, int late_gate, int only_obj) {
     int viewport_x = (int)(int16_t)cam.x_eff;
     int viewport_y = (int)(int16_t)cam.y_eff;
     static int spr_dbg = 0; spr_dbg++;
+    // The late layer draws the pass's own late set when the sub_1dd9c mirror reported it
+    // (v2_late_list_begin/add, the mirror's dispatch order) — the decision the pass made,
+    // not a re-derivation from the state after it (a count that reached 0 in the pass, a
+    // force flag the pass cleared: the gate below cannot see those any more).
+    if (late_gate && g_late_valid && only_obj < 0) {
+        g_late_valid = false;
+        for (int i = 0; i < g_late_n; i++)
+            v2_draw_sprite_obj(buf, ds_base, st, viewport_x, viewport_y, g_late_slots[i], 1);
+        return;
+    }
     for (int obj = 0xFE; obj >= 0; obj -= 2) {
         if (only_obj >= 0 && obj != only_obj) continue;
         uint16_t flags = *(uint16_t*)(ds_base + obj + OBJ_SPRITE_FLAGS);
@@ -1058,162 +1404,8 @@ static void v2_draw_sprites_impl(uint16_t ds_val, int late_gate, int only_obj) {
             if (!draw_it) continue;
         }
 
-        int type = flags & 7;
-
-        {
-            static int spr_printed = 0;
-            uint16_t cur_lvl = st.level();
-            if (spr_printed < 15 && cur_lvl < 38) {
-                spr_printed++;
-                printf("V2-SPR[l%d]: obj=%02x fl=%04x t=%d xy=(%d,%d) seg=%04x off=%04x scr=(%d,%d)\n",
-                       cur_lvl, obj, flags, type,
-                       *(int16_t*)(ds_base + obj + OBJ_SPRITE_X),
-                       *(int16_t*)(ds_base + obj + OBJ_SPRITE_Y),
-                       *(uint16_t*)(ds_base + obj + OBJ_SPRITE_SEG),
-                       *(uint16_t*)(ds_base + obj + OBJ_SPRITE_OFF),
-                       viewport_x, viewport_y);
-            }
-        }
-
-        // Dispatch table at cs:0x15CB: only types 1, 2, 4 have renderers.
-        // Type 1 → cs:0x0648 (seg003_648_proc, 8×8)
-        // Type 2 → cs:0x1078 (loc_1d8a8, dynamic size)
-        // Type 4 → cs:0x0B82 (sub_1d3b2, 16×16)
-        // Types 0,3,5,6,7 → cs:0x0000 (not used)
-        if (type != 1 && type != 2 && type != 4) continue;
-
-        int16_t world_x = *(int16_t*)(ds_base + obj + OBJ_SPRITE_X);
-        int16_t world_y = *(int16_t*)(ds_base + obj + OBJ_SPRITE_Y);
-
-        int sx0 = world_x - viewport_x;
-        int sy0 = world_y - viewport_y;
-
-        uint16_t sprite_off = *(uint16_t*)(ds_base + obj + OBJ_SPRITE_OFF);
-        uint16_t sprite_seg = *(uint16_t*)(ds_base + obj + OBJ_SPRITE_SEG);
-        if (!sprite_seg) continue;
-
-        // Determine format parameters per type:
-        //   num_strips:    strips per plane section (= rows / rows_per_strip)
-        //   rows_per_strip: VGA rows each strip covers
-        //   bytes_per_row:  data bytes per row within a strip
-        int num_strips, rows_per_strip, bytes_per_row;
-        if (type == 1) {
-            // seg003_648_proc: 8×8 sprite, 72 bytes total
-            // 2 strips/section, 4 rows/strip (DI += 0x158), 2 bytes/row
-            num_strips = 2;
-            rows_per_strip = 4;
-            bytes_per_row = 2;
-        } else if (type == 2) {
-            // loc_1d8a8: dynamic size, CX = ds:[obj+0x0C4D]
-            // CX strips/section, 1 row/strip (DI += 0x56), 8 bytes/row
-            num_strips = (int)*(uint16_t*)(ds_base + obj + OBJ_STRIP_COUNT);
-            if (num_strips <= 0) continue;
-            rows_per_strip = 1;
-            bytes_per_row = 8;
-        } else { // type == 4
-            // sub_1d3b2: 16×16 sprite, 288 bytes total
-            // 8 strips/section, 2 rows/strip (DI += 0x0AC), 4 bytes/row
-            num_strips = 8;
-            rows_per_strip = 2;
-            bytes_per_row = 4;
-        }
-
-        // Horizontal flip: bit 9 (0x200) of flags.
-        // All three type renderers (seg003_648_proc, sub_1d3b2, loc_1d8a8)
-        // check this flag and branch to mirrored rendering paths.
-        bool hflip = (flags & 0x200) != 0;
-
-        // Coarse bounds check — sprite pixel size. (Display lane only; the
-        // byte-exact page channel is the shadow VGA in v2_vm.cpp.)
-        int sprite_h = num_strips * rows_per_strip;
-        int sprite_w = bytes_per_row * 4;  // 4 planes
-        if (sx0 >= v2_fbw || sx0 < -sprite_w || sy0 >= v2_clip_h || sy0 < -sprite_h) continue;
-
-        // Sprite data: resolve segment to shadow buffer, add offset.
-        // sprite_off = 1-based offset to first data byte; mask at offset-1.
-#ifdef V2_RENDER_FROM_SHADOW
-        uint8_t* seg_base = v2_resolve_segment(sprite_seg);
-        if (!seg_base) continue;
-        uint8_t* sprite = seg_base + sprite_off - 1;
-        {
-            static int cmp_mismatch = 0;
-            uint16_t cur_lvl = st.level();
-            // real-vs-shadow compare only meaningful when orig updates real
-            // memory (V2_ONLY: dynamic segments in the snapshot buffer stay 0).
-            if (v2_vm_get_real_ds() && cur_lvl < 38 && cmp_mismatch < 10) {
-                uint8_t* real_sprite = v2_m2c_base + ((uint32_t)sprite_seg << 4) + sprite_off - 1;
-                if (memcmp(sprite, real_sprite, 32) != 0) {
-                    cmp_mismatch++;
-                    printf("V2-SPRMIS: obj=%02x seg=%04x off=%04x shadow_ptr=%s\n",
-                           obj, sprite_seg, sprite_off,
-                           (seg_base != (v2_m2c_base + ((uint32_t)sprite_seg << 4))) ? "SHADOW" : "REAL_FALLBACK");
-                    printf("  shd: %02x%02x%02x%02x %02x%02x%02x%02x\n",
-                           sprite[0],sprite[1],sprite[2],sprite[3],sprite[4],sprite[5],sprite[6],sprite[7]);
-                    printf("  rea: %02x%02x%02x%02x %02x%02x%02x%02x\n",
-                           real_sprite[0],real_sprite[1],real_sprite[2],real_sprite[3],
-                           real_sprite[4],real_sprite[5],real_sprite[6],real_sprite[7]);
-                }
-            }
-        }
-#else
-        uint32_t sprite_linear = ((uint32_t)sprite_seg << 4) + sprite_off - 1;
-        uint8_t* sprite = v2_m2c_base + sprite_linear;
-#endif
-
-        // Column formula: sx0 + N*4 + section (normal) or
-        // sx0 + (sprite_w-1) - (N*4 + section) (flipped).
-        // sx(col) computes the screen x for a given data column.
-        auto sx = [&](int col) -> int {
-            return hflip ? sx0 + sprite_w - 1 - col : sx0 + col;
-        };
-
-        uint8_t* ptr = sprite;
-        for (int section = 0; section < 4; section++) {
-            int plane = section;
-            for (int strip = 0; strip < num_strips; strip++) {
-                uint8_t mask = ptr[0];
-                uint8_t* data = ptr + 1;
-                int base_y = sy0 + strip * rows_per_strip;
-
-                if (mask) {
-                    if (type == 1) {
-                        // Type 1 (jpt_1CF4E): 4 rows × 2 bytes per row
-                        // Mask: 76→row0, 54→row1, 32→row2, 10→row3
-                        if (mask & 0x80) v2_put_pixel(buf, sx(0*4 + plane), base_y + 0, data[0]);
-                        if (mask & 0x40) v2_put_pixel(buf, sx(1*4 + plane), base_y + 0, data[1]);
-                        if (mask & 0x20) v2_put_pixel(buf, sx(0*4 + plane), base_y + 1, data[2]);
-                        if (mask & 0x10) v2_put_pixel(buf, sx(1*4 + plane), base_y + 1, data[3]);
-                        if (mask & 0x08) v2_put_pixel(buf, sx(0*4 + plane), base_y + 2, data[4]);
-                        if (mask & 0x04) v2_put_pixel(buf, sx(1*4 + plane), base_y + 2, data[5]);
-                        if (mask & 0x02) v2_put_pixel(buf, sx(0*4 + plane), base_y + 3, data[6]);
-                        if (mask & 0x01) v2_put_pixel(buf, sx(1*4 + plane), base_y + 3, data[7]);
-                    } else if (type == 2) {
-                        // Type 2 (jpt_1DA02): 1 row × 8 bytes
-                        // Mask: bit7→data[0], ..., bit0→data[7]
-                        if (mask & 0x80) v2_put_pixel(buf, sx(0*4 + plane), base_y, data[0]);
-                        if (mask & 0x40) v2_put_pixel(buf, sx(1*4 + plane), base_y, data[1]);
-                        if (mask & 0x20) v2_put_pixel(buf, sx(2*4 + plane), base_y, data[2]);
-                        if (mask & 0x10) v2_put_pixel(buf, sx(3*4 + plane), base_y, data[3]);
-                        if (mask & 0x08) v2_put_pixel(buf, sx(4*4 + plane), base_y, data[4]);
-                        if (mask & 0x04) v2_put_pixel(buf, sx(5*4 + plane), base_y, data[5]);
-                        if (mask & 0x02) v2_put_pixel(buf, sx(6*4 + plane), base_y, data[6]);
-                        if (mask & 0x01) v2_put_pixel(buf, sx(7*4 + plane), base_y, data[7]);
-                    } else { // type == 4
-                        // Type 4 (jpt_1d514): 2 rows × 4 bytes per row
-                        // Mask: 7654→row0, 3210→row1
-                        if (mask & 0x80) v2_put_pixel(buf, sx(0*4 + plane), base_y + 0, data[0]);
-                        if (mask & 0x40) v2_put_pixel(buf, sx(1*4 + plane), base_y + 0, data[1]);
-                        if (mask & 0x20) v2_put_pixel(buf, sx(2*4 + plane), base_y + 0, data[2]);
-                        if (mask & 0x10) v2_put_pixel(buf, sx(3*4 + plane), base_y + 0, data[3]);
-                        if (mask & 0x08) v2_put_pixel(buf, sx(0*4 + plane), base_y + 1, data[4]);
-                        if (mask & 0x04) v2_put_pixel(buf, sx(1*4 + plane), base_y + 1, data[5]);
-                        if (mask & 0x02) v2_put_pixel(buf, sx(2*4 + plane), base_y + 1, data[6]);
-                        if (mask & 0x01) v2_put_pixel(buf, sx(3*4 + plane), base_y + 1, data[7]);
-                    }
-                }
-                ptr += 9;
-            }
-        }
+        // the format dispatch, the record and the rasterisation: v2_draw_sprite_obj
+        v2_draw_sprite_obj(buf, ds_base, st, viewport_x, viewport_y, obj, late_gate);
     }
 }
 

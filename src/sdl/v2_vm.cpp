@@ -5378,6 +5378,7 @@ static void v2_draw_type4_1D3B2(uint8_t* s, int16_t slot) {
 // renders into the shadow VGA.
 static void v2_late_sprites_1DD9C(uint8_t* s) {
     v2_cc_v2_hit(10);   // M1 call-parity CC_1DD9C (#65)
+    v2_late_list_begin();   // the display list: this pass's late set, reported as it is decided (render_v2.h)
     for (int16_t slot = 0xFE; slot >= 0; slot -= 2) {              // 37999/38032-38033
         uint16_t flags = *(uint16_t*)(s + slot + OBJ_SPRITE_FLAGS);
         if (!(flags & 0x8000)) continue;                           // 38002-38003 not active
@@ -5402,6 +5403,8 @@ static void v2_late_sprites_1DD9C(uint8_t* s) {
             if (v2_m2c_base)
                 handler = *(uint16_t*)(v2_m2c_base + (uint32_t)0x0E25 * 16
                                        + sprite_type * 2 + 0x15CB);
+            if (handler == 0x0648 || handler == 0x1078 || handler == 0x0B82)
+                v2_late_list_add((uint16_t)slot);   // the display list: this object is drawn by the late layer
             if      (handler == 0x0648) v2_draw_type1_1CE78(s, slot);
             else if (handler == 0x1078) v2_draw_type2_1D8A8(s, slot);
             else if (handler == 0x0B82) v2_draw_type4_1D3B2(s, slot);
