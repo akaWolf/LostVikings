@@ -135,13 +135,33 @@ bool g_debug_mode = false;
 
 // №59: --max-frames limit for plain V2_ONLY builds (0 = unlimited). The
 // HEADLESS hook keeps its own enforcement; this one stops the main loop.
-int g_v2only_max_frames = 0;   // read by the v2_nopl_pump quit choke too
+int g_v2only_max_frames = 0;   // read by the frame-boundary stop (v2_vm.cpp) and the main-loop fallback below
 
 extern "C" int v2_state_save(const char*);   // v2_vm.cpp (direction V step 2)
 extern "C" void headless_golden_dump(void);  // v2_gamestate.cpp (all builds)
 extern "C" int v2_state_load(const char*);
+extern "C" void v2_midi_shutdown(void);      // v2_midi.cpp (UX stage 11)
+
+#if defined(V2_ONLY) && !defined(HEADLESS)
+// The windowed game build's clean exit from the GAME thread: the golden dump, the MIDI
+// dump, the flushes, _exit. Reached at the --max-frames frame boundary (v2_phase_post_flip3
+// and v2_blocking_loop_tick — the same points as the headless builds' headless_check_exit,
+// so a replay's tail is the same every run) and from the v2_nopl_pump choke on need_quit.
+void v2_only_clean_exit(const char* why) {   // C++ linkage: the callers declare it at block scope
+    fprintf(stderr, "V2_ONLY: %s reached in the game thread (frame %d), exiting cleanly\n", why, v2_dbg_pre_vm_iter);
+    headless_golden_dump();
+    v2_midi_shutdown();   // UX stage 11: V2_MIDI_DUMP (_exit skips atexit)
+    fflush(stdout); fflush(stderr);
+    _exit(0);
+}
+#endif
 
 int main(int argc, char* argv[]) {
+    // stdout line-buffered in every build: a run log that captures stdout and stderr
+    // together otherwise gets a stdout buffer chunk written in the middle of a line
+    // ("sub_171dc: si=... dx=d4" + a stderr line + the rest), and a debug line falls
+    // out of every grep; a line is now written whole at its newline.
+    setvbuf(stdout, nullptr, _IOLBF, 1 << 16);
     printf("V2_ONLY: starting standalone v2 build (no m2c)\n");
     v2_find_content();   // before any chunk read: the store is settled at its first use
 
@@ -351,11 +371,15 @@ int main(int argc, char* argv[]) {
         { extern int headless_check_exit(void); headless_check_exit(); }
 #endif
         // №59: plain V2_ONLY --max-frames enforcement (frame counter is the
-        // FRAME_BEGIN barrier increment — same counter the traces use).
+        // FRAME_BEGIN barrier increment — same counter the traces use). The stop itself
+        // is taken by the game thread at the frame boundary (v2_phase_post_flip3 /
+        // v2_blocking_loop_tick → v2_only_clean_exit), the headless builds' point; this
+        // loop only backs it up two seconds of frames later, for a game thread that
+        // passes no frame boundary any more (a wait that never ends).
         if (g_v2only_max_frames > 0) {
             // v2_dbg_pre_vm_iter: file-scope extern (top of file)
-            if (v2_dbg_pre_vm_iter >= g_v2only_max_frames) {
-                fprintf(stderr, "V2_ONLY: --max-frames=%d reached, exiting\n",
+            if (v2_dbg_pre_vm_iter >= g_v2only_max_frames + 120) {
+                fprintf(stderr, "V2_ONLY: --max-frames=%d passed by 120 frames without a frame-boundary stop, exiting\n",
                         g_v2only_max_frames);
                 need_quit = true;
             }

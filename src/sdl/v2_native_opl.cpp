@@ -320,27 +320,25 @@ static const double NOPL_FRAME_HZ = 60.0;
 
 static int nopl_frame_mode(void);
 extern "C" void v2_ail_sink_pump(uint64_t);   // (#83) audible sink driver (v2_ail.cpp)
+#if defined(V2_ONLY) && !defined(HEADLESS)
+void v2_only_clean_exit(const char* why);      // v2_main.cpp — C++ linkage, declared here at file scope:
+                                               // a block-scope extern inside the C-linkage pump below would be C
+#endif
 
 extern "C" void v2_nopl_pump(void) {
 #if defined(V2_ONLY) && !defined(HEADLESS)
     // №59 windowed enforcement: when the presenter loop has already left on
-    // need_quit (max-frames / window close), the game thread can sit inside
+    // need_quit (window close, or the max-frames fallback of v2_main.cpp for a game
+    // thread that never reaches a frame boundary), the game thread can sit inside
     // a blocking wait loop forever — every such loop pumps, so this is the
-    // single choke point. Mirror the headless clean exit.
+    // single choke point. Mirror the headless clean exit. The --max-frames stop itself
+    // is taken at the frame boundary (v2_phase_post_flip3 / v2_blocking_loop_tick), the
+    // same point as the headless builds', so a replay's tail does not depend on where
+    // this pump happened to run.
     {
         extern bool need_quit;
-        extern int g_v2only_max_frames;
         // v2_dbg_pre_vm_iter: file-scope extern (top of file)
-        if (need_quit ||
-            (g_v2only_max_frames > 0 && v2_dbg_pre_vm_iter >= g_v2only_max_frames)) {
-            fprintf(stderr, "V2_ONLY: max-frames/quit reached in the game "
-                    "thread (frame %d), exiting cleanly\n", v2_dbg_pre_vm_iter);
-            extern void headless_golden_dump(void);
-            headless_golden_dump();
-            v2_midi_shutdown();   // UX stage 11: V2_MIDI_DUMP (_exit skips atexit)
-            fflush(stdout); fflush(stderr);
-            _exit(0);
-        }
+        if (need_quit) v2_only_clean_exit("quit");
     }
 #endif
     if (g_tick_hz <= 0.0) return;

@@ -22172,6 +22172,12 @@ void v2_phase_post_flip3(uint16_t ds_val) {
     // HEADLESS: enforce --max-frames timeout. Exit cleanly when reached.
     extern int headless_check_exit(void);
     headless_check_exit();
+#elif defined(V2_ONLY)
+    // The windowed game build stops at the same point as the headless builds — after the
+    // third flip of frame N — instead of wherever the presenter thread's check happened
+    // to catch the game thread (0..6 publishes of jitter in the tail of a replay).
+    { extern int g_v2only_max_frames; extern void v2_only_clean_exit(const char* why);
+      if (g_v2only_max_frames > 0 && v2_dbg_pre_vm_iter >= g_v2only_max_frames) v2_only_clean_exit("max-frames"); }
 #endif
     // PSNAP compare MOVED to end of body (line ~17929) — see comment below.
     // Previously compared RENDER3_END here, but produced false-positive PSNAP-DIVERGE
@@ -22549,7 +22555,7 @@ static void v2_read_input_12352_iter(uint8_t* shadow) {
 // V2_ONLY inline spins → record and replay step through menus with identical
 // per-iteration counts.
 extern "C" int v2_replay_drain_to_state(void);  // №52: drain in blocking loops
-static inline void v2_blocking_loop_tick() {
+static inline void v2_blocking_loop_tick(const char* site) {   // site: the loop mirror, for V2_DRAIN_LOG
     v2_dbg_pre_vm_iter++;
     // №52: replay events must keep flowing INSIDE blocking loops too. #59
     // moved the drain onto sdl_spec_snapshot_take (FRAME_BEGIN) — but a
@@ -22562,12 +22568,12 @@ static inline void v2_blocking_loop_tick() {
     // V2_DRAIN_LOG tags the events this tick delivers "loop" (v2_input_recorder.cpp): a
     // recording made by the game build before the read-then-tick order of these loops
     // lands such an event one iteration later now — the tag tells which ones to move.
-    extern bool v2_replay_drain_in_loop;
+    extern bool v2_replay_drain_in_loop; extern const char* v2_replay_drain_site;
     { static int on = -1; if (on < 0) on = getenv("V2_DRAIN_LOG") ? 1 : 0;
-      if (on) fprintf(stderr, "LOOPTICK f=%d\n", v2_dbg_pre_vm_iter); }   // the counter this tick produced
-    v2_replay_drain_in_loop = true;
+      if (on) fprintf(stderr, "LOOPTICK f=%d %s\n", v2_dbg_pre_vm_iter, site); }   // the counter this tick produced
+    v2_replay_drain_in_loop = true; v2_replay_drain_site = site;
     v2_replay_drain_to_state();
-    v2_replay_drain_in_loop = false;
+    v2_replay_drain_in_loop = false; v2_replay_drain_site = nullptr;
     // #61 native AIL: the DOS INT8 kept ticking through blocking loops —
     // pump the (frame-based) verify-pair sequencer here too; in V2_ONLY this
     // is the audible instance.
@@ -22575,6 +22581,10 @@ static inline void v2_blocking_loop_tick() {
 #ifdef HEADLESS
     extern int headless_check_exit(void);
     headless_check_exit();
+#elif defined(V2_ONLY)
+    // the windowed game build: the same deterministic stop inside the blocking loops
+    { extern int g_v2only_max_frames; extern void v2_only_clean_exit(const char* why);
+      if (g_v2only_max_frames > 0 && v2_dbg_pre_vm_iter >= g_v2only_max_frames) v2_only_clean_exit("max-frames"); }
 #endif
 }
 
@@ -22588,7 +22598,7 @@ bool v2_run_viking_switch_loop(uint8_t* shadow) {
 #ifdef V2_ONLY
     v2_read_input_12352_iter(shadow);
 #endif
-    v2_blocking_loop_tick();
+    v2_blocking_loop_tick("switch");
     // Clear word_28814 bit 4 (idempotent — orig does AND ~4 once at loc_10164)
     v2gs(shadow).frame_flags(v2gs(shadow).frame_flags() & (0xFFFB));
 
@@ -23468,7 +23478,7 @@ bool v2_run_pause_loop_iter_exit(uint8_t* shadow) {
 #ifdef V2_ONLY
     v2_read_input_12352_iter(shadow);
 #endif
-    v2_blocking_loop_tick();  // #180: counter + HEADLESS max-frames (see v2_run_viking_switch_loop)
+    v2_blocking_loop_tick("pause");  // #180: counter + HEADLESS max-frames (see v2_run_viking_switch_loop)
     // Per orig loc_11c1f iter (eip 0x1c1f..0x1c4c):
     //   sub_12352 → sub_11cbb → sub_11c52 → sub_11792 → sub_16775 → sub_10130
     //   → sub_108c8 → sub_12d72 (if word_288AC bit15 set).
@@ -23732,7 +23742,7 @@ static bool v2_pw_iter_body(uint8_t* shadow) {
     // this iteration's read — the orig signals V2_PHASE_TRANSITION_TEXT after its sub_12352,
     // so the test-mode mirror body (this function) always ran after the read; V2_ONLY now
     // reads first too (see v2_run_viking_switch_loop).
-    v2_blocking_loop_tick();  // #180: counter + HEADLESS max-frames (see v2_run_viking_switch_loop)
+    v2_blocking_loop_tick("pw_body");  // #180: counter + HEADLESS max-frames (see v2_run_viking_switch_loop)
     // sub_10555: password blink (extracted).
     v2_pw_blink_10555(shadow);
     // sub_105CB: password exit check (extracted).
@@ -23818,12 +23828,16 @@ void v2_run_input_update(uint8_t* shadow) { v2_read_input_12352_iter(shadow); }
 // CF result) — orig's main thread observes it via its own jump; v2's exit
 // signal is V2_PHASE_PW_EXIT below.
 void v2_run_transition_text_loop(uint8_t* shadow) {
-    // #58: the quit-prompt loop (loc_104C3) was the ONLY blocking loop whose
-    // handler didn't bump the iteration counter — the frame counter froze,
-    // frame-gated replay events never became due (Y unreachable) and the
-    // HEADLESS max-frames check never ran => deadlock. Same #180 Fix-A tick
-    // as v2_run_viking_switch_loop / the pause loop.
-    v2_blocking_loop_tick();
+    // One tick per iteration, and it is v2_pw_iter_body's (#180: after this iteration's
+    // read, before the blink — the same place the V2_ONLY inline loops tick, so both
+    // builds run the same replay clock here). #58 had added a second tick in this
+    // handler on the belief that the loop did not bump the counter at all; the body
+    // already did, and the test build stepped the counter twice per iteration of the
+    // quit prompt / text box (2026-09-12: a frame-tagged event inside the box landed
+    // after half the iterations the game build needed, the box blinked every 32
+    // counter steps instead of 16, and a max-frames budget was spent twice as fast).
+    // The canon recordings that pass through the box were moved onto the single tick
+    // (tests/replays, scratch retag.py: outside the box T - red(T), inside T0' + ceil((T-T0)/2)).
     (void)v2_pw_iter_body(shadow);
 }
 

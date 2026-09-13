@@ -683,6 +683,11 @@ int main(int argc, char *argv[]) {
     std::set_terminate(v2_terminate_handler);
     signal(SIGINT, asm_sigint_handler);
     signal(SIGTERM, asm_sigint_handler);
+    // stdout line-buffered (the game build does the same in v2_main.cpp): a run log that
+    // captures stdout and stderr together otherwise gets a stdout buffer chunk written in
+    // the middle of a line ("sub_171dc: si=... dx=d4" + a stderr line + the rest) and a
+    // debug line falls out of every grep; a line is now written whole at its newline.
+    setvbuf(stdout, nullptr, _IOLBF, 1 << 16);
 
     // FN-TEST synthetic-diff selftest (SYNTHETIC_DIFF_ANALYSIS.md): env
     // FNSELFTEST=<fn|all> runs isolated orig<->v2 differential tests on

@@ -32,8 +32,9 @@ extern "C" uint8_t sdl_int9_dos_scan(int sdl_scancode);   // render.cpp (#86): 0
 
 // v2 game frame counter, defined in v2_vm.cpp; bumped in v2_phase_frame_begin.
 extern int v2_dbg_pre_vm_iter;
-// defined below the anonymous namespace (a global: v2_vm.cpp's blocking-loop tick sets it)
+// defined below the anonymous namespace (globals: v2_vm.cpp's blocking-loop tick sets them)
 extern bool v2_replay_drain_in_loop;
+extern const char* v2_replay_drain_site;   // the loop mirror doing the tick (V2_DRAIN_LOG)
 
 namespace {
 
@@ -307,8 +308,10 @@ void apply_replay_event(const SDL_Event& e, const char* via, int player) {
         return;
     }
     if (getenv("V2_DRAIN_LOG")) {
-        fprintf(stderr, "DRAIN-%s[f%d]: %s sym=%d key=%04X spec=%04X ik=%04X\n",
-                via, v2_dbg_pre_vm_iter, e.type == SDL_KEYDOWN ? "KD" : "KU",
+        const char* site = v2_replay_drain_in_loop ? v2_replay_drain_site : nullptr;
+        fprintf(stderr, "DRAIN-%s%s%s%s[f%d]: %s sym=%d key=%04X spec=%04X ik=%04X\n",
+                via, site ? "(" : "", site ? site : "", site ? ")" : "",
+                v2_dbg_pre_vm_iter, e.type == SDL_KEYDOWN ? "KD" : "KU",
                 (int)e.key.keysym.sym, key_val, spec_off,
                 (uint16_t)input_keys);
     }
@@ -382,6 +385,7 @@ extern "C" int v2_replay_drain_to_state(void) { return v2_replay_drain_impl(); }
 // a game-build recording made before that order lands them one iteration later than the
 // live session did — the "loop" tag in V2_DRAIN_LOG names the events to move back a frame.
 bool v2_replay_drain_in_loop = false;
+const char* v2_replay_drain_site = nullptr;
 
 // Global sub_12352 call counter — the seq-delivery coordinate. Incremented by
 // v2_input_tick_12352 at the single input-read point of the running world
