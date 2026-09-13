@@ -308,10 +308,14 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
-            build-essential clang cmake pkg-config wget \
+            build-essential cmake pkg-config wget \
             libx11-dev libxext-dev libxcursor-dev libxi-dev libxfixes-dev libxrandr-dev libxss-dev libxkbcommon-dev \
             libwayland-dev wayland-protocols libdecor-0-dev libegl1-mesa-dev libgles2-mesa-dev libgl1-mesa-dev \
             libdrm-dev libgbm-dev libasound2-dev libpulse-dev libpipewire-0.3-dev libdbus-1-dev libudev-dev libibus-1.0-dev
+          # the 22.04 image ships clang 14; the 40k-line executors compile 3-6 min slower on it than on
+          # the 24.04 image's clang 18 (the four runs of 2026-09-10), so the same clang 18 comes from apt.llvm.org
+          wget -qO /tmp/llvm.sh https://apt.llvm.org/llvm.sh && sudo bash /tmp/llvm.sh 18
+          clang++-18 --version | head -1
 
       - name: Cache the SDL2 build
         id: sdl_cache
@@ -342,10 +346,10 @@ jobs:
           export PKG_CONFIG_PATH="$HOME/sdl2/lib/pkgconfig"
           pkg-config --cflags --libs --static sdl2
           free -g | sed -n 2p | sed 's/^/::notice::runner memory before the build: /'
-          V2_ONLY=1 make CXX=clang++ RELEASE=1 STATIC=1 SDL_STATIC=1 -j$(nproc) 2>&1 | tee build.log || { grep -n -m20 -E "(^| )error:|Error [0-9]+|Killed|internal compiler|virtual memory exhausted|cannot allocate|out of memory|too many|file too big|Segmentation fault" build.log | sed "s/^/::error::/"; exit 1; }
+          V2_ONLY=1 make CXX=clang++-18 RELEASE=1 STATIC=1 SDL_STATIC=1 -j$(nproc) 2>&1 | tee build.log || { grep -n -m20 -E "(^| )error:|Error [0-9]+|Killed|internal compiler|virtual memory exhausted|cannot allocate|out of memory|too many|file too big|Segmentation fault" build.log | sed "s/^/::error::/"; exit 1; }
 
       - name: Build keymap editor
-        run: PKG_CONFIG_PATH="$HOME/sdl2/lib/pkgconfig" make keymap_editor CXX=clang++ STATIC=1 SDL_STATIC=1
+        run: PKG_CONFIG_PATH="$HOME/sdl2/lib/pkgconfig" make keymap_editor CXX=clang++-18 STATIC=1 SDL_STATIC=1
 
       - name: Verify glibc is the only dynamic dependency
         run: |
