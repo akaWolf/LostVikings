@@ -323,10 +323,10 @@ jobs:
           retention-days: 30
 
   release:
-    # Auto-release on every push (any branch) and on tag pushes.
-    # Tag push (v*)  → stable release named after the tag (becomes "Latest").
-    # Branch commit  → pre-release named build-<run>-<short sha> with the
-    #                  branch name in the body. Does not displace "Latest".
+    # One release on the page: every branch push replaces the rolling
+    # pre-release `latest` (the release and its tag are deleted and created
+    # again at the new commit — a build-<run>-<sha> release per push littered
+    # the page); a v* tag push makes a stable release named after the tag.
     # Skipped for PR events to avoid review-time spam.
     name: Publish GitHub release
     # `test` first: no release is published while the HEADLESS smoke test or
@@ -336,6 +336,9 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
+    concurrency:                # two pushes in a row must not race on `latest`
+      group: release-latest
+      cancel-in-progress: false
     steps:
       - name: Download Linux artifact
         uses: actions/download-artifact@v4
@@ -367,31 +370,10 @@ jobs:
         with:
           name: vikings-linux-arm64-v2only
 
-      - name: Compute release metadata
-        id: rel
+      - name: Release notes
         run: |
-          set -e
-          if [[ "$GITHUB_REF" == refs/tags/* ]]; then
-            TAG="${GITHUB_REF#refs/tags/}"
-            echo "tag=$TAG"             >> "$GITHUB_OUTPUT"
-            echo "name=$TAG"            >> "$GITHUB_OUTPUT"
-            echo "prerelease=false"     >> "$GITHUB_OUTPUT"
-          else
-            SHORT="${GITHUB_SHA:0:8}"
-            BRANCH="${GITHUB_REF#refs/heads/}"
-            echo "tag=build-${{ github.run_number }}-$SHORT" >> "$GITHUB_OUTPUT"
-            echo "name=Build ${{ github.run_number }} ($BRANCH @ $SHORT)" >> "$GITHUB_OUTPUT"
-            echo "prerelease=true"      >> "$GITHUB_OUTPUT"
-          fi
-
-      - name: Create release
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name:   ${{ steps.rel.outputs.tag }}
-          name:       ${{ steps.rel.outputs.name }}
-          prerelease: ${{ steps.rel.outputs.prerelease }}
-          body: |
-            Auto-build from commit ${{ github.sha }}.
+          cat > notes.md <<'NOTES'
+            Auto-build from commit ${{ github.sha }} (${{ github.ref_name }}).
 
             Assets:
             - `vikings-linux-x86_64.tar.gz`        — Linux x86_64, **test mode** (orig + v2 mirror)
@@ -420,10 +402,29 @@ jobs:
             redistributed here. The bundled `*_static.bin` files hold the
             static EXE image (initial DS / text / tables) which V2_ONLY loads
             in place of m2c's C++ initialisers, not the game content.
-          files: |
-            vikings-linux-x86_64.tar.gz
-            vikings-windows-x86_64.zip
-            vikings-linux-x86_64-v2only.tar.gz
-            vikings-windows-x86_64-v2only.zip
-            vikings-linux-arm64.tar.gz
-            vikings-linux-arm64-v2only.tar.gz
+          NOTES
+          sed -i 's/^  //' notes.md   # the heredoc body is indented under the YAML block scalar
+          ls -l vikings-*.tar.gz vikings-*.zip
+
+      - name: Rolling pre-release `latest` (every branch push)
+        if: "!startsWith(github.ref, 'refs/tags/v')"
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release delete latest --repo "$GITHUB_REPOSITORY" --yes --cleanup-tag || true
+          # a `latest` tag left behind without its release would pin the new release to the old commit
+          gh api -X DELETE "repos/$GITHUB_REPOSITORY/git/refs/tags/latest" >/dev/null 2>&1 || true
+          gh release create latest --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --prerelease \
+            --title "latest (${GITHUB_REF_NAME} @ ${GITHUB_SHA:0:8})" --notes-file notes.md \
+            vikings-linux-x86_64.tar.gz vikings-windows-x86_64.zip \
+            vikings-linux-x86_64-v2only.tar.gz vikings-windows-x86_64-v2only.zip \
+            vikings-linux-arm64.tar.gz vikings-linux-arm64-v2only.tar.gz
+
+      - name: Stable release (v* tag)
+        if: startsWith(github.ref, 'refs/tags/v')
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          FILES="vikings-linux-x86_64.tar.gz vikings-windows-x86_64.zip vikings-linux-x86_64-v2only.tar.gz vikings-windows-x86_64-v2only.zip vikings-linux-arm64.tar.gz vikings-linux-arm64-v2only.tar.gz"
+          gh release create "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --title "$GITHUB_REF_NAME" --notes-file notes.md $FILES || \
+          gh release upload "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --clobber $FILES

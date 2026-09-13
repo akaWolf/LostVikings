@@ -417,8 +417,10 @@ now); `release` `needs` every job, so nothing is published while the
 smoke test or a replay fails on either architecture. Every push to any
 branch also publishes a GitHub Release:
 
-- Branch push → **pre-release** named `Build N (branch @ short_sha)`.
-- Tag push `v*` → **stable release** named after the tag (becomes "Latest").
+- Branch push → the rolling **pre-release `latest`** (one release on the
+  page: the previous `latest` and its tag are deleted and created again at
+  the new commit, titled `latest (branch @ short_sha)`).
+- Tag push `v*` → **stable release** named after the tag.
 - PR events do not create releases.
 
 ### Optional: full-gameplay CI smoke
