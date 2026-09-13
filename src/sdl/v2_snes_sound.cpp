@@ -49,12 +49,31 @@ static void push(uint8_t kind, uint8_t a = 0, uint16_t b = 0) {
     g_cmd_wr.store(wr + 1, std::memory_order_release);
 }
 
-// ------------------------------------------------------ sound -> audio --
-enum { OUT_RING = 1 << 16 };                          // stereo frames at 32 kHz (2 s)
-static int16_t g_out[OUT_RING * 2];
+// ------------------------------------------------------ engine -> device --
+// Pull model (2026-09-11; the thread + 2 s ring of stage 10 ran up to two
+// seconds ahead of the device, every command of the game reached the speaker
+// that late): the audio callback owns the engine. v2_snes_sound_mix produces
+// exactly the console frames its device block needs — a sequencer tick
+// (60.0988 Hz, 532.4 samples at 32 kHz) whenever the FIFO below runs short —
+// so the game's commands land at the next tick boundary and are heard after the
+// device buffer, like the OPL render. Producer and consumer are the same
+// thread: the FIFO holds under one tick plus a block, never blocks.
+// A song-set load (function 2: thousands of port handshakes, ~30 ms of SPC
+// emulation) would stall the callback past its budget, so the level command
+// that loads a set runs on a helper thread while g_busy holds: the callback
+// delivers silence and no tick advances — the console's loading screen. One
+// writer at a time (the callback, or the helper while busy), one reader.
+enum { OUT_FIFO = 1 << 15 };                          // stereo frames at 32 kHz (1 s: far above the ~one tick that ever waits)
+static int16_t g_out[OUT_FIFO * 2];
 static std::atomic<uint32_t> g_out_wr{0}, g_out_rd{0};
-static std::atomic<bool> g_thread_on{false}, g_quit{false};
-static std::thread g_thread;
+static std::atomic<bool> g_engine_on{false};          // the engine exists and may be driven from the callback
+static std::atomic<int>  g_in_mix{0};                 // callbacks inside v2_snes_sound_mix (the shutdown waits for zero)
+static std::atomic<bool> g_busy{false};               // a level command with a set load runs on g_loader
+static std::thread g_loader;
+static uint32_t wall_ms() {                           // trace stamps: the command's push and its drain on one clock
+    static const auto t0 = std::chrono::steady_clock::now();
+    return (uint32_t)std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - t0).count();
+}
 
 // --------------------------------------------------------------- state --
 // The 65816 side ($7F:C000..): four 0x40-byte track blocks (byte-addressed
@@ -74,6 +93,7 @@ struct Engine {
     int      menu_depth;                              // the PC nests its screens (pause -> quit prompt); the effects stop at the first open and restart at the last close
     // pacing
     double   tick_acc;
+    uint32_t hs_pushed;                               // handshake frames already delivered within the current tick (they belong to its 532.4)
     // debug
     FILE*    port_log; uint32_t frame_no;
     bool     dead;                                    // a protocol timeout — stop driving the SPC
@@ -91,51 +111,47 @@ static inline uint8_t rd8(uint32_t off) { return off < g_data.size() ? g_data[of
 // the next frame (time 0). Handshake polls advance the SPC one stereo
 // sample (32 clocks) per step — the console's tight CPU loops poll about
 // that often.
-static bool audio_live() {                            // any sequence playing -> the output must be paced in real time
+static bool audio_live() {                            // any sequence playing
     for (int t = 0; t < 4; t++) if (!(r16(E->trk[t]) & 0x8000)) return true;
     return false;
 }
+static inline uint32_t out_avail() { return g_out_wr.load(std::memory_order_acquire) - g_out_rd.load(std::memory_order_acquire); }
+static void out_push(const int16_t* buf, int frames) {
+    uint32_t wr = g_out_wr.load(std::memory_order_relaxed);
+    for (int i = 0; i < frames; i++) {
+        if (wr - g_out_rd.load(std::memory_order_acquire) >= OUT_FIFO - 1) break;   // cannot happen (under one tick ever waits); never block
+        g_out[(wr % OUT_FIFO) * 2] = buf[i * 2];
+        g_out[(wr % OUT_FIFO) * 2 + 1] = buf[i * 2 + 1];
+        wr++;
+    }
+    g_out_wr.store(wr, std::memory_order_release);
+}
+// The tick's samples: the DSP output of the frame, delivered whatever plays
+// (silence and echo tails included — the device paces the engine through them).
 static void run_samples(int n) {
     static int16_t buf[64 * 2];
     while (n > 0) {
         int k = n > 64 ? 64 : n;
         E->spc.play(k * 2, buf);
-        if (!audio_live()) { n -= k; continue; }       // silence during a set load: no throttle (the console's loading screens)
-        uint32_t wr = g_out_wr.load(std::memory_order_relaxed);
-        for (int i = 0; i < k; i++) {
-            // block while the ring is full (the audio device paces us)
-            while (wr - g_out_rd.load(std::memory_order_acquire) >= OUT_RING - 1) {
-                if (g_quit.load()) return;
-                std::this_thread::sleep_for(std::chrono::milliseconds(1));
-            }
-            g_out[(wr % OUT_RING) * 2] = buf[i * 2];
-            g_out[(wr % OUT_RING) * 2 + 1] = buf[i * 2 + 1];
-            wr++;
-            g_out_wr.store(wr, std::memory_order_release);
-        }
+        out_push(buf, k);
         n -= k;
     }
 }
 // A few clocks of SPC time (the 65816's own instruction time between port
-// accesses): end_frame at clock granularity; whatever samples complete go
-// to the ring like run_samples' do.
+// accesses): end_frame at clock granularity. The DSP keeps producing through
+// the handshake, so while a sequence plays those samples are delivered and
+// counted against the tick's 532.4 (the console's NMI period does not stretch
+// for its port traffic); during a set load (nothing playing — the reset comes
+// first) they are dropped: the console spends that time on its loading screen,
+// the device's timeline does not.
 static void run_clocks(int clocks) {
     static int16_t buf[32];
     E->spc.set_output(buf, 32);
     E->spc.end_frame(clocks);
     int n = E->spc.sample_count() / 2;
     if (n <= 0 || !audio_live()) return;
-    uint32_t wr = g_out_wr.load(std::memory_order_relaxed);
-    for (int i = 0; i < n; i++) {
-        while (wr - g_out_rd.load(std::memory_order_acquire) >= OUT_RING - 1) {
-            if (g_quit.load()) return;
-            std::this_thread::sleep_for(std::chrono::milliseconds(1));
-        }
-        g_out[(wr % OUT_RING) * 2] = buf[i * 2];
-        g_out[(wr % OUT_RING) * 2 + 1] = buf[i * 2 + 1];
-        wr++;
-        g_out_wr.store(wr, std::memory_order_release);
-    }
+    out_push(buf, n);
+    E->hs_pushed += (uint32_t)n;
 }
 static const int GAP_CLOCKS = 12;                     // ~ the console's inter-access time (STA/CMP loops of the 65816)
 static inline int port_rd(int p) { return E->spc.read_port(0, p); }
@@ -150,7 +166,7 @@ static inline void port_wr(int p, int v) {
 }
 static const int POLL_LIMIT = 1000000;                // 12-clock steps (~12 s) before giving up
 static bool wait_port_eq(int p, int v) {
-    for (int i = 0; i < POLL_LIMIT; i++) { if (port_rd(p) == v) return true; run_clocks(GAP_CLOCKS); if (g_quit.load()) return false; }
+    for (int i = 0; i < POLL_LIMIT; i++) { if (port_rd(p) == v) return true; run_clocks(GAP_CLOCKS); }
     fprintf(stderr, "V2-SNESSND: port %d never became %02X — driver dead\n", p, v); E->dead = true; return false;
 }
 // $05:8D99 — byte command with echo
@@ -168,7 +184,7 @@ static uint16_t send_word(uint16_t w) {
     for (int i = 0; i < POLL_LIMIT; i++) {            // LDA $2141; CMP #1; BEQ; CMP $2141; BNE
         a = port_rd(1);
         if (a != 1 && port_rd(1) == a) break;
-        run_clocks(GAP_CLOCKS); if (g_quit.load()) return 0;
+        run_clocks(GAP_CLOCKS);
         if (i == POLL_LIMIT - 1) { fprintf(stderr, "V2-SNESSND: word ack timeout\n"); E->dead = true; return 0; }
     }
     port_wr(0, 0); port_wr(1, 0);
@@ -182,7 +198,7 @@ static uint16_t recv_word() {
     if (!wait_port_eq(1, 2)) return 0;
     int hi = port_rd(0); port_wr(1, 2);
     int a = 2;
-    for (int i = 0; i < POLL_LIMIT; i++) { a = port_rd(1); if (a != 2) break; run_clocks(GAP_CLOCKS); if (g_quit.load()) return 0; }
+    for (int i = 0; i < POLL_LIMIT; i++) { a = port_rd(1); if (a != 2) break; run_clocks(GAP_CLOCKS); }
     port_wr(1, a);
     return (uint16_t)((hi << 8) | lo);
 }
@@ -469,7 +485,7 @@ static void snes_music_volume_live(int pct) {
     for (int t = 0; t < 4; t++) if (tr16(t, 0) == (uint16_t)E->last_music_id) {
         if (tr16(t, 0x10) == 1) continue;
         trw16(t, 0x14, (uint16_t)((v - 1) << 8)); trw16(t, 0x16, (uint16_t)(v << 8)); trw16(t, 0x12, 0x0100); trw16(t, 0x10, 0);
-        if (snd_trace_on()) fprintf(stderr, "V2-SNESSND-TRACE: t%u music volume %d%% -> %02X\n", E->frame_no, pct, v);
+        if (snd_trace_on()) fprintf(stderr, "V2-SNESSND-TRACE: t%u music volume %d%% -> %02X (drained at %u ms)\n", E->frame_no, pct, v, wall_ms());
     }
 }
 // $00:87E1 (+ dispatch $8804 by mode) — mode 0 play, 1 nothing, 2 fade (function 4 of the last music, 0x80), 3 load only
@@ -542,43 +558,55 @@ static void handle(const Cmd& c) {
     }
 }
 
-// -------------------------------------------------------------- thread --
-static void thread_main() {
+// -------------------------------------------------------------- engine --
+// Created on the game thread by v2_snes_sound_start (function 0 = the driver
+// upload runs there, nothing plays yet), then owned by the audio callback.
+static void engine_init() {
     E = new Engine();
     memset(E->trk, 0, sizeof E->trk); E->pkt_len = 0; E->budget = 12; E->magic = false;
     E->cur_set = -1; E->music_on = true; E->sfx_on = true; E->sound_on = true; E->last_music_id = 0;
-    E->tick_acc = 0; E->port_log = nullptr; E->frame_no = 0; E->dead = false;
+    E->ambient_mask = 0; E->menu_depth = 0;
+    E->tick_acc = 0; E->hs_pushed = 0; E->port_log = nullptr; E->frame_no = 0; E->dead = false;
     if (const char* e = getenv("V2_SPC_PORT_LOG")) if (e[0]) E->port_log = fopen(e, "w");
     E->spc.init();
     fn_init();                                        // function 0
+}
+// The level commands that load a song set ($00:880E through the dispatch modes
+// 0 and 3 when the set changed) go to the helper thread — see g_busy.
+static bool needs_set_load(const Cmd& c) {
+    if (c.kind != CMD_LEVEL_START && c.kind != CMD_LEVEL_EXIT) return false;
+    const uint8_t* L = &g_levels[(c.b & 63) * 4];
+    if (L[0] == 0xFF) return false;
+    const uint8_t mode = (c.kind == CMD_LEVEL_START) ? L[1] : L[2];
+    return (mode == 0 || mode == 3) && E->cur_set != L[0];
+}
+// One console frame (the NMI): the game's calls of this frame, the sequencer
+// ($85:8000), then the frame's 532.4 samples less the handshake samples already
+// delivered — the DSP ran through the port traffic, the frame does not stretch.
+// false = a set load was started instead (the engine is busy, nothing produced).
+static bool produce_tick() {
     const double SAMPLES_PER_TICK = 32000.0 / 60.0988;
-    // pacing: the output ring throttles the loop while a sequence plays;
-    // in silence (nothing pushed) the wall clock keeps the console's frame
-    // rate, so ticks and the port-log frame numbers stay meaningful
-    auto next_tick = std::chrono::steady_clock::now();
-    const auto TICK = std::chrono::nanoseconds((long long)(1e9 / 60.0988));
-    while (!g_quit.load()) {
-        if (!audio_live()) {
-            std::this_thread::sleep_until(next_tick);
-            next_tick += TICK;
-            if (std::chrono::steady_clock::now() > next_tick + TICK * 4) next_tick = std::chrono::steady_clock::now();
-        } else next_tick = std::chrono::steady_clock::now();
-        // the game's calls of this frame
-        for (;;) {
-            uint32_t rd = g_cmd_rd.load(std::memory_order_relaxed);
-            if (rd == g_cmd_wr.load(std::memory_order_acquire)) break;
-            Cmd c = g_cmd[rd % CMD_RING];
-            g_cmd_rd.store(rd + 1, std::memory_order_release);
-            handle(c);
+    E->hs_pushed = 0;
+    for (;;) {
+        uint32_t rd = g_cmd_rd.load(std::memory_order_relaxed);
+        if (rd == g_cmd_wr.load(std::memory_order_acquire)) break;
+        Cmd c = g_cmd[rd % CMD_RING];
+        g_cmd_rd.store(rd + 1, std::memory_order_release);
+        if (needs_set_load(c)) {
+            if (g_loader.joinable()) g_loader.join();  // the previous load finished long ago (g_busy was false)
+            g_busy.store(true, std::memory_order_release);
+            g_loader = std::thread([c] { handle(c); g_busy.store(false, std::memory_order_release); });
+            return false;
         }
-        tick();                                       // JSL $85:8000
-        E->frame_no++;
-        E->tick_acc += SAMPLES_PER_TICK;
-        int n = (int)E->tick_acc; E->tick_acc -= n;
-        run_samples(n);
+        handle(c);
     }
-    if (E->port_log) fclose(E->port_log);
-    delete E; E = nullptr;
+    tick();                                           // JSL $85:8000
+    E->frame_no++;
+    E->tick_acc += SAMPLES_PER_TICK;
+    int n = (int)E->tick_acc; E->tick_acc -= n;
+    n -= (int)E->hs_pushed;
+    if (n > 0) run_samples(n);
+    return true;
 }
 
 // ---------------------------------------------------------------- API --
@@ -625,23 +653,26 @@ static bool load_assets() {
     return true;
 }
 void v2_snes_sound_start() {
-    if (g_thread_on.load()) return;
+    if (g_engine_on.load()) return;
     if (!load_assets()) return;
-    g_quit = false;
-    g_thread = std::thread(thread_main);
-    g_thread_on = true;
+    engine_init();
+    g_out_wr.store(0); g_out_rd.store(0);
+    g_engine_on.store(true, std::memory_order_release);
 }
 void v2_snes_sound_shutdown() {
-    if (!g_thread_on.load()) return;
-    g_quit = true;
-    if (g_thread.joinable()) g_thread.join();
-    g_thread_on = false;
+    if (!g_engine_on.load()) return;
+    g_engine_on.store(false);
+    while (g_in_mix.load()) std::this_thread::sleep_for(std::chrono::milliseconds(1));   // a callback still inside the mix
+    if (g_loader.joinable()) g_loader.join();                                             // a set load still running
+    if (E->port_log) fclose(E->port_log);
+    delete E; E = nullptr;
 }
-static inline bool live() { return g_thread_on.load(std::memory_order_acquire); }
+static inline bool live() { return g_engine_on.load(std::memory_order_acquire); }
 void v2_snes_snd_level_start(uint16_t level)       { if (live()) push(CMD_LEVEL_START, 0, level); }
 void v2_snes_snd_level_exit(uint16_t level)        { if (live()) push(CMD_LEVEL_EXIT, 0, level); }
 void v2_snes_snd_play_sfx(uint8_t id, uint8_t vol) { if (live()) push(CMD_SFX, id, vol); }
 void v2_snes_snd_set_music_volume(uint8_t pct) { if (live()) push(CMD_MUSIC_VOL, pct, 0); }
+uint32_t v2_snes_snd_wall_ms() { return wall_ms(); }
 void v2_snes_snd_stop_sfx(uint8_t id)              { if (live()) push(CMD_STOP, id, 0xFFFF); }
 void v2_snes_snd_sfx_param(uint8_t id, uint16_t v) { if (live()) push(CMD_PARAM, id, v); }
 void v2_snes_snd_play_music(uint8_t id)            { if (live()) push(CMD_MUSIC, id, 0); }
@@ -652,17 +683,24 @@ void v2_snes_snd_menu_open()                       { if (live()) push(CMD_MENU_O
 int  v2_snes_sfx_map(int pc_id)                    { return (pc_id >= 0 && pc_id < 256 && g_assets_ok) ? g_sfx_map[pc_id] : 0; }
 void v2_snes_snd_menu_close()                      { if (live()) push(CMD_MENU_CLOSE, 0, 0); }
 
-// audio thread: linear resampling 32000 -> rate from the output ring
+// audio thread: the engine is driven here — ticks until the FIFO covers this
+// block, then linear resampling 32000 -> rate out of it
 bool v2_snes_sound_mix(int16_t* out, uint32_t frames, uint32_t rate) {
-    if (!live() || !rate) return false;
-    static double pos = 0.0;                          // fractional read position in ring frames
+    if (!rate) return false;
+    struct InMix { InMix() { g_in_mix.fetch_add(1); } ~InMix() { g_in_mix.fetch_sub(1); } } in_mix;
+    if (!live()) return false;
+    static double pos = 0.0;                          // fractional read position in FIFO frames
     static int16_t last[2] = {0, 0};
     const double step = 32000.0 / (double)rate;
+    // every source frame this block reads, plus the pair the interpolation needs;
+    // while a set loads (g_busy) nothing is produced and the block runs dry into silence
+    const uint32_t need = (uint32_t)(pos + (double)frames * step) + 2;
+    while (out_avail() < need && !g_busy.load(std::memory_order_acquire)) if (!produce_tick()) break;
     uint32_t rd = g_out_rd.load(std::memory_order_relaxed);
     uint32_t avail = g_out_wr.load(std::memory_order_acquire) - rd;
     for (uint32_t i = 0; i < frames; i++) {
         if (avail >= 2) {
-            uint32_t i0 = rd % OUT_RING, i1 = (rd + 1) % OUT_RING;
+            uint32_t i0 = rd % OUT_FIFO, i1 = (rd + 1) % OUT_FIFO;
             double f = pos;
             for (int c = 0; c < 2; c++) {
                 double s = g_out[i0 * 2 + c] + (g_out[i1 * 2 + c] - g_out[i0 * 2 + c]) * f;
@@ -670,7 +708,7 @@ bool v2_snes_sound_mix(int16_t* out, uint32_t frames, uint32_t rate) {
             }
             pos += step;
             while (pos >= 1.0 && avail >= 2) { pos -= 1.0; rd++; avail--; }
-        }
+        } else last[0] = last[1] = 0;                 // the loading screen: silence, no held sample
         out[i * 2] = last[0]; out[i * 2 + 1] = last[1];
     }
     g_out_rd.store(rd, std::memory_order_release);

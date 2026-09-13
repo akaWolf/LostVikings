@@ -9287,7 +9287,11 @@ static void v2_ui_service(uint8_t* s) {
               if (last_mv >= 0) {
                   const uint16_t h = *(const uint16_t*)(s + 0x990C);
                   if (h != 0xFFFF) v2_ail_seq_set_volume(s, h, (uint16_t)(mv < 0 ? 0 : mv > 100 ? 100 : mv));
-                  if (v2_snes_sound_enabled()) v2_snes_snd_set_music_volume((uint8_t)(mv < 0 ? 0 : mv > 100 ? 100 : mv));
+                  if (v2_snes_sound_enabled()) {
+                      v2_snes_snd_set_music_volume((uint8_t)(mv < 0 ? 0 : mv > 100 ? 100 : mv));
+                      { static int tr = -1; if (tr < 0) { const char* e = getenv("V2_VOL_TRACE"); tr = (e && e[0] == '1') ? 1 : 0; }
+                        if (tr) fprintf(stderr, "V2-VOL: SNES music volume %d%% pushed at %u ms\n", mv, v2_snes_snd_wall_ms()); }
+                  }
               }
               last_mv = mv;
           } }

@@ -6,11 +6,12 @@
 // the game's glue (bank 0: level music by the level head, sound effects by
 // id). See docs2/SNES_SOUND_ENGINE.md for the reverse.
 //
-// Threads: the game thread queues events (an SPSC ring); the sound thread
-// owns the SPC and the 65816-side state, runs the sequencer at the console's
-// frame rate and streams 32 kHz stereo into an output ring; the SDL audio
-// callback (play.cpp) resamples that into the device stream instead of the
-// OPL mix while the option is on. Nothing here touches the DS.
+// Threads: the game thread queues events (an SPSC ring); the SDL audio
+// callback (play.cpp) owns the SPC and the 65816-side state and pulls the
+// engine — a sequencer tick (60.0988 Hz) whenever its block needs more of the
+// 32 kHz output, resampled into the device stream instead of the OPL mix while
+// the option is on (the pull model of 2026-09-11: no sound thread, no output
+// ring running ahead of the device). Nothing here touches the DS.
 #pragma once
 #include <cstdint>
 
@@ -29,6 +30,7 @@ void v2_snes_snd_fade_music(uint8_t id);             // op 214 ($C330): function
 void v2_snes_snd_set_music_on(bool on);              // the console's $0302 (music enabled)
 void v2_snes_snd_set_sfx_on(bool on);                // the console's $0304 (effects enabled)
 void v2_snes_snd_set_music_volume(uint8_t pct);      // 2026-09-11: MUSIC VOL changed — the playing music track's volume follows (its start volume x pct / 100)
+uint32_t v2_snes_snd_wall_ms();                      // the engine's trace clock (ms), for stamping a command's push against its drain
 void v2_snes_snd_menu_open();                        // $8435 / $EF1A: the pause menu / inventory opens — $890A stops the looping effects (remembering them in $19D5), then SFX 0xE7
 void v2_snes_snd_menu_close();
 int  v2_snes_sfx_map(int pc_id);                     // the PC effect number's console sequence id (chunk 0x317), 0 = none                       // $84AC / $EF75: the menu closes — $8943 restarts the remembered effects (not on the quit exit)
