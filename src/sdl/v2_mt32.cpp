@@ -64,6 +64,7 @@ bool ring_push(const Ent& e) {
 struct MusicMemo { bool have = false, live = false; uint16_t rel = 0xFFFF; Ent reg{}, start{}; };
 MusicMemo g_memo;
 std::atomic<bool> g_armed{false};       // the option is on: the producers queue
+int g_service_last = -1;                // v2_mt32_service's last on/off (1 from v2_mt32_prepare: armed before the game booted)
 Ent  g_init[24]; int g_init_n = 0; bool g_init_done = false;   // the boot chain (fn64 .. fn9A), captured always
 uint64_t g_drops = 0;
 
@@ -89,6 +90,8 @@ bool g_data_ok = false, g_data_tried = false;
 // audio-thread state: the instance
 // ---------------------------------------------------------------------------
 bool g_built = false;
+bool g_skip_boot_copy = false;   // build() replayed the transcript: the ring's own copy of the boot chain (armed before the boot) is skipped
+bool g_in_boot_copy = false;     // inside that copy (fn64 .. fn9A / fn99 = 0)
 std::atomic<int> g_toast{0};     // audio thread -> game thread: 1 = Munt is up, 2 = no ROMs (the OPL stays audible)
 uint8_t  g_ds[0x10000];          // private copy of the game DS (the state blocks fn97 writes)
 uint8_t  g_track[0x10000];       // the track buffer: 0x215 for the preload, then every track's MT-32 variant
@@ -440,17 +443,22 @@ void build(uint32_t rate) {
     g_munt_mode = munt_mode();
     if (g_munt_mode && !g_synth_open) g_toast.store(munt_open(rate) ? 1 : 2, std::memory_order_release);   // without ROMs the driver still runs (the dump); the mix falls through to the OPL. Already open: v2_mt32_prepare did it before the game booted
     else { snprintf(g_status, sizeof g_status, "MT-32 world -> SC-55"); g_toast.store(0, std::memory_order_release); }
-    // the boot chain: in the ring when the option was on at the game's start, otherwise the transcript
-    size_t rd = g_rd.load(std::memory_order_relaxed);
-    const bool ring_has_init = (rd != g_wr.load(std::memory_order_acquire)) && g_ring[rd].kind == K_CALL && g_ring[rd].code == 0x64;
-    if (!ring_has_init) {
-        if (!g_init_done) { fprintf(stderr, "V2-MT32: the driver boot chain was not seen yet — waiting\n"); return; }
-        for (int i = 0; i < g_init_n; i++) run_call(g_init[i]);
-    }
+    // the boot chain: the transcript, always. The audible driver of this build boots
+    // lazily, inside the first music play (v2_music_play_176bd_v2 -> v2_ail_boot), so a
+    // ring armed from the start (v2_mt32_prepare) holds the first scene's stop-all and
+    // its track load AHEAD of fn64 — while the game booted its driver (and, with the
+    // MT-32, registered the 0x215 preload in slot 0) at program start, before any scene:
+    // that stop-all (FM handle FFFF, nothing registered there in the FM world) is what
+    // released the preload, and the track load came after the preload had used the
+    // buffer. Replaying the transcript first restores the game's order; the ring's own
+    // copy of the chain (fn64 .. fn9A, or fn99 answering 0) is skipped in the pump.
+    if (!g_init_done) { fprintf(stderr, "V2-MT32: the driver boot chain was not seen yet — waiting\n"); return; }
+    for (int i = 0; i < g_init_n; i++) run_call(g_init[i]);
+    g_skip_boot_copy = true; g_in_boot_copy = false;
     g_built = true;
-    fprintf(stderr, "V2-MT32: instance up (blob %u, bank %u, sfx %u, preload %u bytes; bank@%04X sfx@%04X track@%04X ds@%04X; init %s)\n",
+    fprintf(stderr, "V2-MT32: instance up (blob %u, bank %u, sfx %u, preload %u bytes; bank@%04X sfx@%04X track@%04X ds@%04X; boot chain replayed, %zu ring entries queued)\n",
             g_blob_len, g_bank_len, g_sfx_len, g_pre_len, g_pub.bank_para, g_pub.sfx_para, g_pub.track_para, g_pub.ds_para,
-            ring_has_init ? "from the ring" : "replayed");
+            (g_wr.load(std::memory_order_acquire) - g_rd.load(std::memory_order_relaxed)) & (RING - 1));
 }
 
 void teardown() {
@@ -540,13 +548,19 @@ void v2_mt32_publish(const uint8_t* game_ds, uint16_t ds_para, uint8_t* arena, u
 }
 
 // v2_main, before the game thread, with MT32 chosen at start: the chunks and
-// Munt (the ROM images, a fraction of a second) come up now. Otherwise the world
-// was built on the audio thread at its first pump after the driver boot — the
-// OPL rendering was heard until then, the module joined with the title already
-// playing and started the sequence from its top: a switch in the music at the
-// "MT-32: ..." toast. Open ahead, the world catches the boot chain within a pump
-// of the driver's start and the mix is the module's from the first note; the OPL
-// is never heard. Without ROMs the status says so and build() reports it (the OPL stays).
+// Munt (the ROM images, a fraction of a second) come up now, and the world is
+// ARMED now — every event from the game's first scene on is in the ring (its
+// stop-all, its track load, the driver calls), build() replays the boot chain
+// from the transcript ahead of them (the game's order: the driver boots at
+// program start, the audible driver of this build lazily at the first music
+// play) and the instance runs in step with the audible driver: the module
+// plays the first note itself, nothing to resume, the OPL is never heard.
+// Armed at the first game frame instead
+// (v2_mt32_service), the world came up after the logo track had started: the
+// OPL was heard until that frame (0.3 s of the device mix), the instance was
+// built from the transcript and restarted the track from its top, whose leading
+// rest (0.9 s) was the silence right after the "MT-32: ..." toast. Without ROMs
+// the status says so and build() reports it (the OPL stays, the world runs unheard).
 static uint32_t g_mix_rate_hint = 0;   // the device rate play.cpp got from SDL (0 until sound_init; HEADLESS has no audio)
 void v2_mt32_set_mix_rate(uint32_t rate) { g_mix_rate_hint = rate; }
 void v2_mt32_prepare() {
@@ -556,17 +570,18 @@ void v2_mt32_prepare() {
     g_munt_mode = true;
     if (munt_open(g_mix_rate_hint ? g_mix_rate_hint : 44100)) g_toast.store(1, std::memory_order_release);
     else fprintf(stderr, "V2-MT32: %s\n", g_status);
+    g_armed.store(true, std::memory_order_release);
+    g_service_last = 1;                  // v2_mt32_service: already on — no second arming, no resume
 }
 
 void v2_mt32_service() {
-    static int last = -1;
     const int on = v2_mt32_enabled() ? 1 : 0;
     { const int t = g_toast.exchange(0); if (t) v2_ui_toast(g_status); }   // what the audio thread found when it built the world
-    if (on == last) return;
-    last = on;
+    if (on == g_service_last) return;
+    g_service_last = on;
     if (on) {
         v2_options_ensure_loaded();
-        if (!load_data()) { v2_ui_toast(g_status); v2_options.sound_mode = 0; last = 0; return; }
+        if (!load_data()) { v2_ui_toast(g_status); v2_options.sound_mode = 0; g_service_last = 0; return; }
         snprintf(g_status, sizeof g_status, munt_mode() ? "MT-32: starting" : "MT-32 world -> SC-55: starting");
         g_armed.store(true, std::memory_order_release);
         // the music memo: the sequence playing now was registered and started before the
@@ -608,6 +623,17 @@ void v2_mt32_pump(uint64_t pos, uint32_t offset_frames, uint32_t rate) {
     size_t rd = g_rd.load(std::memory_order_relaxed);
     while (budget-- > 0 && rd != g_wr.load(std::memory_order_acquire)) {
         const Ent& e = g_ring[rd];
+        if (e.kind == K_CALL && g_skip_boot_copy) {       // the boot chain came from the transcript (build)
+            if (e.code == 0x64) g_in_boot_copy = true;
+            if (g_in_boot_copy) {
+                if (e.code == 0x9A || (e.code == 0x99 && e.ret == 0)) {
+                    g_in_boot_copy = false; g_skip_boot_copy = false;
+                    if (trace_on()) fprintf(stderr, "V2-MT32: the ring's copy of the boot chain skipped (replayed from the transcript at build)\n");
+                }
+                rd = (rd + 1) & (RING - 1);
+                continue;
+            }
+        }
         if (e.kind == K_TRACK) {
             memcpy(g_track, g_trk_stage[e.slot], g_trk_stage_len[e.slot]);
             if (trace_on()) fprintf(stderr, "V2-MT32: track chunk %04X (%u bytes) in the buffer\n", e.code, g_trk_stage_len[e.slot]);

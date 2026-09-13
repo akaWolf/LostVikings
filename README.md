@@ -267,7 +267,9 @@ F1 → SOUND < PC | SNES | SC55 | MT32 > (saved as `sound=0..3` in
 The ROM images are Roland's and are not included. Without them you keep
 the PC sound and a short message on the screen says what is missing
 (the log line `V2-SC55:` / `V2-MT32:` has the detail). A module boots
-for a few seconds after the switch. For a check, `V2_MT32_DUMP=<file.mid>`
+for a few seconds after the switch; chosen in the saved options, the MT-32
+plays from the game's first note, while a switch during the game restarts
+the current track from its top. For a check, `V2_MT32_DUMP=<file.mid>`
 writes the MIDI stream the module receives (MT32 and SC55) and
 `V2_MIDI_DUMP=<file.mid>` the FM driver's own events, as standard MIDI
 files.
