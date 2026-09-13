@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # stage 6.1 w3 increment 7: OPL-stream A/B of the NATIVE sequencer.
 #
-# Runs every replay twice on the V2_ONLY binary — once through the
+# Runs every replay twice on the game binary — once through the
 # interpreted driver, once with V2_AIL_NATIVE=1 — under identical
 # deterministic settings (V2_AIL_FRAME_TICKS=1) and byte-compares the
 # V2_OPL_TRACE streams. The stored assets_raw/opl_ref shas are reported
@@ -17,7 +17,7 @@ OUT=/dev/shm/ailnat_ab
 mkdir -p "$OUT"
 
 if [ ! -x ./vikings ]; then
-echo "FAIL: ./vikings not built (V2_ONLY=1 make)"; exit 2
+echo "FAIL: ./vikings not built (make)"; exit 2
 fi
 
 run_one() {

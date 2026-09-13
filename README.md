@@ -24,18 +24,21 @@ register stream a real Sound Blaster Pro got in 1992.
 
 ## Pre-built downloads
 
-Every push to any branch produces a GitHub Release with six artifacts:
+Every push to any branch refreshes the rolling `latest` release with six
+artifacts — the game for three platforms, and the test-mode build (the m2c
+original and the v2 mirror in lockstep, every frame cross-checked: the
+verification build, not the one to play) for the same three:
 
-| File | Platform | Mode |
+| File | Platform | Build |
 | --- | --- | --- |
-| `vikings-linux-x86_64.tar.gz`        | Linux x86_64   | default (orig + v2 mirror) |
-| `vikings-windows-x86_64.zip`         | Windows x86_64 | default |
-| `vikings-linux-x86_64-v2only.tar.gz` | Linux x86_64   | V2_ONLY (standalone v2) |
-| `vikings-windows-x86_64-v2only.zip`  | Windows x86_64 | V2_ONLY |
-| `vikings-linux-arm64.tar.gz`         | Linux arm64 (aarch64) | default (orig + v2 mirror) |
-| `vikings-linux-arm64-v2only.tar.gz`  | Linux arm64 (aarch64) | V2_ONLY |
+| `vikings-linux-x86_64.tar.gz`       | Linux x86_64          | the game |
+| `vikings-windows-x86_64.zip`        | Windows x86_64        | the game |
+| `vikings-linux-arm64.tar.gz`        | Linux arm64 (aarch64) | the game |
+| `vikings-linux-x86_64-test.tar.gz`  | Linux x86_64          | test mode |
+| `vikings-windows-x86_64-test.zip`   | Windows x86_64        | test mode |
+| `vikings-linux-arm64-test.tar.gz`   | Linux arm64 (aarch64) | test mode |
 
-All four bundles need `DATA.DAT` supplied separately (see below).
+All six bundles need `DATA.DAT` supplied separately (see below).
 
 Each archive contains:
 
@@ -72,7 +75,7 @@ Place `DATA.DAT` next to the `vikings` binary and launch.
 The bundled `ds_static.bin` / `exe_static.bin` snapshots are not a
 DATA.DAT substitute — they hold the static EXE image (initial DS, the
 seg001 text/menu data, lookup tables). Test mode reconstructs this
-from `m2c::m[]` populated by C++ static initialisers; V2_ONLY skips
+from `m2c::m[]` populated by C++ static initialisers; the game build skips
 m2c entirely and loads it from the snapshot files at startup. Game
 content (levels, sprites, sound) still comes from `DATA.DAT` in both
 modes.
@@ -124,8 +127,8 @@ All flags compose. `make clean` between mode changes.
 | `STATIC=1`     | static-link `libgcc` + `libstdc++` |
 | `SDL_STATIC=1` | static-link `libSDL2.a` via `pkg-config --static` |
 | `WIN=1`        | mingw-w64 cross-compile → `vikings.exe` |
-| `V2_ONLY=1`    | standalone v2 build; no m2c sources, no `DATA.DAT` |
-| `HEADLESS=1`   | no-display testing build → `vikings_headless` |
+| `TEST=1`       | test mode: the m2c original and the v2 mirror in lockstep (the verification build); without it `make` builds the game |
+| `HEADLESS=1`   | no-display testing build → `vikings_headless` (`TEST=1 HEADLESS=1` is the judge of the scenario replays) |
 
 Example: full static, optimised, Windows release:
 
@@ -149,31 +152,34 @@ Ctrl+S = save, Ctrl+Q = quit.
 
 ## Modes
 
-### Test mode
+### The game (the default build)
+
+`make` builds the v2 reimplementation alone: the m2c-decompiled sources
+are excluded from the build entirely. Faster compile, roughly half the
+binary size. Still needs `DATA.DAT` for game content; the bundled
+`*_static.bin` files supply the static EXE image that test mode gets
+from m2c's C++ initialisers. This is what the release bundles carry and
+what the console content pack, the options menu, co-op and the sound
+modules run on.
+
+### Test mode (`make TEST=1`)
 
 Runs the m2c-decompiled original VM and the **v2 mirror** in lockstep.
 Two SDL windows open — one rendered by the orig path, one by the v2 path. The
 verify infrastructure cross-checks every frame and flags any divergence
-in DS state, VM state, audio, or render output. This is the primary
-development mode.
-
-### V2_ONLY mode
-
-Builds only the v2 reimplementation. m2c-decompiled sources are excluded
-from the build entirely. Faster compile, roughly half the binary size.
-Still needs `DATA.DAT` for game content; the bundled `*_static.bin`
-files supply the static EXE image that test mode gets from m2c's C++
-initialisers. Useful for fast iteration on the v2 code path and as the
-eventual delivery vehicle once feature parity is complete.
+in DS state, VM state, audio, or render output. This is the verification
+build the scenario replays judge; `make clean` when switching modes.
 
 ### HEADLESS mode
 
 No display, no audio device — uses SDL's dummy drivers. Drives the game
 deterministically from a replay file and exits with code `1` on the
-first verify divergence. Built for CI and reproducible bug hunting:
+first verify divergence. Built for CI and reproducible bug hunting;
+composes with both modes (`TEST=1 HEADLESS=1` is the canon judge,
+`HEADLESS=1` alone the game's headless build):
 
 ```sh
-HEADLESS=1 RELEASE=1 make -j$(nproc)
+TEST=1 HEADLESS=1 RELEASE=1 make -j$(nproc)
 ./vikings_headless --replay-input=tests/replays/empty.inp --max-frames=200
 ```
 
@@ -194,21 +200,21 @@ effects — is converted from the console ROM images by the tools of
 `tools/assets/` (`integrate_snes.py` and the converters it drives) on
 top of the open tree of your `DATA.DAT`. None of it is in the
 repository: you need your own SNES DE image and Genesis image (any file
-names — they are found by their SHA-256). It plays in the **V2_ONLY**
-build only (the default build keeps `DATA.DAT` as the oracle of the
-orig-vs-mirror verification):
+names — they are found by their SHA-256). The game reads it (test mode
+keeps `DATA.DAT` as the oracle of the orig-vs-mirror verification and
+ignores the pack):
 
 ```sh
 mkdir -p roms && cp /path/to/LostVikingsDE.sfc /path/to/LV.gen roms/   # or --snes-rom / --genesis-rom
 make content              # = python3 tools/assets/build_content.py (python3, ~25 s)
-V2_ONLY=1 make -j$(nproc)
+make -j$(nproc)
 ./vikings
 ```
 
 `content/` (the open asset tree plus `.compiled/` and `exe_static.bin`,
-~25 MB) is picked up by a V2_ONLY binary beside it, or run from that
-directory; the start-up log says `V2_ONLY: console content pack
-content`. The F1 menu then switches the features: PARALLAX, SCENES and
+~25 MB) is picked up by the game binary beside it, or run from that
+directory; the start-up log says `console content pack content`. The
+F1 menu then switches the features: PARALLAX, SCENES and
 FINALE are on by default, SNES BALANCE is off, LANGUAGE and SOUND (PC /
 SNES / SC55 / MT32) as you like.
 
@@ -227,7 +233,7 @@ V2_EXE_STATIC=<dir>/exe_static.bin` point at a pack elsewhere (the
 level editor's scratch tree has the same layout:
 `tools/assets/edit_server.py --scratch <dir>`).
 
-The V2_ONLY release bundles carry the builder as `content-tools/` (the
+The game's release bundles carry the builder as `content-tools/` (the
 scripts and their inputs from the repo — no game data, no console
 data): `python3 content-tools/tools/assets/build_content.py` in the
 bundle directory, with `DATA.DAT` and the two images beside `vikings`,
@@ -278,14 +284,14 @@ files.
 
 The three entry points have different surfaces.
 
-**Default `vikings`** (built without `V2_ONLY=1`/`HEADLESS=1`):
+**Test-mode `vikings`** (`make TEST=1`):
 
 | Flag | Description |
 | --- | --- |
 | `--debug`         | enable orig debug-build cheats (F4 INT3, F5/F6 level skip) |
 | `--keymap=<path>` | load a custom keymap (default `./vikings_keymap.cfg`) |
 
-**V2_ONLY `vikings`** (`make V2_ONLY=1`):
+**The game, `vikings`** (`make`):
 
 | Flag | Description |
 | --- | --- |
@@ -296,7 +302,7 @@ The three entry points have different surfaces.
 | `--replay-strict`        | ignore live keyboard even after the replay queue is exhausted |
 | `--max-frames=<N>`       | exit cleanly after N frames (0 = unlimited) |
 
-V2_ONLY also understands two teleport env vars: `V2_LOAD_STATE=<file>`
+The game also understands two teleport env vars: `V2_LOAD_STATE=<file>`
 loads a full v2-world snapshot before the first frame (play on from that
 point), and `V2_SAVE_STATE=<file>` writes one back (with both set, the
 save happens immediately after the load — the byte-identical file pair
@@ -378,7 +384,7 @@ boots, SDL dummy drivers work, the replay parser handles `empty.inp`, no
 segfault during init, and the dump dir is created. With `DATA.DAT`
 present the same scripts exercise real gameplay.
 
-Benches of the V2_ONLY build (the windowed binary under SDL's dummy
+Benches of the game build (the windowed binary under SDL's dummy
 drivers; they need what the feature needs):
 
 ```sh
@@ -402,11 +408,11 @@ More detail: `tests/README.md` and `HEADLESS_MODE_ANALYSIS.md`.
 `.github/workflows/build.yml` runs on every push (any branch) and every
 PR, producing the six artifacts described above. The jobs: `test`
 (x86_64 and arm64: the HEADLESS build, `tests/smoke.sh`, the scenario
-replays), `linux` (a 2×2 matrix: x86_64 and arm64, test mode and
-V2_ONLY — the portable build: ubuntu-22.04 runners for the glibc 2.35
+replays), `linux` (a 2×2 matrix: x86_64 and arm64, the game and test
+mode — the portable build: ubuntu-22.04 runners for the glibc 2.35
 floor, SDL2 2.30.10 built from source with its dlopen'ed backends and
 cached, clang 18 from apt.llvm.org, and a check that glibc is the only
-dynamic dependency), `windows`, `windows-v2only` and `release`. Ubuntu's
+dynamic dependency), `windows`, `windows-test` and `release`. Ubuntu's
 own `libSDL2.a` links its backends directly, so a bundle built against it
 needed libpulse, libwayland, libdecor and the rest on the target machine;
 the source build costs the job 2–3 min more. The tests and the release
@@ -448,7 +454,7 @@ src/
   aux/asm.cpp             entry point for test mode
   vikings.exe*.cpp        m2c-decompiled DOS executable (do not hand-edit)
   _data.cpp               m2c-decompiled DS image
-  sdl/v2_main.cpp         entry point for V2_ONLY mode
+  sdl/v2_main.cpp         entry point of the game (the default build)
   sdl/v2_vm.cpp           v2 mirror VM — the reimplementation
   sdl/v2_hash_hot.cpp     verify hash kernels (per-file -O2 island)
   sdl/v2_gamestate.{h,cpp} phase-D typed DS model + serializer (golden/teleport)
@@ -466,7 +472,7 @@ src/
   adlmidi/                git submodule; ONLY chips/nuked/nukedopl3.c is built
 tests/                    HEADLESS test scripts + replays
 tests/golden_states/      per-replay final-state dumps (the golden oracle)
-.github/workflows/build.yml  CI: test (HEADLESS smoke + replays, x86_64/arm64) ∥ linux (x86_64/arm64) + windows × {default, V2_ONLY} → release
+.github/workflows/build.yml  CI: test (HEADLESS smoke + replays, x86_64/arm64) ∥ linux (x86_64/arm64) + windows × {the game, test mode} → release
 ```
 
 `docs2/` holds reverse-engineering notes generated during the

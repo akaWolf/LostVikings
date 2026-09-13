@@ -1,5 +1,9 @@
 vikings_keymap_editor
 .obj-keymap-editor/
+# the build trees: .obj (the game), .obj-test, .obj-headless[-test], .obj-win[-test], -nogen / -bounds suffixes
+/.obj*/
+# the project's private working rules, never committed
+/CLAUDE.md
 # assets_raw/ is the DATA.DAT extraction (tools/data/extract_datadat.py) — never committed,
 # except the two inputs of the console content build (tools/assets/build_content.py):
 # the chunk role map and the DSL text of the six world scripts (a byte dump cannot

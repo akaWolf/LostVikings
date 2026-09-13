@@ -5,7 +5,7 @@
 cd "$(dirname "$0")/.."
 
 if [ ! -x ./vikings_headless ]; then
-    echo "FAIL: vikings_headless not built. Run: make clean && HEADLESS=1 RELEASE=1 make -j\$(nproc)"
+    echo "FAIL: vikings_headless not built. Run: make clean && TEST=1 HEADLESS=1 RELEASE=1 make -j\$(nproc)"
     exit 2
 fi
 

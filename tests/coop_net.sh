@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Co-op lockstep bench (UX stage 8 step 3): three headless V2_ONLY instances
+# Co-op lockstep bench (UX stage 8 step 3): three headless game instances
 # of the same 3-player replay, one per player, over loopback TCP (the host is
 # player 1) must end in the same golden dump as each other AND as the solo
 # lockstep (one process, the same input delay, no peers). Every instance reads

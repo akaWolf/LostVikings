@@ -11,8 +11,8 @@ runs orig (ground truth) + v2 (mirror) in parallel, ловит divergences,
 ## Quick Start
 
 ```bash
-# 1. Build headless binary (test mode without SDL display / MIDI)
-HEADLESS=1 RELEASE=1 make -j$(nproc)
+# 1. Build the headless test-mode binary (no SDL display / MIDI; `make` alone is the game)
+TEST=1 HEADLESS=1 RELEASE=1 make -j$(nproc)
 # → produces vikings_headless (~8.6MB)
 
 # 2. Run smoke test (1 sec, basic sanity)
@@ -20,7 +20,7 @@ HEADLESS=1 RELEASE=1 make -j$(nproc)
 # → PASS: smoke test ...  OR  FAIL: divergence detected (dump path printed)
 
 # 3. Record a curated scenario (test mode, needs DATA.DAT) — see SCENARIOS.md
-make -j$(nproc)
+TEST=1 make -j$(nproc)
 ./tests/record.sh level0_walk     # play, then quit (Alt+X). Writes replays/level0_walk.inp
 
 # 4. Run all curated scenarios under headless verify
@@ -40,9 +40,9 @@ GOLDEN=update ./tests/scenarios.sh   # (re)take the catalog from a green run
 # 4c. Teleport save/load (direction V step 2, phase-D tooling)
 # Any headless run can snapshot the FULL v2 world at its clean exit:
 V2_SAVE_STATE=/tmp/state.bin ./vikings_headless --replay-input=... --max-frames=...
-# A V2_ONLY build loads it before the first frame (game thread parked):
+# The game build loads it before the first frame (game thread parked):
 V2_LOAD_STATE=/tmp/state.bin ./vikings          # play on from that point
-# With BOTH env vars set, V2_ONLY saves back immediately after loading —
+# With BOTH env vars set, the game saves back immediately after loading —
 # the file pair must be byte-identical (load/save roundtrip channel; the
 # DS block passes through the phase-D serializer in both directions, so
 # every save AND load re-proves the typed model).
@@ -135,14 +135,14 @@ See `replays/SCENARIOS.md` for the scenario table.
 
 ```bash
 # 1. Build test mode (orig + v2 mirror)
-make -j$(nproc)
+TEST=1 make -j$(nproc)
 
 # 2. Record — play the scenario, then quit (Alt+X or close window)
 ./tests/record.sh my_scenario
 #   → writes replays/my_scenario.inp  + replays/my_scenario.frames
 
 # 3. Verify it replays clean under headless
-HEADLESS=1 RELEASE=1 make -j$(nproc)
+TEST=1 HEADLESS=1 RELEASE=1 make -j$(nproc)
 ./tests/scenarios.sh
 # Exit 0 = OK, Exit 1 = divergence found (good — bug to investigate!)
 
@@ -152,9 +152,9 @@ git add tests/replays/my_scenario.inp tests/replays/my_scenario.frames
 
 `record.sh` runs test-mode `vikings --record-input=...`. The recorder
 is also available directly (`./vikings --record-input=<f>`), plus with
-`--debug` if the scenario needs the F4/F5/F6 cheats. V2_ONLY mode
-(`v2_main.cpp`) records too, but only covers v2-implemented paths — use
-test mode for full gameplay capture.
+`--debug` if the scenario needs the F4/F5/F6 cheats. The game
+(`v2_main.cpp`) records too, but a recording is verified against the
+original only in test mode — record there.
 
 **Recommended scenario library** (full list + what each exercises in
 `replays/SCENARIOS.md`):

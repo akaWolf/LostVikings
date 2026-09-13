@@ -2,8 +2,8 @@
 # Wide-screen determinism canon (UX stage 9, step 4). The wide view is a
 # different deterministic game (objects activate at W+16, the camera centres on
 # W/2), and a 320-recorded replay does not necessarily complete a wide level —
-# so this does NOT compare against the 320 catalog. It builds a HEADLESS +
-# V2_ONLY binary (the plain vikings_headless is the 320 dual-run judge and
+# so this does NOT compare against the 320 catalog. It builds the game's
+# HEADLESS binary (the plain vikings_headless is the 320 dual-run judge and
 # cannot go wide — its orig half stays 320), runs every replay TWICE at the WIDE
 # width via V2_VIEW_W, and requires: (1) no crash, (2) the two golden end-states
 # identical (the wide code paths are deterministic — the same as the 320 paths,
@@ -16,8 +16,8 @@ JOBS=${JOBS:-$(nproc)}
 BIN=vikings_headless_wide
 # EXE_NAME on the command line overrides the Makefile's `vikings_headless`, so the
 # 320 dual-run judge in the repo root is never overwritten by this build
-echo "building $BIN (HEADLESS V2_ONLY)…"
-( ulimit -s unlimited; HEADLESS=1 V2_ONLY=1 RELEASE=1 make CXX=clang++ EXE_NAME="$BIN" -j"$JOBS" ) > /tmp/wide_build_$$.log 2>&1 || { echo "FAIL: build"; tail -5 /tmp/wide_build_$$.log; exit 2; }
+echo "building $BIN (the game, HEADLESS)…"
+( ulimit -s unlimited; HEADLESS=1 RELEASE=1 make CXX=clang++ EXE_NAME="$BIN" -j"$JOBS" ) > /tmp/wide_build_$$.log 2>&1 || { echo "FAIL: build"; tail -5 /tmp/wide_build_$$.log; exit 2; }
 OUT="/tmp/wide_canon_$$"; rm -rf "$OUT"; mkdir -p "$OUT"
 export V2_FAST_VSYNC=${V2_FAST_VSYNC:-1} V2_VIEW_W=$W
 export V2_CONTENT=0   # the canon content: never the content/ pack of the repo root (v2_main.cpp)

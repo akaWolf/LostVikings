@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # content_tools_bundle.sh DEST — the console content builder as it ships in the
-# V2_ONLY release bundles (content-tools/): everything tools/assets/build_content.py
+# the game's release bundles (content-tools/): everything tools/assets/build_content.py
 # needs, in the repo's own layout so its path logic (ROOT = two levels above the
 # script) holds — the asset tools and converters, the lvsc chain of tools/data,
 # the two repo inputs of the archive conversion (the chunk role map, the DSL
@@ -20,7 +20,7 @@ cp "$ROOT/assets_raw/chunk_map.json" "$DEST/assets_raw/"
 cp "$ROOT"/assets_raw/lvs/*.lvsf "$DEST/assets_raw/lvs/"
 cp "$ROOT/exe_static.bin" "$ROOT/ds_static.bin" "$DEST/"   # level_render / texts_exe read them from ROOT
 cat > "$DEST/README.txt" <<'EOF'
-Console content builder (SNES / Genesis material for the V2_ONLY engine).
+Console content builder (SNES / Genesis material for the game).
 
 From the directory that holds vikings, your DATA.DAT and your two console
 images (the SNES DE ROM and the Genesis ROM — any file name, they are found by

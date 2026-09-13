@@ -40,7 +40,7 @@ jobs:
 
       - name: Generated-executor declarations are current (tools/data/gen_vm_decls.py --check)
         run: python3 tools/data/gen_vm_decls.py --check
-      - name: Build HEADLESS variant
+      - name: Build the HEADLESS test-mode binary (the canon judge)
         # clang: v2_vm.cpp (with the transpiled executors since stage 3A) needs
         # > 8 GB under gcc and dies on the 16 GB runner; clang peaks at ~1.2 GB.
         # ulimit: clang's parser needs a deep stack for the 40k-line executor.
@@ -50,7 +50,7 @@ jobs:
           ulimit -s unlimited
           set -o pipefail
           free -g | sed -n 2p | sed 's/^/::notice::runner memory before the build: /'
-          HEADLESS=1 make CXX=clang++ RELEASE=1 STATIC=1 SDL_STATIC=1 -j$(nproc) 2>&1 | tee build.log || { grep -n -m20 -E "(^| )error:|Error [0-9]+|Killed|internal compiler|virtual memory exhausted|cannot allocate|out of memory|too many|file too big|Segmentation fault" build.log | sed "s/^/::error::/"; exit 1; }
+          TEST=1 HEADLESS=1 make CXX=clang++ RELEASE=1 STATIC=1 SDL_STATIC=1 -j$(nproc) 2>&1 | tee build.log || { grep -n -m20 -E "(^| )error:|Error [0-9]+|Killed|internal compiler|virtual memory exhausted|cannot allocate|out of memory|too many|file too big|Segmentation fault" build.log | sed "s/^/::error::/"; exit 1; }
 
       # Optional gameplay-test asset fetch.
       # DATA.DAT is the copyrighted 1992 asset file — NOT in the repo. If a
@@ -106,17 +106,17 @@ jobs:
     # 3-6 min slower): the binary depends on glibc alone. Ubuntu's libSDL2.a
     # links its backends directly, and the "static" bundles of before needed
     # libpulse, libwayland, libdecor, libsamplerate ... on the target machine.
-    # One job for the test mode and V2_ONLY, both architectures.
-    name: Linux ${{ matrix.arch }}${{ matrix.v2only && ' V2_ONLY' || '' }} (release, glibc only)
+    # One job for the game and test mode, both architectures.
+    name: Linux ${{ matrix.arch }}${{ matrix.test && ' test mode' || '' }} (release, glibc only)
     runs-on: ${{ matrix.runner }}
     strategy:
       fail-fast: false
       matrix:
         include:
-          - { arch: x86_64, runner: ubuntu-22.04,     v2only: false, suffix: '' }
-          - { arch: arm64,  runner: ubuntu-22.04-arm, v2only: false, suffix: '' }   # GitHub's hosted arm64 Linux runner (public repos)
-          - { arch: x86_64, runner: ubuntu-22.04,     v2only: true,  suffix: '-v2only' }
-          - { arch: arm64,  runner: ubuntu-22.04-arm, v2only: true,  suffix: '-v2only' }
+          - { arch: x86_64, runner: ubuntu-22.04,     test: false, suffix: '' }
+          - { arch: arm64,  runner: ubuntu-22.04-arm, test: false, suffix: '' }   # GitHub's hosted arm64 Linux runner (public repos)
+          - { arch: x86_64, runner: ubuntu-22.04,     test: true,  suffix: '-test' }
+          - { arch: arm64,  runner: ubuntu-22.04-arm, test: true,  suffix: '-test' }
     env:
       SDL2_VERSION: 2.30.10
       BUNDLE: vikings-linux-${{ matrix.arch }}${{ matrix.suffix }}
@@ -156,7 +156,7 @@ jobs:
           # the link line of the static library: glibc pieces only, no backend may be a link dependency
           grep -E "^Libs" "$HOME/sdl2/lib/pkgconfig/sdl2.pc"
 
-      - name: Build (${{ matrix.v2only && 'V2_ONLY=1 ' || '' }}RELEASE=1 STATIC=1 SDL_STATIC=1 against the source-built SDL2)
+      - name: Build (${{ matrix.test && 'TEST=1 ' || '' }}RELEASE=1 STATIC=1 SDL_STATIC=1 against the source-built SDL2)
         run: |
           # the job log is not readable through the API without admin rights — on a
           # failure the first error lines are surfaced as annotations (check-run API)
@@ -165,7 +165,7 @@ jobs:
           export PKG_CONFIG_PATH="$HOME/sdl2/lib/pkgconfig"
           pkg-config --cflags --libs --static sdl2
           free -g | sed -n 2p | sed 's/^/::notice::runner memory before the build: /'
-          ${{ matrix.v2only && 'V2_ONLY=1' || '' }} make CXX=clang++-18 RELEASE=1 STATIC=1 SDL_STATIC=1 -j$(nproc) 2>&1 | tee build.log || { grep -n -m20 -E "(^| )error:|Error [0-9]+|Killed|internal compiler|virtual memory exhausted|cannot allocate|out of memory|too many|file too big|Segmentation fault" build.log | sed "s/^/::error::/"; exit 1; }
+          ${{ matrix.test && 'TEST=1' || '' }} make CXX=clang++-18 RELEASE=1 STATIC=1 SDL_STATIC=1 -j$(nproc) 2>&1 | tee build.log || { grep -n -m20 -E "(^| )error:|Error [0-9]+|Killed|internal compiler|virtual memory exhausted|cannot allocate|out of memory|too many|file too big|Segmentation fault" build.log | sed "s/^/::error::/"; exit 1; }
 
       - name: Build keymap editor
         run: PKG_CONFIG_PATH="$HOME/sdl2/lib/pkgconfig" make keymap_editor CXX=clang++-18 STATIC=1 SDL_STATIC=1
@@ -185,8 +185,8 @@ jobs:
           # Static DS / EXE blobs needed at runtime by the v2 mirror.
           cp ds_static.bin exe_static.bin "dist/$BUNDLE/"
           [ -f README.md ] && cp README.md "dist/$BUNDLE/"
-          # the V2_ONLY bundles carry the console content builder (README "Console content"): scripts, no game data
-          if ${{ matrix.v2only }}; then bash tools/assets/content_tools_bundle.sh "dist/$BUNDLE/content-tools"; fi
+          # the game's bundles carry the console content builder (README "Console content"): scripts, no game data
+          if ! ${{ matrix.test }}; then bash tools/assets/content_tools_bundle.sh "dist/$BUNDLE/content-tools"; fi
           tar -czf "$BUNDLE.tar.gz" -C dist "$BUNDLE"
           ls -lh "$BUNDLE.tar.gz"
 
@@ -254,6 +254,8 @@ jobs:
           # Static DS / EXE blobs needed at runtime by the v2 mirror.
           cp ds_static.bin exe_static.bin dist/vikings-windows-x86_64/
           [ -f README.md ] && cp README.md dist/vikings-windows-x86_64/
+          # the game's bundles carry the console content builder (README "Console content"): scripts, no game data
+          bash tools/assets/content_tools_bundle.sh dist/vikings-windows-x86_64/content-tools
           cd dist && zip -r ../vikings-windows-x86_64.zip vikings-windows-x86_64
           ls -lh ../vikings-windows-x86_64.zip
 
@@ -263,8 +265,8 @@ jobs:
           path: vikings-windows-x86_64.zip
           retention-days: 30
 
-  windows-v2only:
-    name: Windows x86_64 V2_ONLY (mingw-w64 cross-compile)
+  windows-test:
+    name: Windows x86_64 test mode (mingw-w64 cross-compile)
     runs-on: ubuntu-latest
     env:
       SDL2_VERSION: 2.30.10
@@ -292,13 +294,13 @@ jobs:
           # entirely and pass the SDL flags to make explicitly.
           ls /usr/x86_64-w64-mingw32/include/SDL2/SDL.h
 
-      - name: Build (V2_ONLY=1 WIN=1 RELEASE=1 SDL_STATIC=1)
+      - name: Build (TEST=1 WIN=1 RELEASE=1 SDL_STATIC=1)
         run: |
           SDLP=/usr/x86_64-w64-mingw32
           # -j2: see the Windows job above
           set -o pipefail
           free -g | sed -n 2p | sed 's/^/::notice::runner memory before the build: /'
-          V2_ONLY=1 make WIN=1 RELEASE=1 SDL_STATIC=1 SDL="-I$SDLP/include -I$SDLP/include/SDL2 -L$SDLP/lib -lmingw32 -l:libSDL2.a -lm -ldinput8 -ldxguid -ldxerr8 -luser32 -lgdi32 -lwinmm -limm32 -lole32 -loleaut32 -lshell32 -lsetupapi -lversion -luuid" -j2 2>&1 | tee build.log || { grep -n -m20 -E "(^| )error:|Error [0-9]+|Killed|internal compiler|virtual memory exhausted|cannot allocate|out of memory|too many|file too big|Segmentation fault" build.log | sed "s/^/::error::/"; exit 1; }
+          TEST=1 make WIN=1 RELEASE=1 SDL_STATIC=1 SDL="-I$SDLP/include -I$SDLP/include/SDL2 -L$SDLP/lib -lmingw32 -l:libSDL2.a -lm -ldinput8 -ldxguid -ldxerr8 -luser32 -lgdi32 -lwinmm -limm32 -lole32 -loleaut32 -lshell32 -lsetupapi -lversion -luuid" -j2 2>&1 | tee build.log || { grep -n -m20 -E "(^| )error:|Error [0-9]+|Killed|internal compiler|virtual memory exhausted|cannot allocate|out of memory|too many|file too big|Segmentation fault" build.log | sed "s/^/::error::/"; exit 1; }
 
       - name: Build keymap editor
         run: |
@@ -307,19 +309,17 @@ jobs:
 
       - name: Package
         run: |
-          mkdir -p dist/vikings-windows-x86_64-v2only
-          cp vikings.exe vikings_keymap_editor.exe vikings_keymap.cfg dist/vikings-windows-x86_64-v2only/
-          cp ds_static.bin exe_static.bin dist/vikings-windows-x86_64-v2only/
-          [ -f README.md ] && cp README.md dist/vikings-windows-x86_64-v2only/
-          # the console content builder (README "Console content"): scripts + the mod package, no game data
-          bash tools/assets/content_tools_bundle.sh dist/vikings-windows-x86_64-v2only/content-tools
-          cd dist && zip -r ../vikings-windows-x86_64-v2only.zip vikings-windows-x86_64-v2only
-          ls -lh ../vikings-windows-x86_64-v2only.zip
+          mkdir -p dist/vikings-windows-x86_64-test
+          cp vikings.exe vikings_keymap_editor.exe vikings_keymap.cfg dist/vikings-windows-x86_64-test/
+          cp ds_static.bin exe_static.bin dist/vikings-windows-x86_64-test/
+          [ -f README.md ] && cp README.md dist/vikings-windows-x86_64-test/
+          cd dist && zip -r ../vikings-windows-x86_64-test.zip vikings-windows-x86_64-test
+          ls -lh ../vikings-windows-x86_64-test.zip
 
       - uses: actions/upload-artifact@v4
         with:
-          name: vikings-windows-x86_64-v2only
-          path: vikings-windows-x86_64-v2only.zip
+          name: vikings-windows-x86_64-test
+          path: vikings-windows-x86_64-test.zip
           retention-days: 30
 
   release:
@@ -331,7 +331,7 @@ jobs:
     name: Publish GitHub release
     # `test` first: no release is published while the HEADLESS smoke test or
     # the scenario replays fail on either architecture.
-    needs: [test, linux, windows, windows-v2only]
+    needs: [test, linux, windows, windows-test]
     if: github.event_name == 'push'
     runs-on: ubuntu-latest
     permissions:
@@ -350,25 +350,25 @@ jobs:
         with:
           name: vikings-windows-x86_64
 
-      - name: Download Linux V2_ONLY artifact
+      - name: Download Linux test-mode artifact
         uses: actions/download-artifact@v4
         with:
-          name: vikings-linux-x86_64-v2only
+          name: vikings-linux-x86_64-test
 
-      - name: Download Windows V2_ONLY artifact
+      - name: Download Windows test-mode artifact
         uses: actions/download-artifact@v4
         with:
-          name: vikings-windows-x86_64-v2only
+          name: vikings-windows-x86_64-test
 
       - name: Download Linux arm64 artifact
         uses: actions/download-artifact@v4
         with:
           name: vikings-linux-arm64
 
-      - name: Download Linux arm64 V2_ONLY artifact
+      - name: Download Linux arm64 test-mode artifact
         uses: actions/download-artifact@v4
         with:
-          name: vikings-linux-arm64-v2only
+          name: vikings-linux-arm64-test
 
       - name: Release notes
         run: |
@@ -376,12 +376,13 @@ jobs:
             Auto-build from commit ${{ github.sha }} (${{ github.ref_name }}).
 
             Assets:
-            - `vikings-linux-x86_64.tar.gz`        — Linux x86_64, **test mode** (orig + v2 mirror)
-            - `vikings-windows-x86_64.zip`         — Windows x86_64, test mode
-            - `vikings-linux-x86_64-v2only.tar.gz` — Linux x86_64, **V2_ONLY** (standalone v2 build)
-            - `vikings-windows-x86_64-v2only.zip`  — Windows x86_64, V2_ONLY
-            - `vikings-linux-arm64.tar.gz`         — Linux arm64 (aarch64), test mode
-            - `vikings-linux-arm64-v2only.tar.gz`  — Linux arm64 (aarch64), V2_ONLY
+            - `vikings-linux-x86_64.tar.gz`       — Linux x86_64
+            - `vikings-windows-x86_64.zip`        — Windows x86_64
+            - `vikings-linux-arm64.tar.gz`        — Linux arm64 (aarch64)
+            - `vikings-linux-x86_64-test.tar.gz`  — Linux x86_64, **test mode**: the m2c original and the v2 mirror
+              in lockstep, every frame cross-checked — the verification build, not the one to play
+            - `vikings-windows-x86_64-test.zip`   — Windows x86_64, test mode
+            - `vikings-linux-arm64-test.tar.gz`   — Linux arm64 (aarch64), test mode
 
             All bundles contain `vikings`/`vikings.exe`, `vikings_keymap_editor`,
             `vikings_keymap.cfg`, `ds_static.bin` and `exe_static.bin`. SDL2 and
@@ -390,7 +391,7 @@ jobs:
             12 and later): SDL2 is built from source with the dlopen'ed backends,
             X11 / Wayland / PulseAudio / PipeWire / ALSA / libdecor are picked up
             at run time from whatever the machine has.
-            The V2_ONLY bundles also carry `content-tools/`: the builder of the
+            The game bundles also carry `content-tools/`: the builder of the
             console content pack (SNES parallax, the SNES-only levels, the Genesis
             interludes, languages, SNES sound — README, "Console content") — the
             converters only, no console data: run
@@ -400,7 +401,7 @@ jobs:
             All modes require the copyrighted `DATA.DAT` from a legal copy of
             the 1992 Lost Vikings (e.g. the GOG release). It is not
             redistributed here. The bundled `*_static.bin` files hold the
-            static EXE image (initial DS / text / tables) which V2_ONLY loads
+            static EXE image (initial DS / text / tables) which the game loads
             in place of m2c's C++ initialisers, not the game content.
           NOTES
           sed -i 's/^  //' notes.md   # the heredoc body is indented under the YAML block scalar
@@ -417,14 +418,14 @@ jobs:
           gh release create latest --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --prerelease \
             --title "latest (${GITHUB_REF_NAME} @ ${GITHUB_SHA:0:8})" --notes-file notes.md \
             vikings-linux-x86_64.tar.gz vikings-windows-x86_64.zip \
-            vikings-linux-x86_64-v2only.tar.gz vikings-windows-x86_64-v2only.zip \
-            vikings-linux-arm64.tar.gz vikings-linux-arm64-v2only.tar.gz
+            vikings-linux-x86_64-test.tar.gz vikings-windows-x86_64-test.zip \
+            vikings-linux-arm64.tar.gz vikings-linux-arm64-test.tar.gz
 
       - name: Stable release (v* tag)
         if: startsWith(github.ref, 'refs/tags/v')
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          FILES="vikings-linux-x86_64.tar.gz vikings-windows-x86_64.zip vikings-linux-x86_64-v2only.tar.gz vikings-windows-x86_64-v2only.zip vikings-linux-arm64.tar.gz vikings-linux-arm64-v2only.tar.gz"
+          FILES="vikings-linux-x86_64.tar.gz vikings-windows-x86_64.zip vikings-linux-x86_64-test.tar.gz vikings-windows-x86_64-test.zip vikings-linux-arm64.tar.gz vikings-linux-arm64-test.tar.gz"
           gh release create "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --title "$GITHUB_REF_NAME" --notes-file notes.md $FILES || \
           gh release upload "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --clobber $FILES

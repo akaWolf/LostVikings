@@ -20,7 +20,7 @@ HINT="${2:-}"
 OUT="tests/replays/${NAME}.inp"
 
 if [ ! -x ./vikings ]; then
-    echo "Default build missing. Run: make -j\$(nproc)"
+    echo "Test-mode build missing. Run: TEST=1 make -j\$(nproc)"
     exit 2
 fi
 if [ ! -f DATA.DAT ]; then

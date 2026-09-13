@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# #61 native AIL smoke: run the V2_ONLY binary with the interpreted Miles
+# #61 native AIL smoke: run the game binary with the interpreted Miles
 # driver enabled over the level1 replay and assert the driver-health
-# invariants. Needs ./vikings built with V2_ONLY=1.
+# invariants. Needs ./vikings (the game build).
 #
 #   ./tests/native_ail_check.sh [max_frames] [timeout_s]
 #
@@ -16,7 +16,7 @@ export V2_CONTENT=0   # the canon content: never the content/ pack of the repo r
 cd "$(dirname "$0")/.."
 
 if [ ! -x ./vikings ]; then
-echo "FAIL: ./vikings not built (V2_ONLY=1 make)"; exit 2
+echo "FAIL: ./vikings not built (make)"; exit 2
 fi
 
 MAX_FRAMES="${1:-1200}"

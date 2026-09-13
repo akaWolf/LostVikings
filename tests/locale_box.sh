@@ -5,14 +5,14 @@
 # canonical worlds read the string table directly and every level dialogue
 # stayed English while the interpreted intro translated. The canon cannot see
 # it — it runs without a language bank — so this bench runs the windowed
-# V2_ONLY binary under SDL's dummy drivers with the content pack, jumps to the
+# game binary under SDL's dummy drivers with the content pack, jumps to the
 # first level (V2_START_LEVEL=0: the opening line of the three vikings), lets
 # V2_UI_BOXSHOT dump the frame of the first dialogue box and compares the box
 # area (x 8..160, y 60..94 of the 320x200 frame, cropped as P6) with the
 # golden crop of each language in tests/golden_locale/. The crop is
 # deterministic across runs (the frame is the game's own, no presenter).
 #
-# Needs: a V2_ONLY build (BIN, default ./vikings — build: V2_ONLY=1 make),
+# Needs: a game build (BIN, default ./vikings — build: make),
 # content/ with the language banks (make content, with the collection's
 # locale.strings + lv_snes_strings.json at hand — otherwise SKIP), python3.
 #   bash tests/locale_box.sh              # compare en ru ja against the goldens
@@ -41,7 +41,7 @@ scene_args() {   # -> "<level> <max-frames> <shot index> <crop>"
         *) echo "FAIL: unknown scene $1" >&2; exit 1 ;;
     esac
 }
-if [ ! -x "$ROOT/$BIN" ]; then echo "FAIL: $BIN not built (V2_ONLY=1 make)"; exit 1; fi
+if [ ! -x "$ROOT/$BIN" ]; then echo "FAIL: $BIN not built (make)"; exit 1; fi
 if [ ! -f "$CONTENT/.compiled/0768.bin" ]; then echo "SKIP: no content pack with language banks at $CONTENT (make content with locale.strings + lv_snes_strings.json beside DATA.DAT)"; exit 0; fi
 D=$(mktemp -d /tmp/lv_locale_XXXXXX)
 ln -s "$ROOT/$BIN" "$D/vikings"; ln -s "$ROOT/ds_static.bin" "$D/ds_static.bin"; ln -s "$ROOT/vikings_keymap.cfg" "$D/vikings_keymap.cfg"

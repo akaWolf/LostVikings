@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""build_content.py — the console content pack (content/) for the V2_ONLY engine.
+"""build_content.py — the console content pack (content/) for the game.
 
 The SNES / Genesis material of the UX plan — the SNES DE parallax layers of
 the 42 levels, the five SNES-exclusive levels in the progression (TR33, SNDS,
@@ -12,7 +12,7 @@ cached in bac_lv_locale.json) on top of the open tree of the user's DATA.DAT.
 None of it is in the repository or in the release bundles: the build needs the
 two ROM images, and the pack it writes is never redistributed.
 
-The engine reads the pack through the asset store, in the V2_ONLY build only
+The engine reads the pack through the asset store, in the game build only (test mode ignores it)
 (the default build keeps DATA.DAT as the oracle of the orig-vs-mirror
 verification): V2_ASSETS_DIR=<content>/.compiled and
 V2_EXE_STATIC=<content>/exe_static.bin — or, with neither variable set, a
@@ -48,7 +48,7 @@ The result has the scratch-tree layout of tools/assets/edit_server.py, so the
 editor can work on it (--scratch content). Usage:
   python3 tools/assets/build_content.py [--data DATA.DAT] [--out content] [--fresh]
                                        [--snes-rom X.sfc --genesis-rom Y.gen | --mod PKG.json]
-The same tree ships in the V2_ONLY release bundles as content-tools/ (the
+The same tree ships in the game's release bundles as content-tools/ (the
 scripts and their repo inputs, no game data): run it from the bundle directory
 with DATA.DAT and the two images beside the executable.
 """
@@ -168,7 +168,7 @@ def find_bac(arg, data_dir):
 
 
 def main():
-    ap = argparse.ArgumentParser(description="build the console content pack for the V2_ONLY engine")
+    ap = argparse.ArgumentParser(description="build the console content pack for the game")
     ap.add_argument("--data", help="DATA.DAT (default: ./DATA.DAT, then the repo root)")
     ap.add_argument("--out", default="content", help="output directory (default: ./content)")
     ap.add_argument("--snes-rom", help="the SNES DE image (default: found by its SHA-256, see the module doc)")
@@ -289,7 +289,7 @@ def main():
     print(f"      {n_rec} records in .compiled ({ARCHIVE_CHUNKS} archive ids, {len(extras)} extras, "
           f"{ARCHIVE_CHUNKS + len(extras) - n_rec} of them replacing an archive id); {source}; "
           f"exe_static.bin {len(img)} B with the {trailer[0].decode()} trailer")
-    print("      V2_ONLY build: a content/ directory beside the executable (or in the working")
+    print("      the game: a content/ directory beside the executable (or in the working")
     print("      directory) is picked up by itself; elsewhere:")
     print(f"      V2_ASSETS_DIR={out}/.compiled V2_EXE_STATIC={exe} ./vikings")
     return 0

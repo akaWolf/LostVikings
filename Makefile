@@ -96,17 +96,20 @@ ADL_DEFINES := -DADLMIDI_DISABLE_DOSBOX_EMULATOR \
 INCLUDES := -I ./src/aux/ -I ./src/rendering/
 
 V2_DEFINES := -DV2_RENDER_FROM_SHADOW
-# V2_ONLY: build v2 standalone (skip orig m2c main loop + DS-hash compare).
-# When defined, orig sub_* functions are not called per-frame; v2 phase functions
-# handle everything on shadow DS. v2 sub_12352 reads SDL input directly.
-# Enable via env: `V2_ONLY=1 make -j$(nproc)` — disabled by default.
-ifdef V2_ONLY
+# The game — the standalone v2 build (-DV2_ONLY: the orig sub_* functions are
+# never called, the v2 phase functions run everything on the shadow DS, v2
+# sub_12352 reads SDL input directly) — is the DEFAULT. TEST=1 builds test
+# mode: the m2c original and the v2 mirror in lockstep with the DS-hash
+# compare, the build the scenario replays verify. `V2_ONLY=1` is accepted as an
+# empty synonym of the default (older notes and scripts).
+ifndef TEST
 V2_DEFINES += -DV2_ONLY
 endif
-# HEADLESS: automated test build. Test mode (orig + v2 mirror), no SDL
-# window, no audio device, no adlmidi link. Input from --replay-input, render
-# to in-memory buffer (verified via A2), exit on first divergence with PPM dump.
-# Designed for CI / fuzz testing. Mutually exclusive with V2_ONLY.
+# HEADLESS: no SDL window, no audio device, no adlmidi link. Input from
+# --replay-input, render to in-memory buffer (verified via A2), exit on first
+# divergence with PPM dump. Composes with both modes: `TEST=1 HEADLESS=1 make`
+# is the canon judge of tests/scenarios.sh (orig + mirror), `HEADLESS=1 make`
+# the game's headless build (tests/wide_canon.sh, tests/coop_smoke.sh).
 # Enable: `HEADLESS=1 make -j$(nproc)` → vikings_headless binary.
 ifdef HEADLESS
 V2_DEFINES += -DHEADLESS
@@ -114,13 +117,15 @@ EXE_NAME := vikings_headless
 OBJDIR := .obj-headless
 endif
 
-# V2_ONLY objects live in their own objdir so switching default<->V2_ONLY
-# never mixes configurations (multiple-definition trap) and never forces a
-# clean rebuild. Suffix applied AFTER the HEADLESS assignment so the combo
-# builds compose (.obj-v2only / .obj-headless-v2only); -nogen/-bounds
-# suffixes below compose on top as before. The binary name stays `vikings`.
-ifdef V2_ONLY
-OBJDIR := $(OBJDIR)-v2only
+# Test-mode objects live in their own objdir so switching game<->test never
+# mixes configurations (multiple-definition trap) and never forces a clean
+# rebuild. Suffix applied AFTER the HEADLESS assignment so the combo builds
+# compose (.obj-test / .obj-headless-test); -nogen/-bounds suffixes below
+# compose on top as before. The binary name stays `vikings`. (Before the game
+# became the default, .obj held test mode and .obj-v2only the game: a tree with
+# those directories needs one `make clean`.)
+ifdef TEST
+OBJDIR := $(OBJDIR)-test
 endif
 
 # Stage-3A transpiled executors (src/sdl/gen/*.gen.inc) are the DEFAULT in
@@ -148,9 +153,9 @@ endif
 # COV_SEG000=1: instrument ONLY the m2c oracle (vikings.exe_seg000.cpp) with
 # gcov, for the fn-test coverage report (task #47). Everything else compiles
 # as usual; the link adds --coverage for the gcov runtime. Use with HEADLESS:
-#   COV_SEG000=1 HEADLESS=1 make -j$(nproc)
+#   COV_SEG000=1 TEST=1 HEADLESS=1 make -j$(nproc)
 #   FNSELFTEST=all ./vikings_headless > /tmp/fnst_cov.log 2>&1
-#   gcov --json-format -o .obj-headless/src .obj-headless/src/vikings.exe_seg000.o
+#   gcov --json-format -o .obj-headless-test/src .obj-headless-test/src/vikings.exe_seg000.o
 #   python3 python/fn_coverage_report.py vikings.exe_seg000.cpp.gcov.json.gz
 ifdef COV_SEG000
 COV_LDFLAGS := --coverage
@@ -214,11 +219,11 @@ $(OBJDIR)/src/vikings.exe.o: CXXFLAGS += -Wno-overflow
 $(OBJDIR)/src/vikings.exe_seg002.o: CXXFLAGS += -Wno-overflow
 $(OBJDIR)/src/vikings.exe_seg003.o: CXXFLAGS += -Wno-overflow
 
-ifdef V2_ONLY
-# V2_ONLY: m2c-decompiled files NOT compiled. v2_main.cpp is the entry point.
+ifndef TEST
+# The game: m2c-decompiled files NOT compiled. v2_main.cpp is the entry point.
 # Excluded: vikings.exe*.cpp, _data.cpp, asm.cpp, shadowstack.cpp, memmgr.cpp (all m2c-only).
 # Static EXE data (seg001 text/menu, seg004 tables, etc.) is loaded at runtime
-# from `exe_static.bin` — a snapshot of m2c::m[0..0x29F00] taken once in default
+# from `exe_static.bin` — a snapshot of m2c::m[0..0x29F00] taken once in test
 # mode after the C++ Initializer in vikings.exe.cpp populates it (= the static
 # image baked into the original DOS .EXE binary).
 CXX_SRCS := \
@@ -421,15 +426,15 @@ DEPS     := $(ALL_OBJS:.o=.d)
 
 all: $(EXE_NAME)
 
-# The console content pack for the V2_ONLY engine (the SNES / Genesis material
-# of the UX plan): DATA.DAT + the user's SNES DE and Genesis images (roms/, or
-# --snes-rom / --genesis-rom) -> content/, which a V2_ONLY binary beside it picks
-# up by itself. tools/assets/build_content.py.
+# The console content pack for the game (the SNES / Genesis material of the UX
+# plan): DATA.DAT + the user's SNES DE and Genesis images (roms/, or
+# --snes-rom / --genesis-rom) -> content/, which the game binary beside it picks
+# up by itself (test mode ignores it). tools/assets/build_content.py.
 content:
 	python3 tools/assets/build_content.py
 
 # Standalone keymap editor — links ONLY against SDL2 + v2_keymap.cpp. No m2c,
-# no adlmidi, no game logic. Independent of HEADLESS / V2_ONLY toggles.
+# no adlmidi, no game logic. Independent of HEADLESS / TEST toggles.
 KEYMAP_EDITOR_OBJDIR := .obj-keymap-editor
 KEYMAP_EDITOR_SRCS := \
   src/sdl/v2_keymap.cpp \

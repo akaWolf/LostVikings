@@ -3,19 +3,19 @@
 # MIDI lane of the audible driver, judged on their MIDI streams — no ROMs, no ears needed.
 #
 # The MT-32 world lives on the audio thread and is paced by the audio clock, so this runs the
-# WINDOWED V2_ONLY binary under SDL's dummy video/audio in real time for ~30 s of tests/replays/level1.inp
+# WINDOWED game binary under SDL's dummy video/audio in real time for ~30 s of tests/replays/level1.inp
 # (the game boots, the title plays, level 1 starts) with SOUND=MT32 in a scratch options file, and
 # collects two dumps from the one run:
 #   V2_MT32_DUMP  — the MT-32 driver's MPU-401 stream (MT-32 reset, the 64 timbres, the MT-32 arrangement
 #                   01EC of level 1's track) — tools/assets/midi_check.py mt32
 #   V2_MIDI_DUMP  — the FM driver's channel messages (the lane) against the FM arrangement 01EB — midi_check.py lane
 #
-#   BIN=vikings ./tests/mt32_dump.sh      (build: V2_ONLY=1 RELEASE=1 make; the assets/ tree or DATA.DAT must be in place)
+#   BIN=vikings ./tests/mt32_dump.sh      (build: RELEASE=1 make; the assets/ tree or DATA.DAT must be in place)
 set -u
 export V2_CONTENT=0   # the canon content: never the content/ pack of the repo root (v2_main.cpp)
 cd "$(dirname "$0")/.."
 BIN=${BIN:-vikings}
-if [ ! -x "./$BIN" ]; then echo "FAIL: $BIN not built (V2_ONLY=1 RELEASE=1 make)"; exit 1; fi
+if [ ! -x "./$BIN" ]; then echo "FAIL: $BIN not built (RELEASE=1 make)"; exit 1; fi
 OUT=${OUT:-$(mktemp -d /tmp/lv_mt32_XXXXXX)}
 D="$OUT/cwd"; mkdir -p "$D"
 for f in *; do [ "$f" = v2_options.cfg ] || ln -sfn "$PWD/$f" "$D/$f"; done   # the tree, minus the user's options

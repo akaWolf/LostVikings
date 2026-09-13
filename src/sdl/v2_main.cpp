@@ -95,7 +95,7 @@ static void v2_find_content() {
     }
     if (g_content_dir.empty()) return;
     v2_assets_set_dir((g_content_dir + "/.compiled").c_str());
-    printf("V2_ONLY: console content pack %s (V2_CONTENT=0 plays the archive as is)\n",
+    printf("console content pack %s (V2_CONTENT=0 plays the archive as is)\n",
            g_content_dir.c_str());
 }
 
