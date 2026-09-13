@@ -112,7 +112,14 @@ static void fill(Snap& S, const uint8_t* s) {
     S.par_acc_x = v2_parallax.acc_x;
     S.par_acc_y = v2_parallax.acc_y;
     S.t = SDL_GetPerformanceCounter();
-    S.tile_frame = v2_last_frame_tiles;
+    // A tile frame: the last v2_draw_tiles took the tile path AND this flip's level is
+    // not a chunk screen (byte_2AAAF & 0x42 — sub_11439 skips the tile render there, the
+    // chunk pixels stay in VGA). The flag alone went stale across a level change: the
+    // fade-in flips of the title (a chunk screen) after the S&S logo (a tile level) still
+    // carried it, the presenter composed them itself, v2_draw_tiles' chunk path returns
+    // without painting in presenter mode, and the presenter's buffer showed whatever it
+    // had composed last — the S&S logo under the title's palette (2026-09-11 report).
+    S.tile_frame = v2_last_frame_tiles && !(s[DS_LEVEL_FLAGS] & 0x42);
     S.fullscreen = v2_scene_fullscreen() != 0;
     S.w = v2_fbw;
     S.players = g_v2_coop_players;

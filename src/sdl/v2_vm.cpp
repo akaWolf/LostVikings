@@ -2789,6 +2789,8 @@ static void v2_load_chunk_10cd8(uint8_t* shadow, uint16_t ax, uint16_t di) {
                                             shadow + DS_CHUNK_HDR);
     if (plane_size == 0) return;    // orig error paths → sub_10dba DOS-abort (class E)
     v2gs(shadow).decomp_size(plane_size); // ds:0x2BBC = plane_size (mirror orig)
+    { static int tr = -1; if (tr < 0) tr = getenv("V2_FLIP_DUMP") ? 1 : 0;   // debug: every raw picture chunk the game shows
+      if (tr) fprintf(stderr, "V2-CHUNKBLIT: chunk %04X di %04X plane_size %u level %d seg %04X\n", ax, di, plane_size, (int)v2gs(shadow).level(), chunk_seg); }
     if (di == 0) {
         v2_draw_hud_background(v2_current_ds_val, chunk_seg, plane_size);
     } else {

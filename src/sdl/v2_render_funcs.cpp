@@ -422,6 +422,41 @@ void v2_swap_render_buf() {
         // V2-PAL-DIVERGE idx 0x71.)
         v2_publish_dac_palette();
     }
+    // debug: V2_FLIP_DUMP=<dir>:<from>-<to> writes the frame published by EVERY flip whose
+    // game frame lies in [from, to] as <dir>/flip_<n>_f<game frame>.ppm — the display
+    // buffer through the palette just published: in the game build the composition
+    // buffer, in test mode the shadow-VGA page the judge compares. The two builds' flip
+    // sequences of one replay can be laid side by side (chunk screens, level changes).
+    {
+        static int dump = -1; static char dir[480]; static int from = 0, to = -1, n = 0;
+        if (dump < 0) {
+            const char* e = getenv("V2_FLIP_DUMP"); dump = 0;
+            if (e && *e) { snprintf(dir, sizeof dir, "%s", e); char* c = strrchr(dir, ':');
+                           if (c && sscanf(c + 1, "%d-%d", &from, &to) == 2) { *c = 0; dump = 1; } }
+        }
+        if (dump == 1 && v2_dbg_pre_vm_iter >= from && v2_dbg_pre_vm_iter <= to && n < 6000) {
+            char path[560]; snprintf(path, sizeof path, "%s/flip_%04d_f%d.ppm", dir, n, v2_dbg_pre_vm_iter);
+            FILE* f = fopen(path, "wb");
+            if (f) {
+                // the presenter's canvas: the map rows of the display buffer, then the HUD band
+                // (rows 176..239) from the published HUD buffer — through the shadow DAC just
+                // published (6-bit, << 2 like v2_publish_dac_palette)
+                extern uint8_t v2_display_hud_buf[];
+                const int W = v2_display_w > 0 ? v2_display_w : 320;
+                const int map_rows = v2_display_fullscreen ? v2_display_fullscreen : 176;
+                fprintf(f, "P6\n%d 240\n255\n", W);
+                for (int y = 0; y < 240; y++) for (int x = 0; x < W; x++) {
+                    uint8_t idx = 0;
+                    if (y < map_rows) idx = v2_display_buf[y * W + x];
+                    else if (!v2_display_fullscreen && x < 320) idx = v2_display_hud_buf[(y - 176) * 320 + x];
+                    const uint8_t* c = v2_dac_shadow + idx * 3;
+                    fputc(c[0] << 2, f); fputc(c[1] << 2, f); fputc(c[2] << 2, f);
+                }
+                fclose(f);
+            }
+            n++;
+        }
+    }
     v2_flip_notify();   // PACING VRR: the presenter shows this flip at once (render_v2.cpp)
 }
 
@@ -609,6 +644,14 @@ void v2_draw_tiles(uint16_t ds_val) {
     // dynamic content (sprites, cursor) and recover static chunk pixels — semantic
     // equivalent of orig page-flip + dirty-rect tile-redraw mechanism.
     uint8_t lvl_flags = v2gs(ds_base).level_flags_b();
+    // debug (V2_FLIP_DUMP set): the path this level's frames take, once per level
+    { static int tr = -1; static int last_level = -2;
+      if (tr < 0) tr = getenv("V2_FLIP_DUMP") ? 1 : 0;
+      if (tr && !v2_tls_presenter && (int)st.level() != last_level) {
+          last_level = (int)st.level();
+          fprintf(stderr, "V2-DRAWTILES: level %d flags %02X path %s chunk_bg_valid %d fbw %d at game frame %d\n", last_level, lvl_flags,
+                  (lvl_flags & 0x42) ? "chunk" : "tiles", (int)v2_chunk_bg_valid, v2_fbw, v2_dbg_pre_vm_iter);
+      } }
     if (lvl_flags & 0x42) {
         if (v2_tls_presenter) return;      // UX stage 9: the presenter never composes chunk screens
         v2_last_frame_tiles = false;
@@ -1526,6 +1569,8 @@ void v2_draw_viewport_chunk(uint16_t chunk_seg, uint16_t plane_size) {
 #endif
 
     // Orig: VGA Mode X 4 planes at display_offset; v2: equivalent rectangle in v2_render_buf.
+    { static int tr = -1; if (tr < 0) tr = getenv("V2_FLIP_DUMP") ? 1 : 0;   // debug: every picture blit
+      if (tr) fprintf(stderr, "V2-VPCHUNK: seg %04X plane_size %u resolved %s\n", chunk_seg, plane_size, chunk ? "yes" : "NO"); }
     v2_fbw = 320;   // UX stage 9 step 4: the planes below are written 320-stride — the frame is the 320-px raster from here on
     // Plane interleave x = (i % pitch) * 4 + plane, y = i / pitch. pitch=86 = 320/4 + slack.
     for (int p = 0; p < 4; p++) {

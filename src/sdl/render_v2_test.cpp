@@ -55,6 +55,31 @@ void render_callback_v2(void* state)
     // frame's own, else the published tick frame's
     const int FW = smooth ? v2_smooth_last_w : v2_display_w;
     v2_present_w = FW;
+    // debug: V2_PRESENT_DUMP=<dir>:<from>-<to> writes EVERY presented frame whose
+    // game frame lies in [from, to] as <dir>/pf_<n>_f<game frame>_<ms>.ppm (the
+    // 320x240 canvas the presenter shows: the interpolated frame or the published
+    // flip, through the palette in effect) — what the user saw, present by present.
+    {
+        static int dump = -1; static char dir[480]; static int from = 0, to = -1, n = 0;
+        if (dump < 0) {
+            const char* e = getenv("V2_PRESENT_DUMP"); dump = 0;
+            if (e && *e) { snprintf(dir, sizeof dir, "%s", e); char* c = strrchr(dir, ':');
+                           if (c && sscanf(c + 1, "%d-%d", &from, &to) == 2) { *c = 0; dump = 1; } }
+        }
+        if (dump == 1 && v2_dbg_pre_vm_iter >= from && v2_dbg_pre_vm_iter <= to && n < 4000) {
+            extern int v2_smooth_last_reason;   // the file name tells whether the presenter composed the frame itself (sm) or showed the flip (tick<reason>)
+            char path[560]; snprintf(path, sizeof path, "%s/pf_%04d_f%d_%u_%s%d.ppm", dir, n, v2_dbg_pre_vm_iter, (unsigned)SDL_GetTicks(),
+                                     smooth ? "sm" : "tick", v2_smooth_last_reason);
+            FILE* f = fopen(path, "wb");
+            if (f) {
+                const uint8_t* src = smooth ? v2_smooth_frame : v2_display_buf;
+                fprintf(f, "P6\n%d 240\n255\n", FW);
+                for (int i = 0; i < FW * 240; i++) { const SDL_Color& c = myDrawInfo_v2->drawPalette[src[i]]; fputc(c.r, f); fputc(c.g, f); fputc(c.b, f); }
+                fclose(f);
+            }
+            n++;
+        }
+    }
     // debug: V2_SMOOTH_DUMP=<dir> writes the first 48 presented frames after
     // game frame 100 as <dir>/pf_<n>_f<game frame>_t<fraction>.ppm (+ the
     // tick frame it interpolates towards) — proves the sub-tick positions.
