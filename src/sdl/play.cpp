@@ -19,6 +19,7 @@
 
 // #61 native AIL channel (v2_native_opl.cpp)
 extern "C" void v2_nopl_set_mix_rate(uint32_t);
+void v2_mt32_set_mix_rate(uint32_t);   // v2_mt32.cpp: the device rate v2_mt32_prepare opens Munt at
 extern "C" void v2_nopl_mix(int16_t*, uint32_t);
 
 static auto _sound_t0 = std::chrono::steady_clock::now();
@@ -159,6 +160,7 @@ void sound_init()
     // #61 native AIL channel renders at the obtained device rate.
     v2_nopl_set_mix_rate((uint32_t)obtained.freq);
     g_snes_mix_rate = (uint32_t)obtained.freq;
+    v2_mt32_set_mix_rate((uint32_t)obtained.freq);   // the MT-32 world opens Munt at this rate before the game boots (v2_mt32_prepare)
 
     SDL_PauseAudio(0);
 }

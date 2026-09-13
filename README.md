@@ -232,7 +232,7 @@ derived from `DATA.DAT` and the console images.
 
 ## Sound options
 
-F1 → SOUND < PC | SNES | SC55 | MT32 > (saved as `sound_mode=` in
+F1 → SOUND < PC | SNES | SC55 | MT32 > (saved as `sound=0..3` in
 `v2_options.cfg`). What each one needs:
 
 - **PC** — the original: the game's Sound Blaster Pro / AdLib driver

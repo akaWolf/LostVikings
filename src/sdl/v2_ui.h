@@ -15,7 +15,7 @@ struct V2Options {
     std::atomic<bool> smooth{true};          // UX9: the presenter interpolates camera/sprites between ticks
     std::atomic<bool> console_finale{true};  // UX9: the SNES finale's BG2 dragon layer + crowd on the concert (next load)
     // UX9 step 3 — the presenter's picture (render thread only, no game state):
-    std::atomic<int>  filter{0};             // 0 NEAREST, 1 SHARP (integer pre-scale + linear), 2 LINEAR
+    std::atomic<int>  filter{1};             // 0 NEAREST, 1 SHARP (integer pre-scale + linear; the default since 2026-09-10), 2 LINEAR, 3 XBRZ, 4 HQX, 5 NONE
     std::atomic<bool> integer_scale{false};  // whole multiples of the 320x240 (or 320xH) canvas only
     std::atomic<int>  border{0};             // 0 BLACK, 1 GLOW (the frame blurred and dimmed behind the picture)
     std::atomic<int>  wide{0};               // UX9 step 4: 0 OFF (the 320-px raster), 1 16:10, 2 16:9 — the view width of the next level (v2_wide_view_width)

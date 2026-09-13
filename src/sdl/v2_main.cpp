@@ -7,6 +7,7 @@
 #define SDL_MAIN_HANDLED
 #include "v2_midi.h"   // UX stage 11: V2_MIDI_DUMP is written before the _exit paths
 #include "v2_sc55.h"   // UX stage 11: the SC-55 module boots before the game thread starts
+#include "v2_mt32.h"   // UX stage 11: the MT-32 world (chunks, Munt) comes up before the game thread starts
 #include "v2_ui.h"     // v2_options
 #include <SDL2/SDL.h>
 #include "v2_timing.h"
@@ -218,6 +219,9 @@ int main(int argc, char* argv[]) {
     // v2_sc55). A failure is reported by v2_ui_service's own attempt (toast, back to PC).
     v2_options_ensure_loaded();
     if (v2_options.sound_mode.load() == 2) v2_sc55_start();
+    // the MT-32 world likewise: the chunks and Munt (the ROMs) before the driver
+    // boots, so the module carries the music from its first note (v2_mt32_prepare)
+    if (v2_options.sound_mode.load() == 3) v2_mt32_prepare();
 
     // Input record/replay (V2_ONLY only). File format is SDL-independent.
     v2_input_recorder_init(record_input, replay_input, strict_replay ? 1 : 0);

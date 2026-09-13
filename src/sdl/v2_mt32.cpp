@@ -438,7 +438,7 @@ void build(uint32_t rate) {
     g_bytes_out = 0; g_sysex_out = 0; g_short_out = 0;
     if (!g_dump.on) { const char* p = getenv("V2_MT32_DUMP"); if (p && *p) { g_dump.on = true; g_dump.path = p; } }
     g_munt_mode = munt_mode();
-    if (g_munt_mode) g_toast.store(munt_open(rate) ? 1 : 2, std::memory_order_release);   // without ROMs the driver still runs (the dump); the mix falls through to the OPL
+    if (g_munt_mode && !g_synth_open) g_toast.store(munt_open(rate) ? 1 : 2, std::memory_order_release);   // without ROMs the driver still runs (the dump); the mix falls through to the OPL. Already open: v2_mt32_prepare did it before the game booted
     else { snprintf(g_status, sizeof g_status, "MT-32 world -> SC-55"); g_toast.store(0, std::memory_order_release); }
     // the boot chain: in the ring when the option was on at the game's start, otherwise the transcript
     size_t rd = g_rd.load(std::memory_order_relaxed);
@@ -539,6 +539,25 @@ void v2_mt32_publish(const uint8_t* game_ds, uint16_t ds_para, uint8_t* arena, u
     if (v2_mt32_enabled()) load_data();
 }
 
+// v2_main, before the game thread, with MT32 chosen at start: the chunks and
+// Munt (the ROM images, a fraction of a second) come up now. Otherwise the world
+// was built on the audio thread at its first pump after the driver boot — the
+// OPL rendering was heard until then, the module joined with the title already
+// playing and started the sequence from its top: a switch in the music at the
+// "MT-32: ..." toast. Open ahead, the world catches the boot chain within a pump
+// of the driver's start and the mix is the module's from the first note; the OPL
+// is never heard. Without ROMs the status says so and build() reports it (the OPL stays).
+static uint32_t g_mix_rate_hint = 0;   // the device rate play.cpp got from SDL (0 until sound_init; HEADLESS has no audio)
+void v2_mt32_set_mix_rate(uint32_t rate) { g_mix_rate_hint = rate; }
+void v2_mt32_prepare() {
+    v2_options_ensure_loaded();
+    if (v2_options.sound_mode.load() != 3) return;
+    if (!load_data()) { fprintf(stderr, "V2-MT32: %s\n", g_status); return; }
+    g_munt_mode = true;
+    if (munt_open(g_mix_rate_hint ? g_mix_rate_hint : 44100)) g_toast.store(1, std::memory_order_release);
+    else fprintf(stderr, "V2-MT32: %s\n", g_status);
+}
+
 void v2_mt32_service() {
     static int last = -1;
     const int on = v2_mt32_enabled() ? 1 : 0;
@@ -553,6 +572,13 @@ void v2_mt32_service() {
         // the music memo: the sequence playing now was registered and started before the
         // world listened — stage its track and queue the two calls ahead of everything else
         if (g_memo.have && g_memo.live && g_memo.rel != 0xFFFF) {
+            // first the stop-all of slot 0 the world never saw (sub_17912 at the level start,
+            // FM handle FFFF = nothing registered there in the FM world): the boot transcript
+            // the world replays leaves the 0x215 preload registered in slot 0, and a music
+            // slot beside a live preload slot steps twice per tick (the shared state block) —
+            // the tempo doubling of the first ROM runs again (SOUND_SYSTEM.md, the MT-32 tempo)
+            Ent st; memset(&st, 0, sizeof st); st.kind = K_STOPALL; st.args[0] = 0; st.args[1] = 0xFFFF;
+            ring_push(st);
             v2_mt32_note_track(g_memo.rel);
             if (ring_push(g_memo.reg) && ring_push(g_memo.start))
                 fprintf(stderr, "V2-MT32: resuming the music playing now (track %04X, FM handle %04X) from its top\n",

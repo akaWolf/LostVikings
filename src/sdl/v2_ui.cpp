@@ -43,7 +43,7 @@ void v2_options_ensure_loaded() {
             else if (!strcmp(key, "snes_balance")) v2_options.snes_balance = val != 0;
             else if (!strcmp(key, "smooth")) v2_options.smooth = val != 0;
             else if (!strcmp(key, "console_finale")) v2_options.console_finale = val != 0;
-            else if (!strcmp(key, "filter")) v2_options.filter = (val >= 0 && val <= 5) ? val : 0;
+            else if (!strcmp(key, "filter")) v2_options.filter = (val >= 0 && val <= 5) ? val : 1;   // out of range: the default, SHARP
             else if (!strcmp(key, "integer_scale")) v2_options.integer_scale = val != 0;
             // (square_pixels — the step-3 ASPECT toggle — is gone, 2026-09-06: the
             // canvas is always the 320x240 raster; an old cfg's key is ignored here)

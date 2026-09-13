@@ -41,6 +41,8 @@ void v2_mt32_publish(const uint8_t* game_ds, uint16_t ds_para,
                      uint8_t* arena, uint16_t arena_para, uint32_t arena_size,
                      uint16_t bank_para, uint16_t sfx_para, uint16_t track_para);   // at the audible driver's boot: the paragraphs the game's pointers use
 void v2_mt32_service();                 // every tick: the option on/off, status toasts
+void v2_mt32_prepare();                 // v2_main, before the game thread: with MT32 chosen at start, the chunks and Munt (the ROMs) come up now, so the world is ready when the driver boots and the OPL is never heard
+void v2_mt32_set_mix_rate(uint32_t rate);   // play.cpp, from sound_init: the device rate v2_mt32_prepare opens Munt at
 
 // audio thread
 void v2_mt32_pump(uint64_t sample_pos, uint32_t offset_frames, uint32_t rate);   // build lazily, drain the calls, fn67 on the sample clock (offset: frames into the current callback, for Munt's timestamps)
