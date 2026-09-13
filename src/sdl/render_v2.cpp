@@ -50,6 +50,10 @@ bool v2_present_vsync = false;   // UX stage 9: SDL_RenderPresent blocks on the 
 #include <condition_variable>
 #include <chrono>
 #include <cmath>
+#include "v2_stats.h"
+#include "v2_ui.h"                     // the PACING option (v2_options)
+V2Stats v2_stats;                      // the STATS overlay's figures (v2_stats.h)
+std::atomic<uint64_t> v2_tick_wait_ticks{0};   // v2_timing.h: the game thread's time inside its vsync waits
 extern bool need_quit;
 namespace {
 std::mutex g_vs_mx; std::condition_variable g_vs_cv;
@@ -72,9 +76,15 @@ static void v2_vsync_on_present(void) {
     const uint64_t now = SDL_GetPerformanceCounter(); const double freq = (double)SDL_GetPerformanceFrequency();
     if (g_present_last) {
         const double dt = (double)(now - g_present_last) / freq * 1000.0;
-        if (dt > 0.5 && dt < 200.0) { g_present_ema_ms = g_present_ema_ms > 0.0 ? g_present_ema_ms * 0.9 + dt * 0.1 : dt; g_present_n++; }
+        // a stall (the level load, a texture rebuild: several refreshes long) is not an interval
+        // sample — with the mode known it is left out, so the average settles on the refresh at once
+        const bool stall = g_display_hz > 0.0 && dt > 2.5 * 1000.0 / g_display_hz;
+        if (dt > 0.5 && dt < 200.0 && !stall) { g_present_ema_ms = g_present_ema_ms > 0.0 ? g_present_ema_ms * 0.9 + dt * 0.1 : dt; g_present_n++; }
+        // STATS: a present that took more than 1.5 refreshes missed one (the lock on)
+        if (g_vs_locked.load(std::memory_order_relaxed) && g_present_ema_ms > 0.0 && dt > 1.5 * g_present_ema_ms) v2_stats.present_late.fetch_add(1, std::memory_order_relaxed);
     }
     g_present_last = now;
+    v2_stats.present_ms_x100.store((int)(g_present_ema_ms * 100.0 + 0.5), std::memory_order_relaxed);
     // the effective refresh: the mode's rate when the measured interval agrees with it, else the
     // measurement itself — once it has settled (the first presents of a window run long: the
     // level load, the texture creation; an early lock read 20 ms and SMOOTH AUTO took 60 Hz for 48)
@@ -92,6 +102,8 @@ static void v2_vsync_on_present(void) {
         fprintf(stderr, "render_v2: vsync lock %s (display mode %.0f Hz, present interval %.2f ms)\n", locked ? "ON" : "OFF", g_display_hz, g_present_ema_ms);
     }
     g_vs_hz_x100.store((int)(hz * 100.0 + 0.5), std::memory_order_relaxed);
+    v2_stats.vsync_locked.store(locked ? 1 : 0, std::memory_order_relaxed);
+    v2_stats.display_hz_x100.store((int)(hz * 100.0 + 0.5), std::memory_order_relaxed);
     if (!locked) return;
     // the 60 Hz schedule on the refreshes: an exact divider for the multiples of 60 (0.5 Hz tolerance), the measured ratio otherwise
     double step = 60.0 / hz;
@@ -137,6 +149,51 @@ bool v2_vsync_auto_smooth(void) {
     if (!g_vs_locked.load(std::memory_order_acquire)) return false;
     const double hz = v2_vsync_display_hz(); const int k = (int)(hz / 60.0 + 0.5);
     return !(k >= 1 && fabs(hz - 60.0 * k) < 0.5);
+}
+
+// ---------------------------------------------------------------------------
+// PACING < VSYNC | VRR > (2026-09-11). VRR = a G-Sync / FreeSync display: the
+// present does not wait for a refresh (SDL_RenderSetVSync 0), the game keeps
+// its own 60.0 Hz timer (no lock), and the presenter shows every flip the
+// moment the game made it — one present per sub-frame, the display follows the
+// game's 60 Hz. The game's flip rings a bell (v2_flip_notify, from
+// v2_swap_render_buf) the presenter waits on instead of sleeping.
+// ---------------------------------------------------------------------------
+namespace {
+std::mutex g_flip_mx; std::condition_variable g_flip_cv; uint64_t g_flip_seq = 0;
+int g_pacing_applied = -1;
+}
+void v2_flip_notify(void) {
+    { std::lock_guard<std::mutex> lk(g_flip_mx); g_flip_seq++; }
+    g_flip_cv.notify_all();
+}
+static bool v2_pacing_vrr(void) { return v2_options.pacing.load(std::memory_order_relaxed) == 1; }
+// presenter: wait for the game's next flip (VRR pacing), at most `ms` (menus and
+// waits without flips still get their presents)
+static void v2_presenter_wait_flip(uint32_t ms) {
+    static uint64_t seen = 0;
+    std::unique_lock<std::mutex> lk(g_flip_mx);
+    g_flip_cv.wait_for(lk, std::chrono::milliseconds(ms), [] { return g_flip_seq > seen || need_quit; });
+    seen = g_flip_seq;
+}
+// presenter, once per loop: the option changed -> the renderer's vsync follows, the lock starts over
+static void v2_pacing_apply(SDL_Renderer* r) {
+    const int want = v2_options.pacing.load(std::memory_order_relaxed);
+    if (want == g_pacing_applied || !r) return;
+    g_pacing_applied = want;
+#if SDL_VERSION_ATLEAST(2, 0, 18)
+    { const char* e = getenv("V2_NO_PRESENT_VSYNC");
+      const int vs = (want == 1 || (e && *e == '1')) ? 0 : 1;
+      if (SDL_RenderSetVSync(r, vs) == 0) {
+          SDL_RendererInfo ri; v2_present_vsync = SDL_GetRendererInfo(r, &ri) == 0 && (ri.flags & SDL_RENDERER_PRESENTVSYNC);
+      } else fprintf(stderr, "render_v2: SDL_RenderSetVSync(%d) failed: %s\n", vs, SDL_GetError()); }
+#endif
+    // the lock measures again from scratch under the new pacing
+    { std::lock_guard<std::mutex> lk(g_vs_mx); g_vs_acc = 0.0; }
+    g_present_n = 0; g_present_ema_ms = 0.0; g_present_last = 0;
+    if (g_vs_locked.exchange(false)) fprintf(stderr, "render_v2: vsync lock OFF (pacing changed)\n");
+    v2_stats.vsync_locked.store(0, std::memory_order_relaxed);
+    fprintf(stderr, "render_v2: pacing %s (present %s)\n", want == 1 ? "VRR" : "VSYNC", v2_present_vsync ? "waits for the refresh" : "returns at once");
 }
 const int SCREEN_WIDTH_V2 = 320;
 const int SCREEN_HEIGHT_V2 = 240;
@@ -609,8 +666,25 @@ void render_thread_proc_v2(void* _state)
       // Это избегает конфликтов с обработкой событий
 
       if ((loop_counter & 127) == 0) v2_vsync_query_display(myWindow_v2);   // the window may have moved to another display
-      v2_vsync_latch_sleep();      // with the vsync lock: snapshot just before the refresh, after the game's flip for it
+      v2_pacing_apply(myRenderer_v2);   // PACING < VSYNC | VRR >
+      if (v2_pacing_vrr()) v2_presenter_wait_flip(20);   // VRR: one present per game flip, the display follows the game
+      else v2_vsync_latch_sleep();      // with the vsync lock: snapshot just before the refresh, after the game's flip for it
       render_callback_v2(_state);  // snapshot drawBuffer→stableBuffer + sprite replay
+      // STATS: sub-frame delivery — how many of the game's distinct flips this present skipped
+      // (drops) or repeated (doubles, counted only when the game is flipping and nothing is
+      // interpolated: one present per sub-frame is the contract of the 60 Hz lock)
+      { static uint32_t seen = 0; static bool init = false;
+        extern uint32_t v2_smooth_subframe_seq(void); extern uint64_t v2_smooth_last_flip_ticks(void);
+        const uint32_t seq = v2_smooth_subframe_seq();
+        if (init) {
+            const uint32_t d = seq - seen;
+            const double since_flip_ms = (double)(SDL_GetPerformanceCounter() - v2_smooth_last_flip_ticks()) / (double)SDL_GetPerformanceFrequency() * 1000.0;
+            const bool flowing = since_flip_ms < 3.0 * 16.7;
+            if (d >= 2) v2_stats.flip_drops.fetch_add(d - 1, std::memory_order_relaxed);
+            if (d == 0 && flowing && g_vs_locked.load(std::memory_order_relaxed) && !v2_smooth_effective() && !v2_pacing_vrr())
+                v2_stats.flip_doubles.fetch_add(1, std::memory_order_relaxed);
+        }
+        seen = seq; init = true; }
 #ifndef HEADLESS
       updateDraw_v2();             // читает только stableBuffer
 #else
@@ -630,7 +704,7 @@ void render_thread_proc_v2(void* _state)
               if (myWindow_v2) SDL_SetWindowTitle(myWindow_v2, t);
           }
       }
-      v2_present_sleep();          // stage 6.3: single pacing source (v2_timing.h)
+      if (!v2_pacing_vrr()) v2_present_sleep();   // stage 6.3: single pacing source (v2_timing.h); VRR paces on the flips
 
       loop_counter++;
     }

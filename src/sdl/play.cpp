@@ -35,6 +35,8 @@ static uint8_t myBuffer[16384];   // device mix buffer (cherry-pick 3f2114a size
 #include "v2_snes_sound.h"
 #include "v2_sc55.h"       // UX stage 11: the SC-55 option
 #include "v2_mt32.h"       // UX stage 11: the MT-32 world
+#include "v2_ui.h"         // 2026-09-11: the AUDIO BUF option (the device buffer size)
+#include "v2_stats.h"      // 2026-09-11: the STATS overlay's audio counters
 static uint32_t g_snes_mix_rate = 0;   // UX stage 10: the device rate for the SNES resampler
 void my_audio_callback(void* argument, Uint8* stream, int len)
 {
@@ -55,6 +57,7 @@ void my_audio_callback(void* argument, Uint8* stream, int len)
             double gap_ms = interval_ms - expected_ms;
             _cb_underrun_count++;
             _cb_underrun_total_ms += gap_ms;
+            v2_stats.audio_underruns.fetch_add(1, std::memory_order_relaxed);
             printf("[%ums] SOUND-UNDERRUN: gap=%.1fms (expected=%.1fms, +%.1fms missing) "
                    "underruns=%d total_silence=%.1fms\n",
                    _sound_now_ms(), interval_ms, expected_ms, gap_ms,
@@ -109,6 +112,7 @@ void my_audio_callback(void* argument, Uint8* stream, int len)
         if (samples[s] == 32767 || samples[s] == -32768) clipped++;
     }
     static int _clip_log = 0;
+    if (clipped) v2_stats.audio_clips.fetch_add(1, std::memory_order_relaxed);
     if (clipped && _clip_log++ < 20)
         printf("[%ums] SOUND-CLIP: %d/%d samples at rail (peak %+d/%d)\n",
                _sound_now_ms(), clipped, sample_count_int16, peak_pos, peak_neg);
@@ -119,6 +123,7 @@ void my_audio_callback(void* argument, Uint8* stream, int len)
     double _cb_us = std::chrono::duration<double, std::micro>(_cb_end - _cb_start).count();
     if (_cb_us > _cb_budget_us * 0.9) {
         _cb_overrun_count++;
+        v2_stats.audio_cb_overruns.fetch_add(1, std::memory_order_relaxed);
         printf("[%ums] SOUND-CB-OVERRUN: took %.0fus (budget=%.0fus, %.1f%%) "
                "overruns=%d/total=%d\n",
                _sound_now_ms(), _cb_us, _cb_budget_us, 100.0 * _cb_us / _cb_budget_us,
@@ -137,7 +142,11 @@ void sound_init()
     spec.freq = MYFREQ;
     spec.format = AUDIO_S16SYS;
     spec.channels = 2;
-    spec.samples = 1024;  // cherry-pick 3f2114a — was 64, larger reduces audio glitches
+    // the device buffer: the AUDIO BUF option (256 / 512 / 1024 frames; cfg audio_buffer=), 512 by
+    // default since 2026-09-11 (11.6 ms at 44.1 kHz; 1024 = 23 ms was the cherry-pick 3f2114a
+    // default, "was 64, larger reduces audio glitches"); the STATS overlay counts the underruns
+    v2_options_ensure_loaded();
+    { const int b = v2_options.audio_buffer.load(); spec.samples = (Uint16)((b == 256 || b == 512 || b == 1024) ? b : 512); }
 
     spec.callback = my_audio_callback;
     spec.userdata = nullptr;
@@ -153,6 +162,8 @@ void sound_init()
            obtained.freq, obtained.format, obtained.channels, obtained.samples, obtained.size);
 
     myFormat = obtained.format;
+    v2_stats.audio_rate.store(obtained.freq, std::memory_order_relaxed);
+    v2_stats.audio_samples.store(obtained.samples, std::memory_order_relaxed);
     if (myFormat != AUDIO_S16SYS)
         fprintf(stderr, "SOUND-INIT: WARNING obtained format 0x%X != S16SYS — "
                 "native mix assumes s16 stereo\n", myFormat);

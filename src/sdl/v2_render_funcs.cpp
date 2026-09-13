@@ -422,6 +422,7 @@ void v2_swap_render_buf() {
         // V2-PAL-DIVERGE idx 0x71.)
         v2_publish_dac_palette();
     }
+    v2_flip_notify();   // PACING VRR: the presenter shows this flip at once (render_v2.cpp)
 }
 
 // Publish the current shadow DAC to the presenter palette. Called from

@@ -28,6 +28,8 @@ static const uint32_t V2_PRESENT_MS = 15;
 static const uint32_t V2_FRAME_BUDGET_MS = 16;
 
 extern bool v2_vsync_wait_game(void);   // render_v2.cpp: true = a display vsync was waited for (the lock)
+#include <atomic>
+extern std::atomic<uint64_t> v2_tick_wait_ticks;   // render_v2.cpp: performance-counter ticks the game thread spent in these waits (STATS: frame work = frame - waits)
 static inline void v2_tick_sleep(void) {
 #if defined(V2_ONLY) && !defined(HEADLESS)
     // V2_NOVSYNC=1 drops the game-thread tick pacing too (the presenter
@@ -37,6 +39,7 @@ static inline void v2_tick_sleep(void) {
     static int novsync = -1;
     if (novsync < 0) { const char* e = getenv("V2_NOVSYNC"); novsync = (e && *e == '1') ? 1 : 0; }
     if (novsync) return;
+    struct WaitClock { uint64_t t0; WaitClock() : t0(SDL_GetPerformanceCounter()) {} ~WaitClock() { v2_tick_wait_ticks.fetch_add(SDL_GetPerformanceCounter() - t0, std::memory_order_relaxed); } } clock;
     if (v2_vsync_wait_game()) return;            // the display's vsync
     // no lock (no blocking present, or the presenter stalled): a 60.0 Hz timer
     // on a running deadline, so the period is exact on average (SDL_Delay(16)

@@ -103,6 +103,9 @@ extern "C" int v2_view_rows(void);           // v2_vm.cpp: 176 / 200 (LVX scene)
 void v2_smooth_capture(void);                 // game thread, at the page flip
 bool v2_smooth_render(uint8_t* out);          // presenter: true = out (320x200) holds an interpolated frame
 bool v2_smooth_effective(void);               // the presenter is interpolating between the sub-frames right now (menu)
+uint32_t v2_smooth_subframe_seq(void);        // distinct sub-frames flipped so far (STATS)
+uint64_t v2_smooth_last_flip_ticks(void);     // SDL_GetPerformanceCounter at the newest flip
+void v2_flip_notify(void);                    // game thread, after the flip: the VRR presenter waits on it
 // the vsync lock (render_v2.cpp, 2026-09-11): the game's vsync waits follow the display's refreshes
 bool   v2_vsync_wait_game(void);              // game thread: block until the next game vsync; false = no lock, pace yourself
 bool   v2_vsync_locked(void);

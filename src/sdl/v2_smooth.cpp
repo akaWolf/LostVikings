@@ -40,6 +40,8 @@
 #include "v2_ds_layout.h"
 #include "v2_ui.h"
 #include "v2_coop.h"        // UX stage 8 step 2: the local player's camera
+#include "v2_stats.h"       // the STATS overlay's sub-frame counters
+#include "v2_timing.h"      // v2_tick_wait_ticks: the game thread's vsync waits (STATS: work = frame - waits)
 #include <SDL2/SDL.h>
 #include <atomic>
 #include <cmath>
@@ -88,6 +90,8 @@ std::mutex g_mx;
 Snap g_prev_local, g_cur_local;
 uint8_t g_work[DS_SIZE];
 std::atomic<bool> g_effective{false};   // the last render interpolated
+std::atomic<uint32_t> g_subframe_seq{0};      // distinct sub-frames captured (STATS, the VRR presenter)
+std::atomic<uint64_t> g_last_flip_ticks{0};   // the newest flip's time
 
 inline int16_t rd16(const uint8_t* b, uint32_t o) { return (int16_t)(b[o] | (b[o + 1] << 8)); }
 inline void wr16(uint8_t* b, uint32_t o, int16_t v) { b[o] = (uint8_t)v; b[o + 1] = (uint8_t)((uint16_t)v >> 8); }
@@ -141,9 +145,35 @@ void v2_smooth_capture(void) {
                   sub <= 0xFE ? rd16(s, sub + OBJ_SPRITE_X) : 0, sub <= 0xFE ? rd16(s, sub + OBJ_SPRITE_Y) : 0); } }
     const uint64_t now = SDL_GetPerformanceCounter();
     const double since_cur_ms = g_cur.valid ? (double)(now - g_cur.t) / (double)SDL_GetPerformanceFrequency() * 1000.0 : 1e9;
-    if (g_cur.valid && since_cur_ms >= SAME_SUBFRAME_MS) memcpy(&g_prev, &g_cur, sizeof(Snap));
+    const bool new_subframe = !g_cur.valid || since_cur_ms >= SAME_SUBFRAME_MS;
+    if (g_cur.valid && new_subframe) memcpy(&g_prev, &g_cur, sizeof(Snap));
     fill(g_cur, s);
+    g_last_flip_ticks.store(g_cur.t, std::memory_order_relaxed);
+    if (new_subframe) {
+        g_subframe_seq.fetch_add(1, std::memory_order_relaxed);
+        v2_stats.subframes.fetch_add(1, std::memory_order_relaxed);
+        // sub-frames per game frame: the count of the frame just finished (3 in play); its wall time
+        // (first flip to first flip) and its work = that time minus what the game thread spent in
+        // its vsync waits (v2_tick_wait_ticks, v2_timing.h); slow = the work alone exceeded a refresh
+        static int last_iter = -1, in_frame = 0; static uint64_t frame_t0 = 0, wait_t0 = 0;
+        if (v2_dbg_pre_vm_iter != last_iter) {
+            const uint64_t waited = v2_tick_wait_ticks.load(std::memory_order_relaxed);
+            if (last_iter >= 0 && frame_t0) {
+                const double freq = (double)SDL_GetPerformanceFrequency();
+                const double frame_ms = (double)(g_cur.t - frame_t0) / freq * 1000.0;
+                const double work_ms = frame_ms - (double)(waited - wait_t0) / freq * 1000.0;
+                v2_stats.subframes_per_frame.store(in_frame, std::memory_order_relaxed);
+                v2_stats.frame_ms_x100.store((int)(frame_ms * 100.0 + 0.5), std::memory_order_relaxed);
+                v2_stats.work_ms_x100.store((int)((work_ms > 0.0 ? work_ms : 0.0) * 100.0 + 0.5), std::memory_order_relaxed);
+                if (work_ms > 16.7) v2_stats.slow_frames.fetch_add(1, std::memory_order_relaxed);
+            }
+            last_iter = v2_dbg_pre_vm_iter; in_frame = 0; frame_t0 = g_cur.t; wait_t0 = waited;
+        }
+        in_frame++;
+    }
 }
+uint32_t v2_smooth_subframe_seq(void) { return g_subframe_seq.load(std::memory_order_relaxed); }
+uint64_t v2_smooth_last_flip_ticks(void) { return g_last_flip_ticks.load(std::memory_order_relaxed); }
 
 // the SMOOTH option: 0 NONE, 1 AUTO (the display's refresh is no multiple of 60), 2 ON
 static bool smooth_wanted(void) {

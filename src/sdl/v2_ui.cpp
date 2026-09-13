@@ -1,6 +1,7 @@
 // UX stage 3: options menu + debug tools overlay. See v2_ui.h.
 #include "v2_ui.h"
 #include "v2_net.h"        // UX stage 8 tails: the lobby items and the status line
+#include "v2_stats.h"      // 2026-09-11: the STATS overlay's figures
 #include <cstdio>
 #include <cstring>
 #include <string>
@@ -51,6 +52,9 @@ void v2_options_ensure_loaded() {
             else if (!strcmp(key, "snes_sound")) { if (val != 0) v2_options.sound_mode = 1; }   // the pre-UX11 key
             else if (!strcmp(key, "sound")) v2_options.sound_mode = (val >= 0 && val <= 3) ? val : 0;
             else if (!strcmp(key, "wide")) v2_options.wide = (val >= 0 && val <= 2) ? val : 0;
+            else if (!strcmp(key, "audio_buffer")) v2_options.audio_buffer = (val == 256 || val == 512 || val == 1024) ? val : 512;
+            else if (!strcmp(key, "pacing")) v2_options.pacing = (val >= 0 && val <= 1) ? val : 0;
+            else if (!strcmp(key, "stats")) v2_options.stats = val != 0;
         }
     }
     fclose(f);
@@ -70,6 +74,7 @@ void v2_options_save() {
     if (!f) return;
     fprintf(f, "parallax=%d\nscenes=%d\nsnes_balance=%d\nlanguage=%s\nsmooth=%d\nconsole_finale=%d\n", (int)v2_options.parallax.load(), (int)v2_options.scenes.load(), (int)v2_options.snes_balance.load(), v2_locale_code_at(v2_options.language.load()), (int)v2_options.smooth.load(), (int)v2_options.console_finale.load());
     fprintf(f, "filter=%d\ninteger_scale=%d\nborder=%d\nsound=%d\nwide=%d\n", v2_options.filter.load(), (int)v2_options.integer_scale.load(), v2_options.border.load(), v2_options.sound_mode.load(), v2_options.wide.load());
+    fprintf(f, "audio_buffer=%d\npacing=%d\nstats=%d\n", v2_options.audio_buffer.load(), v2_options.pacing.load(), (int)v2_options.stats.load());
     if (v2_options_sc55_roms[0]) fprintf(f, "sc55_roms=%s\n", v2_options_sc55_roms);
     if (v2_options_mt32_roms[0]) fprintf(f, "mt32_roms=%s\n", v2_options_mt32_roms);
     fclose(f);
@@ -157,6 +162,7 @@ static void darken_box(uint32_t* rgba, int w, int h, SDL_PixelFormat* fmt, int x
 
 // ------------------------------------------------------------------- menu --
 enum Item { IT_PARALLAX, IT_SCENES, IT_BALANCE, IT_LANG, IT_SMOOTH, IT_FINALE, IT_FILTER, IT_INTEGER, IT_BORDER, IT_WIDE, IT_SOUND,
+            IT_AUDIOBUF, IT_PACING, IT_STATS,                              // 2026-09-11: the audio device buffer, PACING < VSYNC | VRR >, the STATS overlay
             IT_NET_PLAYERS, IT_NET_DELAY, IT_NET_HOST, IT_NET_JOIN,      // UX stage 8 tails: the co-op lobby
             IT_LEVEL, IT_SAVE, IT_LOAD, IT_COUNT };
 // cfg codes: 0 NEAREST, 1 SHARP, 2 LINEAR (stage 9), 3 XBRZ, 4 HQX, 5 NONE (stage 11 tail); the menu walks NONE..HQX
@@ -194,6 +200,9 @@ static void activate() {
     case IT_BORDER:   v2_options.border = (v2_options.border.load() + 1) % 2; v2_options_save(); break;
     case IT_WIDE:     if (net_locked()) break; v2_options.wide = (v2_options.wide.load() + 1) % 3; v2_options_save(); v2_ui_toast("WIDE: NEXT LEVEL"); break;
     case IT_SOUND:    v2_options.sound_mode = (v2_options.sound_mode.load() + 1) % 4; v2_options_save(); { const int m = v2_options.sound_mode.load(); v2_ui_toast(m == 1 ? "SOUND: SNES (NEXT LEVEL)" : m == 2 ? "SOUND: SC-55" : m == 3 ? "SOUND: MT-32" : "SOUND: PC"); } break;
+    case IT_AUDIOBUF: { const int b = v2_options.audio_buffer.load(); v2_options.audio_buffer = (b == 256) ? 512 : (b == 512) ? 1024 : 256; v2_options_save(); v2_ui_toast("AUDIO BUF: NEXT START"); break; }
+    case IT_PACING:   v2_options.pacing = (v2_options.pacing.load() + 1) % 2; v2_options_save(); break;
+    case IT_STATS:    v2_options.stats = !v2_options.stats.load(); v2_options_save(); break;
     case IT_NET_PLAYERS: v2_ui_net_players = (v2_ui_net_players.load() == 3) ? 2 : 3; break;
     case IT_NET_DELAY:   v2_ui_net_delay = v2_ui_net_delay.load() % 8 + 1; break;
     case IT_NET_HOST:    if (v2_net_active()) { v2_ui_toast("ALREADY IN A NETWORK GAME"); break; }
@@ -214,6 +223,8 @@ static void adjust(int d) {
     case IT_BORDER:   v2_options.border = (v2_options.border.load() + d + 2) % 2; v2_options_save(); break;
     case IT_WIDE:     if (net_locked()) break; v2_options.wide = (v2_options.wide.load() + d + 3) % 3; v2_options_save(); v2_ui_toast("WIDE: NEXT LEVEL"); break;
     case IT_LANG: { if (net_locked()) break; int n = v2_locale_count(); if (n > 1) { v2_options.language = (v2_options.language.load() + d + n) % n; v2_options_save(); } break; }
+    case IT_AUDIOBUF: { const int b = v2_options.audio_buffer.load(); v2_options.audio_buffer = d > 0 ? ((b == 256) ? 512 : (b == 512) ? 1024 : 256) : ((b == 1024) ? 512 : (b == 512) ? 256 : 1024); v2_options_save(); v2_ui_toast("AUDIO BUF: NEXT START"); break; }
+    case IT_PACING: case IT_STATS: activate(); break;
     case IT_NET_PLAYERS: activate(); break;
     case IT_NET_DELAY:   v2_ui_net_delay = (v2_ui_net_delay.load() - 1 + d + 8) % 8 + 1; break;
     case IT_NET_HOST:    net_port = (net_port + d < 1024) ? 1024 : (net_port + d > 65535) ? 65535 : net_port + d; break;
@@ -279,7 +290,7 @@ void v2_ui_draw(uint32_t* rgba, int w, int h, SDL_PixelFormat* fmt) {
     const uint32_t YELLOW = SDL_MapRGBA(fmt, 255, 230, 80, 255);
     const uint32_t GREY = SDL_MapRGBA(fmt, 160, 160, 160, 255);
     if (v2_ui_menu_open.load()) {
-        char lines[24][48]; int n = 0;          // title + up to 18 items (debug mode) + the network status
+        char lines[28][48]; int n = 0;          // title + up to 22 items (debug mode) + the network status
         snprintf(lines[n++], 40, "OPTIONS  (F1/ESC CLOSE)");
         snprintf(lines[n++], 40, "PARALLAX  [%s]", v2_options.parallax.load() ? "ON " : "OFF");
         snprintf(lines[n++], 40, "SCENES    [%s]", v2_options.scenes.load() ? "ON " : "OFF");
@@ -301,6 +312,10 @@ void v2_ui_draw(uint32_t* rgba, int w, int h, SDL_PixelFormat* fmt) {
           snprintf(lines[n++], 40, "WIDE      < %s >", WIDE_NAMES[v2_options.wide.load() % 3]); }
         { static const char* const SOUND_NAMES[4] = { "PC  ", "SNES", "SC55", "MT32" };
           snprintf(lines[n++], 40, "SOUND     < %s >", SOUND_NAMES[v2_options.sound_mode.load() % 4]); }
+        snprintf(lines[n++], 40, "AUDIO BUF < %d >%s", v2_options.audio_buffer.load(),
+                 v2_stats.audio_samples.load() && v2_stats.audio_samples.load() != v2_options.audio_buffer.load() ? " (NEXT START)" : "");
+        snprintf(lines[n++], 40, "PACING    < %s >", v2_options.pacing.load() ? "VRR  " : "VSYNC");
+        snprintf(lines[n++], 40, "STATS     [%s]", v2_options.stats.load() ? "ON " : "OFF");
         // UX stage 8 tails: the co-op lobby
         snprintf(lines[n++], 40, "CO-OP     < %d PLAYERS >", v2_ui_net_players.load());
         snprintf(lines[n++], 40, "DELAY     < %d READS >", v2_ui_net_delay.load());
@@ -326,6 +341,24 @@ void v2_ui_draw(uint32_t* rgba, int w, int h, SDL_PixelFormat* fmt) {
             if (cur) put_text(rgba, w, h, fmt, x0 + 3, y0 + 4 + i * 9, ">", YELLOW);
             put_text(rgba, w, h, fmt, x0 + 10, y0 + 4 + i * 9, lines[i], (i == 0 || i == n - 1) ? GREY : (cur ? YELLOW : WHITE));
         }
+    }
+    // STATS overlay (2026-09-11): the pacing, the sub-frame delivery and the audio health, top right
+    if (v2_options.stats.load()) {
+        extern bool v2_smooth_effective(void);
+        char st[8][48]; int m = 0;
+        static const char* const SMOOTH_NAMES[3] = { "NONE", "AUTO", "ON" };
+        if (v2_stats.vsync_locked.load()) snprintf(st[m++], 48, "VSYNC LOCK ON %.2f HZ  PRESENT %.2f MS", v2_stats.display_hz_x100.load() / 100.0, v2_stats.present_ms_x100.load() / 100.0);
+        else snprintf(st[m++], 48, "NO VSYNC LOCK  TIMER 60 HZ  PRESENT %.2f MS", v2_stats.present_ms_x100.load() / 100.0);
+        snprintf(st[m++], 48, "PACING %s  SMOOTH %s %s", v2_options.pacing.load() ? "VRR" : "VSYNC", SMOOTH_NAMES[v2_options.smooth.load() % 3], v2_smooth_effective() ? "ON" : "OFF");
+        snprintf(st[m++], 48, "SUBFRAMES %d/FRAME  DROPS %u  DOUBLES %u  LATE %u", v2_stats.subframes_per_frame.load(), (unsigned)v2_stats.flip_drops.load(), (unsigned)v2_stats.flip_doubles.load(), (unsigned)v2_stats.present_late.load());
+        snprintf(st[m++], 48, "FRAME %.1f MS  WORK %.1f MS  SLOW %u", v2_stats.frame_ms_x100.load() / 100.0, v2_stats.work_ms_x100.load() / 100.0, (unsigned)v2_stats.slow_frames.load());
+        snprintf(st[m++], 48, "AUDIO %d @ %d  UNDERRUNS %u  CLIP %u  CB OVER %u", v2_stats.audio_samples.load(), v2_stats.audio_rate.load(), (unsigned)v2_stats.audio_underruns.load(), (unsigned)v2_stats.audio_clips.load(), (unsigned)v2_stats.audio_cb_overruns.load());
+        extern int v2_present_w;   // render_v2_test.cpp: the frame's width (w is the buffer's stride)
+        int maxlen = 0; for (int i = 0; i < m; i++) maxlen = maxlen > (int)strlen(st[i]) ? maxlen : (int)strlen(st[i]);
+        const int bw = maxlen * 6 + 10, bh = m * 9 + 6, y0 = 4;
+        int x0 = v2_present_w - bw - 4; if (x0 < 0) x0 = 0;
+        darken_box(rgba, w, h, fmt, x0, y0, bw, bh);
+        for (int i = 0; i < m; i++) put_text(rgba, w, h, fmt, x0 + 5, y0 + 3 + i * 9, st[i], i == 0 ? YELLOW : WHITE);
     }
     if (!toast_text.empty() && SDL_GetTicks() < toast_until) {
         int len = (int)toast_text.size();

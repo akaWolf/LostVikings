@@ -229,6 +229,16 @@ own rate; AUTO — the default — does that only on a display whose refresh
 is no multiple of 60 (75, 90, 144, 165 Hz), where the 60 Hz schedule is
 uneven, and stays off on 60 and 120 Hz where there is nothing to smooth.
 The menu line shows the decision and the refresh the game is locked to.
+PACING < VSYNC | VRR > (`pacing=0/1`) is for G-Sync / FreeSync displays:
+VRR presents every sub-frame the moment the game flips it, without a
+vsync wait, and the display follows the game's 60 Hz. AUDIO BUF < 256 |
+512 | 1024 > (`audio_buffer=`) is the sound device's buffer in frames,
+512 (11.6 ms) by default, applied at the next start. STATS [ON]
+(`stats=1`) draws a diagnostics overlay: the vsync lock and its refresh,
+the present interval, sub-frames per game frame with dropped and
+repeated ones, the game frame's wall time and work, and the audio
+buffer with its underruns — the numbers to quote when motion or sound
+misbehaves.
 
 The twelve languages are Blizzard's translations from the Blizzard
 Arcade Collection and are not in the repository either: copy
