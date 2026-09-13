@@ -82,7 +82,7 @@ public:
     uint8_t* bank = nullptr;     uint32_t bank_size = 0;
     uint8_t  stack_mem[STACK_SIZE] = {0};
     // Per-instance arenas (members, NOT function-statics: two instances back
-    // the two worlds in default mode and must never share blob state).
+    // the two worlds in test mode and must never share blob state).
     uint8_t  drv_copy[0x10000 + 16] = {0};
     uint8_t  bank_copy[0x10000 + 16] = {0};
 

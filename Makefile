@@ -103,7 +103,7 @@ V2_DEFINES := -DV2_RENDER_FROM_SHADOW
 ifdef V2_ONLY
 V2_DEFINES += -DV2_ONLY
 endif
-# HEADLESS: automated test build. Default mode (orig + v2 mirror), no SDL
+# HEADLESS: automated test build. Test mode (orig + v2 mirror), no SDL
 # window, no audio device, no adlmidi link. Input from --replay-input, render
 # to in-memory buffer (verified via A2), exit on first divergence with PPM dump.
 # Designed for CI / fuzz testing. Mutually exclusive with V2_ONLY.

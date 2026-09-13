@@ -1,5 +1,5 @@
 #!/bin/bash
-# Record a curated gameplay scenario in DEFAULT mode (orig + v2 mirror).
+# Record a curated gameplay scenario in TEST mode (orig + v2 mirror).
 #
 # Usage:  ./tests/record.sh <scenario-name> [max-frames-hint]
 #

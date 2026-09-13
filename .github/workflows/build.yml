@@ -106,7 +106,7 @@ jobs:
     # 3-6 min slower): the binary depends on glibc alone. Ubuntu's libSDL2.a
     # links its backends directly, and the "static" bundles of before needed
     # libpulse, libwayland, libdecor, libsamplerate ... on the target machine.
-    # One job for the default mode and V2_ONLY, both architectures.
+    # One job for the test mode and V2_ONLY, both architectures.
     name: Linux ${{ matrix.arch }}${{ matrix.v2only && ' V2_ONLY' || '' }} (release, glibc only)
     runs-on: ${{ matrix.runner }}
     strategy:
@@ -394,11 +394,11 @@ jobs:
             Auto-build from commit ${{ github.sha }}.
 
             Assets:
-            - `vikings-linux-x86_64.tar.gz`        — Linux x86_64, **default mode** (orig + v2 mirror)
-            - `vikings-windows-x86_64.zip`         — Windows x86_64, default mode
+            - `vikings-linux-x86_64.tar.gz`        — Linux x86_64, **test mode** (orig + v2 mirror)
+            - `vikings-windows-x86_64.zip`         — Windows x86_64, test mode
             - `vikings-linux-x86_64-v2only.tar.gz` — Linux x86_64, **V2_ONLY** (standalone v2 build)
             - `vikings-windows-x86_64-v2only.zip`  — Windows x86_64, V2_ONLY
-            - `vikings-linux-arm64.tar.gz`         — Linux arm64 (aarch64), default mode
+            - `vikings-linux-arm64.tar.gz`         — Linux arm64 (aarch64), test mode
             - `vikings-linux-arm64-v2only.tar.gz`  — Linux arm64 (aarch64), V2_ONLY
 
             All bundles contain `vikings`/`vikings.exe`, `vikings_keymap_editor`,

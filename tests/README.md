@@ -11,7 +11,7 @@ runs orig (ground truth) + v2 (mirror) in parallel, ловит divergences,
 ## Quick Start
 
 ```bash
-# 1. Build headless binary (default mode without SDL display / MIDI)
+# 1. Build headless binary (test mode without SDL display / MIDI)
 HEADLESS=1 RELEASE=1 make -j$(nproc)
 # → produces vikings_headless (~8.6MB)
 
@@ -19,7 +19,7 @@ HEADLESS=1 RELEASE=1 make -j$(nproc)
 ./tests/smoke.sh
 # → PASS: smoke test ...  OR  FAIL: divergence detected (dump path printed)
 
-# 3. Record a curated scenario (default mode, needs DATA.DAT) — see SCENARIOS.md
+# 3. Record a curated scenario (test mode, needs DATA.DAT) — see SCENARIOS.md
 make -j$(nproc)
 ./tests/record.sh level0_walk     # play, then quit (Alt+X). Writes replays/level0_walk.inp
 
@@ -59,12 +59,12 @@ python3 tests/fuzz_coverage.py 10000 5000
 
 ## How It Works
 
-**Setup**: Default mode runs orig m2c VM + v2 mirror in parallel on shared
+**Setup**: Test mode runs orig m2c VM + v2 mirror in parallel on shared
 shadow DS, with verify infrastructure comparing every state transition.
 
 **Headless build**: skips SDL display + audio (uses SDL dummy drivers).
 adlmidi excluded from link (stubbed). Input from replay file (frame-based,
-deterministic). Game logic + render + verify run as in default mode.
+deterministic). Game logic + render + verify run as in test mode.
 
 **Divergence detection**: 6 verify mechanisms catch any orig↔v2 mismatch:
 - PSNAP — DS state at 22 phase boundaries (350+ watch addresses)
@@ -129,12 +129,12 @@ Frame `0` = before any sub_12352 input call has run.
 
 ## Recording New Scenarios
 
-Record in **default mode** (orig + v2 mirror), so the replay reproduces
+Record in **test mode** (orig + v2 mirror), so the replay reproduces
 bit-for-bit under headless verify. Requires `DATA.DAT` in the repo root.
 See `replays/SCENARIOS.md` for the scenario table.
 
 ```bash
-# 1. Build default mode (orig + v2 mirror)
+# 1. Build test mode (orig + v2 mirror)
 make -j$(nproc)
 
 # 2. Record — play the scenario, then quit (Alt+X or close window)
@@ -150,11 +150,11 @@ HEADLESS=1 RELEASE=1 make -j$(nproc)
 git add tests/replays/my_scenario.inp tests/replays/my_scenario.frames
 ```
 
-`record.sh` runs default-mode `vikings --record-input=...`. The recorder
+`record.sh` runs test-mode `vikings --record-input=...`. The recorder
 is also available directly (`./vikings --record-input=<f>`), plus with
 `--debug` if the scenario needs the F4/F5/F6 cheats. V2_ONLY mode
 (`v2_main.cpp`) records too, but only covers v2-implemented paths — use
-default mode for full gameplay capture.
+test mode for full gameplay capture.
 
 **Recommended scenario library** (full list + what each exercises in
 `replays/SCENARIOS.md`):

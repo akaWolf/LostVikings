@@ -738,7 +738,7 @@ int main(int argc, char *argv[]) {
 
 #ifndef HEADLESS
     v2_keymap_load(keymap_path);
-    // Input record/replay (default mode). render.cpp's event loop already
+    // Input record/replay (test mode). render.cpp's event loop already
     // routes through v2_input_poll_event, so init alone enables it. Recording
     // here captures full m2c gameplay; the resulting .inp replays bit-for-bit
     // in vikings_headless (same asm.cpp code path).

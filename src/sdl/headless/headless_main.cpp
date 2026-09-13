@@ -1,6 +1,6 @@
 // HEADLESS main initialization — CLI parsing, env setup, hook installation.
 //
-// Called from default mode main() (asm.cpp) when -DHEADLESS is set.
+// Called from test mode main() (asm.cpp) when -DHEADLESS is set.
 // Strategy: keep SDL linked but use dummy video/audio drivers so no real
 // display/audio device needed. CI machines without X server / sound card
 // can run this binary.

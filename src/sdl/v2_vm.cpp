@@ -116,17 +116,17 @@ extern uint8_t sdl_spec_get(uint16_t off);
 extern uint8_t sdl_spec_state_get(uint16_t off);
 
 // SDL/adlmidi sound API (defined in sdl/play.cpp).
-// In default mode the orig also calls these; in V2_ONLY only v2 calls them.
+// In test mode the orig also calls these; in V2_ONLY only v2 calls them.
 // #79: the per-side SDL AudioPools are gone; sound is the native interpreted
 // driver (v2_ail). The lines below describe the OLD architecture in
-// default mode (no audio output) but slot tracking continues for DS verify.
+// test mode (no audio output) but slot tracking continues for DS verify.
 // #79: play.h (AudioPool) removed — native AIL is the only sound path
 
 // ============================================================================
 // SFX AUDIT INFRASTRUCTURE
 // ============================================================================
 // Detects divergences between orig (sub_177bb in seg000) and v2 (v2_vm_op_sound)
-// in SFX playback. In default mode both process same VM bytecode and SHOULD
+// in SFX playback. In test mode both process same VM bytecode and SHOULD
 // fire the same op_sound calls. Discrepancies indicate v2 is missing code paths.
 //
 // Three layers (all active simultaneously):
@@ -200,7 +200,7 @@ static int g_audit_v2_fire_count[256] = {0};
 // Per-source: orig and v2 each have their own counter. As long as both call
 // sub_176bd the same number of times in the same order, counters stay in sync
 // and produce identical music handles. Used for deterministic music handle so
-// orig (real producer) and v2 (muted reservation in default mode) reserve slots
+// orig (real producer) and v2 (muted reservation in test mode) reserve slots
 // with matching handles → ds:0x990C contains identical value in real and shadow.
 static int g_audit_orig_music_count = 0;
 static int g_audit_v2_music_count = 0;
@@ -238,7 +238,7 @@ int v2_audit_v2_next_music_idx() { return g_audit_v2_music_count++; }
 // Per-source counter (orig + v2 each track separately) — they stay in sync as
 // long as both fire sub_176bd the same number of times. Monotonic counter alone
 // gives unique handle per call, no frame entropy needed (which was breaking
-// orig+v2 sync in default mode where they may fire in different frames).
+// orig+v2 sync in test mode where they may fire in different frames).
 // Revival-on-collision protected by set_dontstop_external safety check (skips
 // slots already marked need_close).
 uint16_t v2_audit_compute_music_handle(uint16_t bx_seg, int play_idx) {
@@ -1250,7 +1250,7 @@ void v2_verify_render_buf(int frame) {
 // Symmetry verify: orig + v2 DS slot tables must show identical staleness pattern
 // (same handles in same slots, same active/stale state). If diverged, v2's cleanup
 // logic isn't synced with orig's DS slot state. Called once at FRAME_BEGIN after
-// individual side verifies. Only meaningful in default mode. Caller passes both
+// individual side verifies. Only meaningful in test mode. Caller passes both
 // pointers (file-scope statics aren't visible here yet — see line 564, 1328).
 void v2_verify_audio_slots_symmetry(uint8_t* real_ds, uint8_t* shadow_ds, int frame) {
     if (!real_ds || !shadow_ds) return;
@@ -1360,7 +1360,7 @@ static bool v2_sound_shadow_valid = false;
 // populated by v2_read_chunk callers when loading sound chunks. Lookup is by
 // segment value (start offset is always 0 for sound chunks per orig sub_12ab8).
 //
-// In default mode v2 sound calls are no-ops (orig handles real sound emission).
+// In test mode v2 sound calls are no-ops (orig handles real sound emission).
 // ============================================================================
 static std::map<uint16_t, uint32_t> v2_chunk_sizes_by_seg;
 static int v2_id_music = 0;  // 0 = no music (matches handle convention: 0/0xFFFF reserved)
@@ -1383,7 +1383,7 @@ static uint8_t* v2_resolve_snd_seg(const uint8_t* s, uint16_t seg, uint32_t* out
 
 // orig sub_176bd SDL inline (vikings.exe_seg000.cpp:15900-15915).
 // Plays MUSIC track from segment bx_seg as default sequence (-1).
-// Symmetric with sub_177bb pattern: V2_ONLY → real producer; default mode →
+// Symmetric with sub_177bb pattern: V2_ONLY → real producer; test mode →
 // muted reservation. Both modes use deterministic handle so orig (real) and v2
 // (muted) reserve slots with matching handles → ds:0x990C matches in shadow.
 // v2 music play — native driver chain (fn97 register + timbres + fnAA).
@@ -1440,7 +1440,7 @@ static void v2_music_play_176bd_v2(uint8_t* s, uint16_t bx_seg) {
 // orig sub_177bb SDL inline (vikings.exe_seg000.cpp:15905-15909).
 // Plays SFX/sequence ax_seq from segment ds:0x2E6D (sound bank).
 // Uses deterministic handle from audit infra so DS slot bytes match between
-// orig (real_ds) and v2 (shadow_ds) without copying. In default mode, mute=true
+// orig (real_ds) and v2 (shadow_ds) without copying. In test mode, mute=true
 // so v2 only reserves slot tracking — orig handles real audio output.
 // Returns the deterministic handle.
 extern int play_xmidi_external_with_handle_and_mute(const void* xmidi, uint32_t len, int seq_num,
@@ -1800,7 +1800,7 @@ extern "C" void v2_spec_ors_mirror_10350() {
 }
 
 // Unified input read for inline sub_12352 sites. In V2_ONLY: reads live input_keys
-// via v2_input_intro_mask (handles intro mode word_288ac=0x8000). In default mode:
+// via v2_input_intro_mask (handles intro mode word_288ac=0x8000). In test mode:
 // reads v2_input_snapshot atomic set by orig sub_12352 (synchronized with orig).
 // Without this helper, V2_ONLY sites read v2_input_snapshot=0 → writes shadow[0x3BA]=0
 // → next viking switch/dialog wait sees fake "newly pressed" → double-press bug.
@@ -1828,7 +1828,7 @@ static inline uint16_t v2_input_or(uint8_t* shadow, uint16_t ax_prev) {
 // transformation to the OR'd `ax` value at the read point.
 //
 // Called from:
-//   - seg000.cpp sub_12352 at eip 0x2363 (default mode orig executor)
+//   - seg000.cpp sub_12352 at eip 0x2363 (test mode orig executor)
 //   - v2_vm.cpp v2_phase_pre_vm input read (V2_ONLY mode)
 // Both reach the same read site at most once per frame, so the static
 // `prev_intro_keys` evolves consistently within a single binary.
@@ -3066,7 +3066,7 @@ static void v2_vsync_wait_10130(uint8_t* s) {
         // generates the ticks). Tiny yield keeps the box responsive.
         SDL_Delay(0);
 #else
-        SDL_Delay(4);                 // default mode: faster verify
+        SDL_Delay(4);                 // test mode: faster verify
 #endif
         v2_render_callback();         // mirrors orig sub_10130 → sub_1797b call
     }
@@ -7989,7 +7989,7 @@ static void v2_music_load_1775d_helper(uint8_t* s) {
 //   17517-17525: PUSHF; CLI; CALLF sub_1C7BD(0x3E8, 0, ds:0x990C, ds:0x98E6); POPF
 //   17528: RETN
 // IMPORTANT: orig seg000 path ALREADY calls fade_music(1000) at line 16295 (m2c-port
-// addition INLINED into orig path). So in default mode, fade_music runs from orig.
+// addition INLINED into orig path). So in test mode, fade_music runs from orig.
 // v2 mirror MUST NOT also call fade_music — would cause double-fade (volume reset
 // glitch). The #ifdef V2_ONLY guards v2 from calling fade_music when orig also will.
 static void v2_music_fade_178f1_helper(const uint8_t* s) {
@@ -9548,7 +9548,7 @@ static void v2_game_loop_pre_vm(uint8_t* shadow, uint16_t ds_val) {
     // sub_12352: input processing. Exact replica.
     // ax = 0
     // sub_12352 mirror:
-    // - DEFAULT MODE: orig sub_12352 ran in main thread BEFORE PRE_VM signal,
+    // - TEST MODE: orig sub_12352 ran in main thread BEFORE PRE_VM signal,
     //   fired V2_PHASE_INPUT_UPDATE → v2_run_input_update already called
     //   v2_read_input_12352_iter on shadow. shadow_28896/8/A is current. Skip here.
     // - V2_ONLY: orig isn't running → no INPUT_UPDATE signal → drive ourselves.
@@ -9643,7 +9643,7 @@ static void v2_game_loop_pre_vm(uint8_t* shadow, uint16_t ds_val) {
 
     // sub_1041c: password / quit-prompt screen (Start button trigger).
     //
-    // Default mode: orig signals V2_PHASE_PW_ENTRY → v2_run_pw_entry, each
+    // Test mode: orig signals V2_PHASE_PW_ENTRY → v2_run_pw_entry, each
     // V2_PHASE_TRANSITION_TEXT iter → v2_run_transition_text_loop, finally
     // V2_PHASE_PW_EXIT → v2_run_pw_exit. All three call v2_pw_pre_loop /
     // v2_pw_iter_body / v2_pw_post_loop helpers — same code as V2_ONLY below.
@@ -9682,7 +9682,7 @@ static void v2_game_loop_pre_vm(uint8_t* shadow, uint16_t ds_val) {
 
     // sub_10138: check word_28814 (DS:0x0334) for button presses.
     // bit 4 (mask 0x4): viking switch screen — blocking loop loc_10169.
-    //   Default mode: handled by V2_PHASE_VIKING_SWITCH_LOOP barrier (orig signals
+    //   Test mode: handled by V2_PHASE_VIKING_SWITCH_LOOP barrier (orig signals
     //                 per-iter from seg000 loc_10169, v2_run_viking_switch_loop runs
     //                 same iter on shadow). pre_vm does NOTHING here — if shadow has
     //                 bit 4 but real doesn't, that's a divergence to surface for fix.
@@ -9790,7 +9790,7 @@ static void v2_game_loop_pre_vm(uint8_t* shadow, uint16_t ds_val) {
     }
 
     // sub_11ba5: pause handler.
-    //   Default mode: handled by V2_PHASE_PAUSE_LOOP barrier (orig signals from
+    //   Test mode: handled by V2_PHASE_PAUSE_LOOP barrier (orig signals from
     //                 seg000 sub_11ba5, v2_run_pause_loop runs same iter on shadow).
     //                 pre_vm does NOTHING here.
     //   V2_ONLY: orig not running → no signal. v2 drives full pause loop itself
@@ -10273,7 +10273,7 @@ static const char* v2_cc_names[CC_COUNT] = {
 };
 // V2_CC_TRACE=<id>: per-hit stream for one counter (legacy format "O %u fN").
 // V2_CC_TRACE=all: per-hit stream for EVERY counter ("O<id> %u fN") — the M2
-// golden-trace channel: a default-mode run and a V2_ONLY run of the same
+// golden-trace channel: a test-mode run and a V2_ONLY run of the same
 // replay must produce identical V-streams (tests/m2_golden_compare.py).
 static int v2_cc_trace_id() {
     static int id = -2;
@@ -21246,7 +21246,7 @@ void v2_phase_frame_begin(uint16_t ds_val) {
     }
     // v2_input_snapshot set by seg000 right after orig sub_12352 reads input_keys
     // SDL spec-key snapshot — covers V2_ONLY where seg000 sub_12352 doesn't run.
-    // In default mode seg000 also takes snapshot at sub_12352 line 5623; both
+    // In test mode seg000 also takes snapshot at sub_12352 line 5623; both
     // paths update the same buffer so worst case it's refreshed twice/frame.
     { extern void sdl_spec_snapshot_take(); sdl_spec_snapshot_take(); }
     // SFX stale-slot cleanup (fix #126 elevator sound regression).
@@ -21269,7 +21269,7 @@ void v2_phase_frame_begin(uint16_t ds_val) {
     // with same is_handle_active result → byte-identical mirror preserved.
     // #79: the SDL-pool stale-slot machinery is gone — the native driver owns
     // slot reuse (fnAE status + fn98 release, the DOS mechanism). Only the
-    // DS-vs-DS symmetry check remains in default mode.
+    // DS-vs-DS symmetry check remains in test mode.
 #ifndef V2_ONLY
     {
         extern void v2_verify_audio_slots_symmetry(uint8_t*, uint8_t*, int);
@@ -22066,18 +22066,18 @@ void v2_phase_post_flip3(uint16_t ds_val) {
     //   PART A: SDL spec_state OR's (mirrors orig seg000 lines 2560-2563 SDL
     //   adapter that writes byte_31690/31684/31679/3165C from sdl_spec_get).
     //   These must run in BOTH default and V2_ONLY modes — orig writes them
-    //   to real DS in default mode, shadow MUST mirror to avoid divergence
+    //   to real DS in test mode, shadow MUST mirror to avoid divergence
     //   at ds:0x91B0/0x91A4/0x9199/0x917C. Gated by word_2A66F == 0 (matches
     //   orig sub_10350 entry test at eip 0x350; if cmd queue non-empty, skip).
     //
     //   PART B: F10/ALT+X/ALT+Q detection + inline sub_103ca/sub_104a1 path.
-    //   ONLY run in V2_ONLY mode. In default mode orig drives this via main
+    //   ONLY run in V2_ONLY mode. In test mode orig drives this via main
     //   loop sub_10350 → sub_103ca → sub_104a1 → PW_ENTRY signal mirrored
     //   by v2_pw_pre_loop. Inline duplicate in default would write shadow
     //   states that orig didn't (or differently) → DS-DIFF cascade.
     if (v2gs(s).cmd_write() == 0) {
 #ifdef V2_ONLY
-        // PART A (V2_ONLY only): direct snap mirror. In default mode the inline
+        // PART A (V2_ONLY only): direct snap mirror. In test mode the inline
         // v2_spec_ors_mirror_10350 (called from orig sub_10350) is the sole
         // shadow updater for these bytes — it shares orig's word_2a66f gate, so
         // shadow stays in lockstep with real (both update or both stay sticky
@@ -22163,7 +22163,7 @@ void v2_phase_post_flip3(uint16_t ds_val) {
 #endif  // V2_ONLY closes PART B (F10 → canonical pw helpers)
     }  // closes if (*(uint16_t*)(s + 0x218F) == 0) — gating for spec ORs and PART B
     // sub_1086f (orig eip 0xE7): drives shadow cmd queue dispatch.
-    // Default mode: per-iter PRE_SUB_1086F barrier fires from orig sub_1086f
+    // Test mode: per-iter PRE_SUB_1086F barrier fires from orig sub_1086f
     //   loop top (seg000.cpp eip 0x873), v2 mirror runs one iter at a time.
     // V2_ONLY: orig main loop doesn't exist → mirror sub_1086f's outer loop
     //   locally. Each iter calls v2_cmd_loop_1086f which does one cmd
@@ -22199,7 +22199,7 @@ void v2_phase_post_flip3(uint16_t ds_val) {
     //   PRE_SUB_1086F barriers (fired by orig during sub_1086f) — v2 mirrors per cmd
     //   v2_phase_post_flip3 ENTRY (POST_FLIP3 signal handler) — body runs:
     //     word_30C14 = 0, sub_108c8 mirror, sub_10350 mirror (PART A/B V2_ONLY only),
-    //     V2_ONLY drain loop (skipped in default mode — orig drove via barriers).
+    //     V2_ONLY drain loop (skipped in test mode — orig drove via barriers).
     //
     // After body completes, v2 shadow = orig state at orig line 2097 (POST_FLIP3_END snap).
     // Compare here, NOT at body entry (where shadow != either snap cleanly).
@@ -22317,7 +22317,7 @@ static void v2_read_input_12352_iter(uint8_t* shadow) {
 #ifdef V2_ONLY
         // Seq channel: in V2_ONLY this mirror IS the world's only 12352 read —
         // count it and drain/inject recorder events here, before the exchange
-        // (default mode does this in orig sub_12352; doing it in both would
+        // (test mode does this in orig sub_12352; doing it in both would
         // double-count). Also fixes V2_ONLY recording, which previously had
         // no drain site at all (pending events flushed only at shutdown).
         // (file-scope extern "C" decl near v2_replay_drain_to_state — the
@@ -22327,7 +22327,7 @@ static void v2_read_input_12352_iter(uint8_t* shadow) {
         new_kd = sdl_input_press_edges.exchange(0, std::memory_order_relaxed);
         g_last_sub12352_new_keydowns = new_kd;
 #else
-        // default mode: orig sub_12352 drained press_edges and stashed the
+        // test mode: orig sub_12352 drained press_edges and stashed the
         // value — shadow must force the SAME bits on its own prev copy.
         new_kd = g_last_sub12352_new_keydowns;
 #endif
@@ -22356,7 +22356,7 @@ static void v2_read_input_12352_iter(uint8_t* shadow) {
     // (#81) tap delivery — same OR as the orig call site (normal mode only).
     if (w288ac != 0x8000) ax |= new_kd;
 #else
-    // Default mode: orig sub_12352 already folded the replay word (word_30bbc /
+    // Test mode: orig sub_12352 already folded the replay word (word_30bbc /
     // 0x86DC), word_30bbe (0x86DE) and intro_mask(input_keys) into its final ax
     // and latched it verbatim into v2_input_snapshot (seg000 eip 0x2367, the
     // instruction right before `MOV word_28896, ax`). So v2_input_snapshot IS
@@ -22410,7 +22410,7 @@ static void v2_read_input_12352_iter(uint8_t* shadow) {
 // frame so the steps couldn't be replayed apart. (2) HEADLESS: enforce --max-frames
 // here too, so a wait-loop that has run out of replay input still terminates at the
 // budget instead of spinning forever (the main-loop max-frames check is never
-// reached while blocked). Called by BOTH the default-mode phase handlers and the
+// reached while blocked). Called by BOTH the test-mode phase handlers and the
 // V2_ONLY inline spins → record and replay step through menus with identical
 // per-iteration counts.
 extern "C" int v2_replay_drain_to_state(void);  // №52: drain in blocking loops
@@ -22440,7 +22440,7 @@ bool v2_run_viking_switch_loop(uint8_t* shadow) {
     // Clear word_28814 bit 4 (idempotent — orig does AND ~4 once at loc_10164)
     v2gs(shadow).frame_flags(v2gs(shadow).frame_flags() & (0xFFFB));
 
-    // sub_12352 (input): default mode → INPUT_UPDATE signal already updated.
+    // sub_12352 (input): test mode → INPUT_UPDATE signal already updated.
     // V2_ONLY → drive ourselves.
 #ifdef V2_ONLY
     v2_read_input_12352_iter(shadow);
@@ -22697,7 +22697,7 @@ void v2_cmd_loop_1086f(uint8_t* s) {
     //   bit 4 (val=4) → loc_10164: AND ~4, fall through to loc_10169 viking switch wait
     //   bit 0 (val=1) → loc_10151: TRANSITION (sub_1774F + sub_14207 + sub_11080)
     //   bit 1 (val=2) → loc_1014b: word_2AAA9=0x25, fall through to loc_10151
-    // Default mode: orig main thread blocks in loc_10169 inner loop (signaling
+    // Test mode: orig main thread blocks in loc_10169 inner loop (signaling
     // V2_PHASE_VIKING_SWITCH_LOOP per iter to v2). v2 mirror just mirrors AND of
     // bit 2 and waits for next per-iter signal at top of sub_1086f loop.
     // V2_ONLY mode: orig main thread doesn't exist → v2 mirror must loop the
@@ -23306,7 +23306,7 @@ void v2_run_pause_entry(uint8_t* shadow) {
 //   → sub_108c8 (sound) → ESC check → POPF/JNC loop
 // v2 mirror: sync input + selector blink DS writes. sub_11cbb is complex
 // (200+ lines) — mirror exists in v2_game_loop_pre_vm under #if 0, full
-// per-iter version is TODO. For default mode + simple pause (just blink
+// per-iter version is TODO. For test mode + simple pause (just blink
 // + ESC exit), this is enough.
 // Returns true if pause loop should EXIT (cbb_exit from sub_11cbb OR transition+ESC).
 // orig sub_11ba5 loc_11c1f exit: CF set by sub_11cbb STC OR (word_288AC&0x8000 AND
@@ -23317,7 +23317,7 @@ void v2_run_pause_loop(uint8_t* shadow) {
 }
 bool v2_run_pause_loop_iter_exit(uint8_t* shadow) {
     v2_blocking_loop_tick();  // #180: counter + HEADLESS max-frames (see v2_run_viking_switch_loop)
-    // Input read: default mode → INPUT_UPDATE signal already updated.
+    // Input read: test mode → INPUT_UPDATE signal already updated.
     // V2_ONLY → drive ourselves.
 #ifdef V2_ONLY
     v2_read_input_12352_iter(shadow);
@@ -23376,7 +23376,7 @@ bool v2_run_pause_loop_iter_exit(uint8_t* shadow) {
 //   4. POST-LOOP cleanup (post-loop sub_12352 + word_28814 |= 2 if Y +
 //      double render pass + sub_12816 glyph clear + optional sub_14590)
 //
-// Each step has shared helper. Default mode: orig signals PW_ENTRY (step 2),
+// Each step has shared helper. Test mode: orig signals PW_ENTRY (step 2),
 // TRANSITION_TEXT per iter (step 3), PW_EXIT (step 4) and v2 mirrors. V2_ONLY:
 // v2_phase_pre_vm calls all three inline (no orig signals). NO logic
 // duplication — only the dispatch differs (signals vs inline spin).
@@ -23576,7 +23576,7 @@ static bool v2_pw_iter_body(uint8_t* shadow) {
     v2_vsync_wait_10130(shadow);
     v2gs(shadow).vsync_count(1);
     v2_vsync_wait_10130(shadow);
-    // sub_12352 (input): default mode → INPUT_UPDATE signal already updated
+    // sub_12352 (input): test mode → INPUT_UPDATE signal already updated
     // shadow_28896/8/A. V2_ONLY → drive ourselves.
 #ifdef V2_ONLY
     v2_read_input_12352_iter(shadow);
@@ -23599,7 +23599,7 @@ static bool v2_pw_iter_body(uint8_t* shadow) {
 static void v2_pw_post_loop(uint8_t* shadow) {
     uint16_t exit_ax = v2_pw_last_exit_valid ? v2_pw_last_exit_ax : 1;
     // After loop: sub_12352 (one more input read).
-    // Default mode → INPUT_UPDATE signal already updated shadow input.
+    // Test mode → INPUT_UPDATE signal already updated shadow input.
     // V2_ONLY → drive ourselves.
 #ifdef V2_ONLY
     v2_read_input_12352_iter(shadow);

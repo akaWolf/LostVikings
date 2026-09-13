@@ -490,7 +490,7 @@ void render_thread_proc_v2(void* _state)
           }
       }
 #endif
-      // НЕ вызываем SDL_PollEvent (default mode) - события обрабатываются только в первом окне
+      // НЕ вызываем SDL_PollEvent (test mode) - события обрабатываются только в первом окне
       // Это избегает конфликтов с обработкой событий
 
       render_callback_v2(_state);  // snapshot drawBuffer→stableBuffer + sprite replay

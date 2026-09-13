@@ -15,7 +15,7 @@
 //
 // g_v2_coop_players == 1 (the default, and every replay/scenario without a
 // `# coop N` header) leaves all of this inert: the game is the byte-exact
-// original. Co-op needs V2_ONLY (the default mode mirrors the DOS engine,
+// original. Co-op needs V2_ONLY (the test mode mirrors the DOS engine,
 // which has no second player).
 #pragma once
 #include <cstddef>

@@ -48,7 +48,7 @@ pointing at a single suspect area.
 
 ## Notes
 
-- Recording happens in **default mode**, which runs orig + v2 in lockstep at
+- Recording happens in **test mode**, which runs orig + v2 in lockstep at
   ~9-18 fps. The `.inp` timestamps are frame numbers (`v2_dbg_pre_vm_iter`),
   not wall-clock, so the replay reproduces identically under headless.
 - If a scenario needs the debug cheats (F4/F5/F6) record with

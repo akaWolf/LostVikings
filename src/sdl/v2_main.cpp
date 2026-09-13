@@ -2,7 +2,7 @@
 // No m2c-decompiled code is linked. v2 phase functions handle game on shadow DS.
 
 // (VI.4) Windows: SDL2 renames main to SDL_main and expects its own WinMain
-// bootstrap; the default-mode entry (asm.cpp) never includes SDL.h before
+// bootstrap; the test-mode entry (asm.cpp) never includes SDL.h before
 // main so it dodges this — V2_ONLY must opt out explicitly.
 #define SDL_MAIN_HANDLED
 #include "v2_midi.h"   // UX stage 11: V2_MIDI_DUMP is written before the _exit paths
@@ -49,7 +49,7 @@ namespace m2c {
     _STATE* k_state = &_the_state;
 }
 
-// Static EXE data: exe_static.bin is dumped from default-mode m2c::m[0..0x29F00]
+// Static EXE data: exe_static.bin is dumped from test-mode m2c::m[0..0x29F00]
 // after the C++ Initializer in vikings.exe.cpp populates it. Without this data,
 // seg001 text/menu region (+0x9480) is zero, sub_12529 reads width=0, sub_12388
 // LOOPs cx=0xFFFE = 65k iterations → hang.

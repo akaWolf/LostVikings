@@ -357,7 +357,7 @@ extern "C" void sdl_int9_note_keydown(int sdl_scancode) {
 // sub_10138 viking-switch wait, sub_104A1 transition-text) where many
 // sub_12352 calls fire within a single main game frame without an
 // intervening FRAME_BEGIN. orig drains in seg000 sub_12352, stashes
-// the value here, and v2_read_input_12352_iter reads it (default mode) or drains
+// the value here, and v2_read_input_12352_iter reads it (test mode) or drains
 // itself (V2_ONLY). Atomically updated by game thread; v2 thread reads after
 // INPUT_UPDATE signal-handler barrier.
 uint16_t g_last_sub12352_new_keydowns = 0;

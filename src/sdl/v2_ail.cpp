@@ -32,7 +32,7 @@
 //
 // Activation: V2_NATIVE_AIL=1 and V2_ONLY build — in default (verify) mode
 // the orig world plays SDL adlmidi and v2 mirrors muted slots; running the
-// native driver there would desync shadow DS from real DS. The default-mode
+// native driver there would desync shadow DS from real DS. The test-mode
 // symmetric design (a second interpreter instance fed from real memory) is a
 // later #61 stage.
 
@@ -247,7 +247,7 @@ static double   g_tick_hz = 0.0;
 
 // ---------------------------------------------------------------------------
 // Silent SBPro port model — for the world that must NOT reach the audible
-// chip (the shadow instance in default mode). Same latch+timer-status model
+// chip (the shadow instance in test mode). Same latch+timer-status model
 // the smoke rig validated; writes go nowhere but the detect probe still
 // reads its own timer bits back.
 // ---------------------------------------------------------------------------
@@ -348,7 +348,7 @@ extern "C" int v2_ail_native_on() {
 // seg002 ret_d4f_a53 callback model: returns cs:word_1BBF2 — the PIT divisor
 // snapshot seg002 keeps for the AIL timer (the LIVE m2c install wrapper
 // sub_1c0b7 writes it when it programs the PIT with the driver's rate).
-// (#82b) default mode returns the REAL cell byte-for-byte: with the real
+// (#82b) test mode returns the REAL cell byte-for-byte: with the real
 // instance running the arena blob (code_para fix) the driver actually SEES
 // the callback ptr sub_1c537 installed at [2957] and calls here for its
 // tempo bookkeeping — the old 0x7FFF constant made music run ~3.4x slow
@@ -385,7 +385,7 @@ extern "C" int v2_ail_boot(uint8_t* s, uint8_t* snd, uint32_t snd_size,
 
     // The interpreter works on its own copies of blob+bank (code arena); far
     // pointers arriving from the game resolve into the mapped REAL windows.
-    // Instance 0 = shadow world. Audible only in V2_ONLY; in default mode the
+    // Instance 0 = shadow world. Audible only in V2_ONLY; in test mode the
     // REAL world (instance 1, fed through the sub_1bec2 bridge) owns the
     // audible chip and the shadow stays on the silent model.
     v2_ail_interp_use(0);
@@ -910,7 +910,7 @@ extern "C" uint16_t v2_ail_pit_cb_value(void) { return v2_ail_pit_callback(); } 
 // timer tick — the seg002 INT8 slot calls the blob's fn67 handler. Ticks BOTH
 // live instances back-to-back under one lock: both worlds see the identical
 // tick count between any pair of mirrored chain calls (frame-barrier pacing
-// in default mode), which keeps their driver state byte-equal.
+// in test mode), which keeps their driver state byte-equal.
 // ---------------------------------------------------------------------------
 extern "C" void v2_ail_tick() {
     uint16_t a[1] = { 0 };

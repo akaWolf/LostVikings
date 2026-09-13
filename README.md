@@ -71,7 +71,7 @@ Place `DATA.DAT` next to the `vikings` binary and launch.
 
 The bundled `ds_static.bin` / `exe_static.bin` snapshots are not a
 DATA.DAT substitute — they hold the static EXE image (initial DS, the
-seg001 text/menu data, lookup tables). Default mode reconstructs this
+seg001 text/menu data, lookup tables). Test mode reconstructs this
 from `m2c::m[]` populated by C++ static initialisers; V2_ONLY skips
 m2c entirely and loads it from the snapshot files at startup. Game
 content (levels, sprites, sound) still comes from `DATA.DAT` in both
@@ -149,7 +149,7 @@ Ctrl+S = save, Ctrl+Q = quit.
 
 ## Modes
 
-### Default mode
+### Test mode
 
 Runs the m2c-decompiled original VM and the **v2 mirror** in lockstep.
 Two SDL windows open — one rendered by the orig path, one by the v2 path. The
@@ -162,7 +162,7 @@ development mode.
 Builds only the v2 reimplementation. m2c-decompiled sources are excluded
 from the build entirely. Faster compile, roughly half the binary size.
 Still needs `DATA.DAT` for game content; the bundled `*_static.bin`
-files supply the static EXE image that default mode gets from m2c's C++
+files supply the static EXE image that test mode gets from m2c's C++
 initialisers. Useful for fast iteration on the v2 code path and as the
 eventual delivery vehicle once feature parity is complete.
 
@@ -289,8 +289,8 @@ The three entry points have different surfaces.
 
 | Flag | Description |
 | --- | --- |
-| `--debug`                | same as default mode |
-| `--keymap=<path>`        | same as default mode |
+| `--debug`                | same as test mode |
+| `--keymap=<path>`        | same as test mode |
 | `--record-input=<file>`  | record SDL input to a frame-based `.inp` log |
 | `--replay-input=<file>`  | replay an `.inp` log instead of live keyboard |
 | `--replay-strict`        | ignore live keyboard even after the replay queue is exhausted |
@@ -402,7 +402,7 @@ More detail: `tests/README.md` and `HEADLESS_MODE_ANALYSIS.md`.
 `.github/workflows/build.yml` runs on every push (any branch) and every
 PR, producing the six artifacts described above. The jobs: `test`
 (x86_64 and arm64: the HEADLESS build, `tests/smoke.sh`, the scenario
-replays), `linux` (a 2×2 matrix: x86_64 and arm64, default mode and
+replays), `linux` (a 2×2 matrix: x86_64 and arm64, test mode and
 V2_ONLY — the portable build: ubuntu-22.04 runners for the glibc 2.35
 floor, SDL2 2.30.10 built from source with its dlopen'ed backends and
 cached, clang 18 from apt.llvm.org, and a check that glibc is the only
@@ -443,7 +443,7 @@ is masked in logs by GitHub Actions automatically.
 
 ```
 src/
-  aux/asm.cpp             entry point for default mode
+  aux/asm.cpp             entry point for test mode
   vikings.exe*.cpp        m2c-decompiled DOS executable (do not hand-edit)
   _data.cpp               m2c-decompiled DS image
   sdl/v2_main.cpp         entry point for V2_ONLY mode
