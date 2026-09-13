@@ -8,21 +8,30 @@ Vikings strings (UX stage 6). Sources (read-only, /mnt/win):
   assets/strings/locale.strings the collection's string container: 13 language
                                 pools (deDE enUS esES esMX frFR itIT jaJP koKR
                                 plPL ptBR ruRU zhCN zhTW — the file order), each
-                                pool = a hash index we do not decode + the
-                                strings of EVERY collection title as one
-                                NUL-separated run in a shared key order
+                                pool = a table of 8-byte (u32, u32) entries we
+                                do not need, then the strings of EVERY
+                                collection title as one NUL-separated run —
+                                exactly the directory's count (1998) of them,
+                                in ONE key order shared by all 13 pools
 
-The per-language runs are in the same key order, minus keys a language lacks,
-so a language string is found by aligning its run with the English run:
-anchors = identical strings and identical `{placeholder}` sets (monotone via
-the longest increasing subsequence), the intervals between anchors 1:1 when
-their lengths agree and by a small shape alignment (line count, ending
-punctuation, digits, emptiness, length class) otherwise. The LV keys are
-located in the English run by their English text, then mapped onto the 390
-PC EXE strings (assets/texts_exe.json) by normalised text — the PC hints
-name PC keys ('S', 'TAB', 'CTRL'/'INS') where the BAC uses `{action_*}`
-placeholders, so those go through a placeholder-blind word match and the
-placeholders are rendered with the PC key names.
+The directory at 0x8008 (56 u32: 6 words, then 4 per pool — start, count,
+end, 5) places every pool; the run starts where the table ends, and the
+table's end is exact: a table word is an offset below the pool's size while
+text bytes are >= 0x20 (a word >= 0x20202020). Every pool holds the count's
+strings in the same key order (verified: every string unique on both sides
+and identical in two languages sits at the same index in all 13 pools), so a
+language string is the entry at the English string's index — no alignment.
+Anything past the count is the next pool's head (its locale tag and table),
+which an earlier reading of the file took for strings: the table's NUL-split
+bytes came out as thousands of empty and one-byte "strings" in front of and
+behind the run, and the alignment they forced put the level-1 exit line
+(AUTO_DIALOG_A, PC 79) onto an empty one in ru/ko and onto table bytes in
+ja/zh-CN — an empty dialogue box in the game. The LV keys are located in the
+English run by their English text, then mapped onto the 390 PC EXE strings
+(assets/texts_exe.json) by normalised text — the PC hints name PC keys
+('S', 'TAB', 'CTRL'/'INS') where the BAC uses `{action_*}` placeholders, so
+those go through a placeholder-blind word match and the placeholders are
+rendered with the PC key names.
 
   python3 tools/assets/bac_strings.py [--out tools/assets/bac_lv_locale.json]
 """
@@ -52,23 +61,29 @@ PLACEHOLDER_RE = re.compile(r"\{([a-z_0-9]+)\}")
 
 
 def read_pools(path=os.path.join(BAC, "strings", "locale.strings")):
+    """-> 13 lists of the directory's count of strings each, one key order."""
     f = open(path, "rb").read()
     dirw = struct.unpack("<56I", f[0x8008:0x8008 + 224])
     base = 0x8008 + 224
     starts = [base + dirw[6 + k * 4] for k in range(13)] + [len(f)]
+    counts = [dirw[7 + k * 4] for k in range(13)]
     pools = []
     for k in range(13):
-        o, t1 = starts[k], starts[k + 1]
-        m, prev = 0, -1
-        while True:                                   # the index: ascending first words
-            a, b = struct.unpack("<II", f[o + 8 * m:o + 8 * m + 8])
-            if a < prev or b > 0x2000:
-                break
-            prev, m = a, m + 1
-        parts = f[o + 8 * m:t1].split(b"\x00")
-        while parts and parts[-1] == b"":
-            parts.pop()
-        pools.append([p.decode("utf-8", "replace") for p in parts])
+        o, t1, count = starts[k], starts[k + 1], counts[k]
+        size = t1 - o
+        m = 0                                         # the table: 8-byte entries whose first word is an offset below the pool's size
+        while struct.unpack("<I", f[o + 8 * m:o + 8 * m + 4])[0] < size:
+            m += 1
+        parts = f[o + 8 * m:t1].split(b"\x00")[:count]
+        if len(parts) != count:
+            raise ValueError(f"{path}: pool {k} ({LANGS[k]}) holds {len(parts)} strings, the directory says {count}")
+        strings = [p.decode("utf-8") for p in parts]   # strict: the run is UTF-8 text; a decode error means the table's end was missed
+        bad = [s for s in strings if any(ord(c) < 0x20 and c not in "\n\r\t" for c in s)]
+        if bad:
+            raise ValueError(f"{path}: pool {k} ({LANGS[k]}) carries {len(bad)} strings with control bytes: {bad[:3]!r}")
+        pools.append(strings)
+    if len({len(p) for p in pools}) != 1:
+        raise ValueError(f"{path}: the pools differ in size: {[len(p) for p in pools]}")
     return pools
 
 
@@ -83,93 +98,15 @@ def words_blind(s):
     return {w for w in re.findall(r"[A-Z]{2,}", s)}
 
 
-def shape(s):
-    return (s.count("\n"), s.strip() == "", tuple(re.findall(r"\d+", s)),
-            tuple(sorted(PLACEHOLDER_RE.findall(s))), s.strip()[-1:] in ("?", "!", "."),
-            min(len(s) // 12, 6))
-
-
-def lis_pairs(pairs):
-    """Longest monotone chain (both coordinates increasing) of (i, j) pairs."""
-    import bisect
-    pairs = sorted(set(pairs))
-    tails, prev, idx = [], [-1] * len(pairs), []
-    for n, (i, j) in enumerate(pairs):
-        p = bisect.bisect_left([pairs[t][1] for t in tails], j)
-        if p and pairs[tails[p - 1]][0] >= i:       # keep strictly increasing i
-            continue
-        if p == len(tails):
-            tails.append(n)
-        else:
-            tails[p] = n
-        prev[n] = tails[p - 1] if p else -1
-    out, n = [], tails[-1] if tails else -1
-    while n >= 0:
-        out.append(pairs[n]); n = prev[n]
-    return out[::-1]
-
-
-def align(E, P, band=1500):
-    """i (English index) -> j (P index) or None."""
-    n, m = len(E), len(P)
-    # 1. anchors: identical non-trivial strings, unique on both sides
+def check_same_order(E, P, code):
+    """The pools share one key order: a string unique in both must sit at the
+    same index (the placeholders, the names, the untranslated lines)."""
     from collections import Counter
     ce, cp = Counter(E), Counter(P)
-    pos_p = {}
-    for j, s in enumerate(P):
-        if cp[s] == 1:
-            pos_p[s] = j
-    pairs = [(i, pos_p[s]) for i, s in enumerate(E) if ce[s] == 1 and s in pos_p and len(s.strip()) >= 2
-             and abs(pos_p[s] - i) <= band]
-    # identical placeholder sets (unique on both sides) count as anchors too
-    def phkey(s):
-        t = tuple(sorted(PLACEHOLDER_RE.findall(s)))
-        return (t, s.count("\n")) if t else None
-    ke = Counter(phkey(s) for s in E); kp = Counter(phkey(s) for s in P)
-    pos_pk = {phkey(s): j for j, s in enumerate(P) if phkey(s) and kp[phkey(s)] == 1}
-    pairs += [(i, pos_pk[phkey(s)]) for i, s in enumerate(E) if phkey(s) and ke[phkey(s)] == 1
-              and phkey(s) in pos_pk and abs(pos_pk[phkey(s)] - i) <= band]
-    anchors = lis_pairs(pairs)
-    anchors = [(-1, -1)] + anchors + [(n, m)]
-    out = [None] * n
-    for (i0, j0), (i1, j1) in zip(anchors, anchors[1:]):
-        if i1 >= 0 and i1 < n and j1 >= 0 and j1 < m:
-            out[i1] = j1
-        li, lj = i1 - i0 - 1, j1 - j0 - 1
-        if li <= 0:
-            continue
-        if li == lj:
-            for k in range(li):
-                out[i0 + 1 + k] = j0 + 1 + k
-            continue
-        # small shape alignment (Needleman-Wunsch), intervals are short
-        A = [shape(E[i0 + 1 + k]) for k in range(li)]
-        B = [shape(P[j0 + 1 + k]) for k in range(lj)]
-        if li * lj > 250000:                          # a runaway interval: fall back to 1:1 prefix
-            for k in range(min(li, lj)):
-                out[i0 + 1 + k] = j0 + 1 + k
-            continue
-        def sim(a, b):
-            return (3 * (a[0] == b[0]) + 2 * (a[1] == b[1] and a[1]) + 2 * (a[2] == b[2] and bool(a[2]))
-                    + 3 * (a[3] == b[3] and bool(a[3])) + (a[4] == b[4]) + (a[5] == b[5]) - 2)
-        GAP = -2
-        H = [[0] * (lj + 1) for _ in range(li + 1)]
-        for x in range(1, li + 1):
-            H[x][0] = x * GAP
-        for y in range(1, lj + 1):
-            H[0][y] = y * GAP
-        for x in range(1, li + 1):
-            for y in range(1, lj + 1):
-                H[x][y] = max(H[x - 1][y - 1] + sim(A[x - 1], B[y - 1]), H[x - 1][y] + GAP, H[x][y - 1] + GAP)
-        x, y = li, lj
-        while x > 0 and y > 0:
-            if H[x][y] == H[x - 1][y - 1] + sim(A[x - 1], B[y - 1]):
-                out[i0 + x] = j0 + y; x -= 1; y -= 1
-            elif H[x][y] == H[x - 1][y] + GAP:
-                x -= 1
-            else:
-                y -= 1
-    return out
+    pos_p = {s: j for j, s in enumerate(P) if cp[s] == 1}
+    moved = [(i, pos_p[s]) for i, s in enumerate(E) if ce[s] == 1 and s in pos_p and len(s.strip()) >= 2 and pos_p[s] != i]
+    if moved:
+        raise ValueError(f"locale.strings: the {code} pool is not in the English key order: {moved[:5]}")
 
 
 def build(locale_path, keys_path, texts_path, out_path):
@@ -208,16 +145,23 @@ def build(locale_path, keys_path, texts_path, out_path):
             name_idx[e["name"]] = best
     still = [e["name"] for e in js if e["name"] not in name_idx]
     print(f"LV keys located in the English run: {len(name_idx)}/{len(js)}; not located: {still}")
-    # every language
+    # every language: the entry at the English string's index (one key order, read_pools)
     maps = {}
     for k, code in enumerate(LANGS):
-        maps[code] = list(range(len(E))) if code == "en" else align(E, pools[k])
+        check_same_order(E, pools[k], code)
+        maps[code] = list(range(len(E)))
     by_name = {}
     for name, i in name_idx.items():
         by_name[name] = {}
         for k, code in enumerate(LANGS):
             j = maps[code][i]
             by_name[name][code] = pools[k][j] if j is not None and j < len(pools[k]) else None
+    # no LV key may come out blank: an English line with an empty counterpart means the
+    # pools were read wrong (an empty record draws an empty dialogue box in the game)
+    blank = [(n, code) for n in by_name for code in LANGS
+             if E[name_idx[n]].strip() and (by_name[n][code] is None or not by_name[n][code].strip())]
+    if blank:
+        raise ValueError(f"locale.strings: {len(blank)} LV keys without a translation: {blank[:6]}")
     # quality: line-count agreement with English over the LV keys
     for code in LANGS:
         vals = [(E[name_idx[n]], by_name[n][code]) for n in by_name if by_name[n][code] is not None]
