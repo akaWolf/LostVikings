@@ -31,6 +31,7 @@
 #include "v2_coop.h"        // UX stage 8 step 2: the local player's camera
 #include <SDL2/SDL.h>
 #include <atomic>
+#include <cmath>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
@@ -208,13 +209,45 @@ bool v2_smooth_render(uint8_t* out) {
             wr16(g_work, DS_SCROLL_ROW, (int16_t)((uint16_t)vy >> 3));
         }
     }
-    // sub-sprites: world positions of the slots active in both snapshots
+    // sub-sprites: the slots active in both snapshots move by their OWNER's
+    // motion. A sub-sprite's world position is the object's position plus the
+    // animation frame's own offset, and that offset changes from frame to
+    // frame: Olaf's walk keeps the object at 6 px per tick while the sprite
+    // steps 3, 6, 11, 4 ... (the waddle of the original). Lerping the sprite
+    // position spread those offset jumps over the tick — a sway on top of the
+    // motion, seen as a jerky walk. So the object's step (OBJ_WORLD_X/Y of the
+    // slot whose sub-sprite range holds the sprite) is what is interpolated:
+    // the sprite shows its newest frame at its newest offset, moved back by
+    // the part of the object's step not yet elapsed — the frame offset lands
+    // whole at the tick, as on the DOS screen, the motion glides. A sprite
+    // without an owner in both snapshots keeps the plain lerp of its position.
+    static int16_t owner_c[0x100], owner_p[0x100];
+    memset(owner_c, 0xFF, sizeof owner_c); memset(owner_p, 0xFF, sizeof owner_p);
+    for (int side = 0; side < 2; side++) {
+        const Snap& S = side ? P : C; int16_t* owner = side ? owner_p : owner_c;
+        for (uint32_t obj = 0; obj <= 0xFE; obj += 2) {
+            if (!rd16(S.ds, obj + OBJ_SUB_COUNT)) continue;
+            const uint16_t s0 = (uint16_t)rd16(S.ds, obj + OBJ_SUB_SLOT), s1 = (uint16_t)rd16(S.ds, obj + OBJ_SUB_END);
+            for (uint32_t s = s0; s < s1 && s <= 0xFE; s += 2) owner[s] = (int16_t)obj;
+        }
+    }
     for (uint32_t obj = 0; obj <= 0xFE; obj += 2) {
         uint16_t fc = (uint16_t)rd16(C.ds, obj + OBJ_SPRITE_FLAGS);
         uint16_t fp = (uint16_t)rd16(P.ds, obj + OBJ_SPRITE_FLAGS);
         if (!(fc & 0x8000) || !(fp & 0x8000)) continue;
         int16_t ax = rd16(C.ds, obj + OBJ_SPRITE_X), bx = rd16(P.ds, obj + OBJ_SPRITE_X);
         int16_t ay = rd16(C.ds, obj + OBJ_SPRITE_Y), by = rd16(P.ds, obj + OBJ_SPRITE_Y);
+        const int16_t ow = owner_c[obj];
+        if (ow >= 0 && ow == owner_p[obj]) {
+            const int dxo = rd16(C.ds, ow + OBJ_WORLD_X) - rd16(P.ds, ow + OBJ_WORLD_X);
+            const int dyo = rd16(C.ds, ow + OBJ_WORLD_Y) - rd16(P.ds, ow + OBJ_WORLD_Y);
+            if (dxo == 0 && dyo == 0) continue;                                 // the owner stood: the sprite stays where the tick put it
+            if (dxo > V2_SMOOTH_MAX_STEP || -dxo > V2_SMOOTH_MAX_STEP ||
+                dyo > V2_SMOOTH_MAX_STEP || -dyo > V2_SMOOTH_MAX_STEP) continue;   // spawn / teleport / wrap
+            wr16(g_work, obj + OBJ_SPRITE_X, (int16_t)(ax - (int)lround((1.0 - t) * dxo)));
+            wr16(g_work, obj + OBJ_SPRITE_Y, (int16_t)(ay - (int)lround((1.0 - t) * dyo)));
+            continue;
+        }
         if (ax == bx && ay == by) continue;
         if (ax - bx > V2_SMOOTH_MAX_STEP || bx - ax > V2_SMOOTH_MAX_STEP ||
             ay - by > V2_SMOOTH_MAX_STEP || by - ay > V2_SMOOTH_MAX_STEP) continue;
@@ -229,15 +262,21 @@ bool v2_smooth_render(uint8_t* out) {
         acc[1] = P.par_acc_y + (uint32_t)((double)(C.par_acc_y - P.par_acc_y) * t);
 
     // debug: V2_SMOOTH_DUMP=<dir> — one line per interpolated frame: game
-    // frame, fraction, camera prev/cur/lerp, sub-sprite slot 0 prev/cur/lerp
+    // frame, fraction, camera prev/cur/lerp, the active viking's object X
+    // prev/cur and its first sub-sprite's X prev/cur/lerp
     {
         static FILE* lf = nullptr; static int init = 0;
         if (!init) { init = 1; const char* dd = getenv("V2_SMOOTH_DUMP");
             if (dd && *dd) { char path[512]; snprintf(path, sizeof path, "%s/smooth_log.txt", dd); lf = fopen(path, "w"); } }
-        if (lf) fprintf(lf, "f%d t=%.3f period=%.1fms vp %d,%d -> %d,%d = %d,%d | slot0 %d,%d -> %d,%d = %d,%d\n",
-                        v2_dbg_pre_vm_iter, t, period * 1000.0, px, py, cx, cy, rd16(g_work, DS_VIEWPORT_X), rd16(g_work, DS_VIEWPORT_Y),
-                        rd16(P.ds, OBJ_SPRITE_X), rd16(P.ds, OBJ_SPRITE_Y), rd16(C.ds, OBJ_SPRITE_X), rd16(C.ds, OBJ_SPRITE_Y),
-                        rd16(g_work, OBJ_SPRITE_X), rd16(g_work, OBJ_SPRITE_Y));
+        if (lf) {
+            const uint16_t vk = (uint16_t)rd16(C.ds, DS_ACTIVE_VIKING);
+            const uint16_t sub = (uint16_t)rd16(C.ds, vk + OBJ_SUB_SLOT);
+            fprintf(lf, "f%d t=%.3f period=%.1fms vp %d,%d -> %d,%d = %d,%d | vik %02X obj-x %d -> %d | sub %02X x %d -> %d = %d\n",
+                    v2_dbg_pre_vm_iter, t, period * 1000.0, px, py, cx, cy, rd16(g_work, DS_VIEWPORT_X), rd16(g_work, DS_VIEWPORT_Y),
+                    vk, rd16(P.ds, vk + OBJ_WORLD_X), rd16(C.ds, vk + OBJ_WORLD_X),
+                    sub, sub <= 0xFE ? rd16(P.ds, sub + OBJ_SPRITE_X) : 0, sub <= 0xFE ? rd16(C.ds, sub + OBJ_SPRITE_X) : 0,
+                    sub <= 0xFE ? rd16(g_work, sub + OBJ_SPRITE_X) : 0);
+        }
     }
     // the passes, in the gameplay frame's order, on the presenter's buffers
     v2_tls_ds = g_work;
