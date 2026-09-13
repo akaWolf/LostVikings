@@ -98,59 +98,102 @@ jobs:
         run: ./tests/scenarios.sh
 
   linux:
-    name: Linux ${{ matrix.arch }} (release, static C++ runtime)
+    # Every Linux bundle is the portable build (2026-09-10): SDL2 built from its
+    # source with the default dlopen'ed backends — X11 / Wayland / PulseAudio /
+    # PipeWire / ALSA / libdecor are loaded at run time, whatever the machine has
+    # — and linked statically, on the 22.04 runners for a glibc 2.35 floor, with
+    # clang 18 from apt.llvm.org (the image's clang 14 compiled the executors
+    # 3-6 min slower): the binary depends on glibc alone. Ubuntu's libSDL2.a
+    # links its backends directly, and the "static" bundles of before needed
+    # libpulse, libwayland, libdecor, libsamplerate ... on the target machine.
+    # One job for the default mode and V2_ONLY, both architectures.
+    name: Linux ${{ matrix.arch }}${{ matrix.v2only && ' V2_ONLY' || '' }} (release, glibc only)
     runs-on: ${{ matrix.runner }}
     strategy:
       fail-fast: false
       matrix:
         include:
-          - { arch: x86_64, runner: ubuntu-latest }
-          - { arch: arm64,  runner: ubuntu-24.04-arm }   # GitHub's hosted arm64 Linux runner (public repos)
+          - { arch: x86_64, runner: ubuntu-22.04,     v2only: false, suffix: '' }
+          - { arch: arm64,  runner: ubuntu-22.04-arm, v2only: false, suffix: '' }   # GitHub's hosted arm64 Linux runner (public repos)
+          - { arch: x86_64, runner: ubuntu-22.04,     v2only: true,  suffix: '-v2only' }
+          - { arch: arm64,  runner: ubuntu-22.04-arm, v2only: true,  suffix: '-v2only' }
+    env:
+      SDL2_VERSION: 2.30.10
+      BUNDLE: vikings-linux-${{ matrix.arch }}${{ matrix.suffix }}
     steps:
       - uses: actions/checkout@v4
         with:
           submodules: true
 
-      - name: Install build deps
+      - name: Install build deps (the backends' headers only — SDL2 dlopens the libraries at run time) + clang 18
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
-            build-essential clang libsdl2-dev pkg-config
+            build-essential cmake pkg-config wget \
+            libx11-dev libxext-dev libxcursor-dev libxi-dev libxfixes-dev libxrandr-dev libxss-dev libxkbcommon-dev \
+            libwayland-dev wayland-protocols libdecor-0-dev libegl1-mesa-dev libgles2-mesa-dev libgl1-mesa-dev \
+            libdrm-dev libgbm-dev libasound2-dev libpulse-dev libpipewire-0.3-dev libdbus-1-dev libudev-dev libibus-1.0-dev
+          wget -qO /tmp/llvm.sh https://apt.llvm.org/llvm.sh && sudo bash /tmp/llvm.sh 18
+          clang++-18 --version | head -1
 
-      - name: Build release vikings (RELEASE=1 STATIC=1 SDL_STATIC=1)
+      - name: Cache the SDL2 build
+        id: sdl_cache
+        uses: actions/cache@v4
+        with:
+          path: ~/sdl2
+          key: sdl2-src-${{ env.SDL2_VERSION }}-${{ matrix.arch }}-ubuntu2204-v1
+
+      - name: Build SDL2 from source (static library, dlopen'ed backends)
+        if: steps.sdl_cache.outputs.cache-hit != 'true'
+        run: |
+          cd /tmp
+          wget -q "https://github.com/libsdl-org/SDL/releases/download/release-${SDL2_VERSION}/SDL2-${SDL2_VERSION}.tar.gz"
+          tar -xzf "SDL2-${SDL2_VERSION}.tar.gz"
+          cmake -S "SDL2-${SDL2_VERSION}" -B sdl2-build -DCMAKE_BUILD_TYPE=Release \
+            -DSDL_SHARED=OFF -DSDL_STATIC=ON -DSDL_TEST=OFF -DCMAKE_INSTALL_PREFIX="$HOME/sdl2"
+          cmake --build sdl2-build -j"$(nproc)"
+          cmake --install sdl2-build
+          # the link line of the static library: glibc pieces only, no backend may be a link dependency
+          grep -E "^Libs" "$HOME/sdl2/lib/pkgconfig/sdl2.pc"
+
+      - name: Build (${{ matrix.v2only && 'V2_ONLY=1 ' || '' }}RELEASE=1 STATIC=1 SDL_STATIC=1 against the source-built SDL2)
         run: |
           # the job log is not readable through the API without admin rights — on a
           # failure the first error lines are surfaced as annotations (check-run API)
           ulimit -s unlimited
           set -o pipefail
+          export PKG_CONFIG_PATH="$HOME/sdl2/lib/pkgconfig"
+          pkg-config --cflags --libs --static sdl2
           free -g | sed -n 2p | sed 's/^/::notice::runner memory before the build: /'
-          make CXX=clang++ RELEASE=1 STATIC=1 SDL_STATIC=1 -j$(nproc) 2>&1 | tee build.log || { grep -n -m20 -E "(^| )error:|Error [0-9]+|Killed|internal compiler|virtual memory exhausted|cannot allocate|out of memory|too many|file too big|Segmentation fault" build.log | sed "s/^/::error::/"; exit 1; }
+          ${{ matrix.v2only && 'V2_ONLY=1' || '' }} make CXX=clang++-18 RELEASE=1 STATIC=1 SDL_STATIC=1 -j$(nproc) 2>&1 | tee build.log || { grep -n -m20 -E "(^| )error:|Error [0-9]+|Killed|internal compiler|virtual memory exhausted|cannot allocate|out of memory|too many|file too big|Segmentation fault" build.log | sed "s/^/::error::/"; exit 1; }
 
       - name: Build keymap editor
-        run: make keymap_editor CXX=clang++ STATIC=1 SDL_STATIC=1
+        run: PKG_CONFIG_PATH="$HOME/sdl2/lib/pkgconfig" make keymap_editor CXX=clang++-18 STATIC=1 SDL_STATIC=1
 
-      - name: Verify static linkage (C++ runtime + SDL2)
+      - name: Verify glibc is the only dynamic dependency
         run: |
-          if ldd vikings | grep -E 'libstdc\+\+|libgcc_s|libSDL2'; then
-            echo "ERROR: libgcc/libstdc++/libSDL2 are dynamically linked"; exit 1
-          fi
-          echo "OK: C++ runtime and SDL2 both statically linked"
           ldd vikings
+          if ldd vikings | awk '{print $1}' | grep -v -E '^(linux-vdso|libc\.so|libm\.so|libdl\.so|libpthread\.so|librt\.so|/lib)'; then
+            echo "ERROR: a dynamic dependency beyond glibc (listed above)"; exit 1
+          fi
+          echo "OK: glibc only"
 
       - name: Package
         run: |
-          mkdir -p dist/vikings-linux-${{ matrix.arch }}
-          cp vikings vikings_keymap_editor vikings_keymap.cfg dist/vikings-linux-${{ matrix.arch }}/
+          mkdir -p "dist/$BUNDLE"
+          cp vikings vikings_keymap_editor vikings_keymap.cfg "dist/$BUNDLE/"
           # Static DS / EXE blobs needed at runtime by the v2 mirror.
-          cp ds_static.bin exe_static.bin dist/vikings-linux-${{ matrix.arch }}/
-          [ -f README.md ] && cp README.md dist/vikings-linux-${{ matrix.arch }}/
-          tar -czf vikings-linux-${{ matrix.arch }}.tar.gz -C dist vikings-linux-${{ matrix.arch }}
-          ls -lh vikings-linux-${{ matrix.arch }}.tar.gz
+          cp ds_static.bin exe_static.bin "dist/$BUNDLE/"
+          [ -f README.md ] && cp README.md "dist/$BUNDLE/"
+          # the V2_ONLY bundles carry the console content builder (README "Console content"): scripts, no game data
+          if ${{ matrix.v2only }}; then bash tools/assets/content_tools_bundle.sh "dist/$BUNDLE/content-tools"; fi
+          tar -czf "$BUNDLE.tar.gz" -C dist "$BUNDLE"
+          ls -lh "$BUNDLE.tar.gz"
 
       - uses: actions/upload-artifact@v4
         with:
-          name: vikings-linux-${{ matrix.arch }}
-          path: vikings-linux-${{ matrix.arch }}.tar.gz
+          name: ${{ env.BUNDLE }}
+          path: ${{ env.BUNDLE }}.tar.gz
           retention-days: 30
 
   windows:
@@ -218,161 +261,6 @@ jobs:
         with:
           name: vikings-windows-x86_64
           path: vikings-windows-x86_64.zip
-          retention-days: 30
-
-  linux-v2only:
-    name: Linux ${{ matrix.arch }} V2_ONLY (release, static)
-    runs-on: ${{ matrix.runner }}
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - { arch: x86_64, runner: ubuntu-latest }
-          - { arch: arm64,  runner: ubuntu-24.04-arm }   # GitHub's hosted arm64 Linux runner (public repos)
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          submodules: true
-
-      - name: Install build deps
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends \
-            build-essential clang libsdl2-dev pkg-config
-
-      - name: Build (V2_ONLY=1 RELEASE=1 STATIC=1 SDL_STATIC=1)
-        run: |
-          # the job log is not readable through the API without admin rights — on a
-          # failure the first error lines are surfaced as annotations (check-run API)
-          ulimit -s unlimited
-          set -o pipefail
-          free -g | sed -n 2p | sed 's/^/::notice::runner memory before the build: /'
-          V2_ONLY=1 make CXX=clang++ RELEASE=1 STATIC=1 SDL_STATIC=1 -j$(nproc) 2>&1 | tee build.log || { grep -n -m20 -E "(^| )error:|Error [0-9]+|Killed|internal compiler|virtual memory exhausted|cannot allocate|out of memory|too many|file too big|Segmentation fault" build.log | sed "s/^/::error::/"; exit 1; }
-
-      - name: Build keymap editor
-        run: make keymap_editor CXX=clang++ STATIC=1 SDL_STATIC=1
-
-      - name: Verify static linkage (C++ runtime + SDL2)
-        run: |
-          if ldd vikings | grep -E 'libstdc\+\+|libgcc_s|libSDL2'; then
-            echo "ERROR: libgcc/libstdc++/libSDL2 are dynamically linked"; exit 1
-          fi
-          echo "OK: V2_ONLY binary, C++ runtime and SDL2 statically linked"
-          ldd vikings
-
-      - name: Package
-        # V2_ONLY needs ds_static.bin + exe_static.bin at startup (static EXE
-        # image that default mode reconstructs from m2c initialisers).
-        # DATA.DAT (game assets) is still required — user supplies it.
-        run: |
-          mkdir -p dist/vikings-linux-${{ matrix.arch }}-v2only
-          cp vikings vikings_keymap_editor vikings_keymap.cfg dist/vikings-linux-${{ matrix.arch }}-v2only/
-          cp ds_static.bin exe_static.bin dist/vikings-linux-${{ matrix.arch }}-v2only/
-          [ -f README.md ] && cp README.md dist/vikings-linux-${{ matrix.arch }}-v2only/
-          # the console content builder (README "Console content"): scripts + the mod package, no game data
-          bash tools/assets/content_tools_bundle.sh dist/vikings-linux-${{ matrix.arch }}-v2only/content-tools
-          tar -czf vikings-linux-${{ matrix.arch }}-v2only.tar.gz -C dist vikings-linux-${{ matrix.arch }}-v2only
-          ls -lh vikings-linux-${{ matrix.arch }}-v2only.tar.gz
-
-      - uses: actions/upload-artifact@v4
-        with:
-          name: vikings-linux-${{ matrix.arch }}-v2only
-          path: vikings-linux-${{ matrix.arch }}-v2only.tar.gz
-          retention-days: 30
-
-  linux-v2only-portable:
-    # The portable Linux build — an experiment beside linux-v2only, to compare
-    # the time. Ubuntu's libSDL2.a links its backends directly, so the "static"
-    # bundles above still need libpulse, libwayland, libdecor, libsamplerate,
-    # libdbus ... on the target machine (ldd of the arm64 bundle, 2026-09-10).
-    # Here SDL2 is built from its source with the default dlopen'ed backends
-    # (X11 / Wayland / PulseAudio / PipeWire / ALSA / libdecor are loaded at run
-    # time, whatever the machine has) and linked statically, on the 22.04
-    # runners for a glibc 2.35 floor: the binary depends on glibc alone.
-    name: Linux ${{ matrix.arch }} V2_ONLY portable (SDL2 from source, glibc only)
-    runs-on: ${{ matrix.runner }}
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - { arch: x86_64, runner: ubuntu-22.04 }
-          - { arch: arm64,  runner: ubuntu-22.04-arm }
-    env:
-      SDL2_VERSION: 2.30.10
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          submodules: true
-
-      - name: Install build deps (the backends' headers only — SDL2 dlopens the libraries at run time)
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends \
-            build-essential cmake pkg-config wget \
-            libx11-dev libxext-dev libxcursor-dev libxi-dev libxfixes-dev libxrandr-dev libxss-dev libxkbcommon-dev \
-            libwayland-dev wayland-protocols libdecor-0-dev libegl1-mesa-dev libgles2-mesa-dev libgl1-mesa-dev \
-            libdrm-dev libgbm-dev libasound2-dev libpulse-dev libpipewire-0.3-dev libdbus-1-dev libudev-dev libibus-1.0-dev
-          # the 22.04 image ships clang 14; the 40k-line executors compile 3-6 min slower on it than on
-          # the 24.04 image's clang 18 (the four runs of 2026-09-10), so the same clang 18 comes from apt.llvm.org
-          wget -qO /tmp/llvm.sh https://apt.llvm.org/llvm.sh && sudo bash /tmp/llvm.sh 18
-          clang++-18 --version | head -1
-
-      - name: Cache the SDL2 build
-        id: sdl_cache
-        uses: actions/cache@v4
-        with:
-          path: ~/sdl2
-          key: sdl2-src-${{ env.SDL2_VERSION }}-${{ matrix.arch }}-ubuntu2204-v1
-
-      - name: Build SDL2 from source (static library, dlopen'ed backends)
-        if: steps.sdl_cache.outputs.cache-hit != 'true'
-        run: |
-          cd /tmp
-          wget -q "https://github.com/libsdl-org/SDL/releases/download/release-${SDL2_VERSION}/SDL2-${SDL2_VERSION}.tar.gz"
-          tar -xzf "SDL2-${SDL2_VERSION}.tar.gz"
-          cmake -S "SDL2-${SDL2_VERSION}" -B sdl2-build -DCMAKE_BUILD_TYPE=Release \
-            -DSDL_SHARED=OFF -DSDL_STATIC=ON -DSDL_TEST=OFF -DCMAKE_INSTALL_PREFIX="$HOME/sdl2"
-          cmake --build sdl2-build -j"$(nproc)"
-          cmake --install sdl2-build
-          # the link line of the static library: glibc pieces only, no backend may be a link dependency
-          grep -E "^Libs" "$HOME/sdl2/lib/pkgconfig/sdl2.pc"
-
-      - name: Build (V2_ONLY=1 RELEASE=1 STATIC=1 SDL_STATIC=1 against the source-built SDL2)
-        run: |
-          # the job log is not readable through the API without admin rights — on a
-          # failure the first error lines are surfaced as annotations (check-run API)
-          ulimit -s unlimited
-          set -o pipefail
-          export PKG_CONFIG_PATH="$HOME/sdl2/lib/pkgconfig"
-          pkg-config --cflags --libs --static sdl2
-          free -g | sed -n 2p | sed 's/^/::notice::runner memory before the build: /'
-          V2_ONLY=1 make CXX=clang++-18 RELEASE=1 STATIC=1 SDL_STATIC=1 -j$(nproc) 2>&1 | tee build.log || { grep -n -m20 -E "(^| )error:|Error [0-9]+|Killed|internal compiler|virtual memory exhausted|cannot allocate|out of memory|too many|file too big|Segmentation fault" build.log | sed "s/^/::error::/"; exit 1; }
-
-      - name: Build keymap editor
-        run: PKG_CONFIG_PATH="$HOME/sdl2/lib/pkgconfig" make keymap_editor CXX=clang++-18 STATIC=1 SDL_STATIC=1
-
-      - name: Verify glibc is the only dynamic dependency
-        run: |
-          ldd vikings
-          if ldd vikings | awk '{print $1}' | grep -v -E '^(linux-vdso|libc\.so|libm\.so|libdl\.so|libpthread\.so|librt\.so|/lib)'; then
-            echo "ERROR: a dynamic dependency beyond glibc (listed above)"; exit 1
-          fi
-          echo "OK: glibc only"
-
-      - name: Package
-        run: |
-          mkdir -p dist/vikings-linux-${{ matrix.arch }}-v2only-portable
-          cp vikings vikings_keymap_editor vikings_keymap.cfg dist/vikings-linux-${{ matrix.arch }}-v2only-portable/
-          cp ds_static.bin exe_static.bin dist/vikings-linux-${{ matrix.arch }}-v2only-portable/
-          [ -f README.md ] && cp README.md dist/vikings-linux-${{ matrix.arch }}-v2only-portable/
-          bash tools/assets/content_tools_bundle.sh dist/vikings-linux-${{ matrix.arch }}-v2only-portable/content-tools
-          tar -czf vikings-linux-${{ matrix.arch }}-v2only-portable.tar.gz -C dist vikings-linux-${{ matrix.arch }}-v2only-portable
-          ls -lh vikings-linux-${{ matrix.arch }}-v2only-portable.tar.gz
-
-      - uses: actions/upload-artifact@v4
-        with:
-          name: vikings-linux-${{ matrix.arch }}-v2only-portable
-          path: vikings-linux-${{ matrix.arch }}-v2only-portable.tar.gz
           retention-days: 30
 
   windows-v2only:
@@ -443,7 +331,7 @@ jobs:
     name: Publish GitHub release
     # `test` first: no release is published while the HEADLESS smoke test or
     # the scenario replays fail on either architecture.
-    needs: [test, linux, windows, linux-v2only, windows-v2only]
+    needs: [test, linux, windows, windows-v2only]
     if: github.event_name == 'push'
     runs-on: ubuntu-latest
     permissions:
@@ -516,6 +404,10 @@ jobs:
             All bundles contain `vikings`/`vikings.exe`, `vikings_keymap_editor`,
             `vikings_keymap.cfg`, `ds_static.bin` and `exe_static.bin`. SDL2 and
             the C++ runtime are statically linked — no extra DLLs/.so required.
+            The Linux bundles depend on glibc alone (2.35+: Ubuntu 22.04, Debian
+            12 and later): SDL2 is built from source with the dlopen'ed backends,
+            X11 / Wayland / PulseAudio / PipeWire / ALSA / libdecor are picked up
+            at run time from whatever the machine has.
             The V2_ONLY bundles also carry `content-tools/`: the builder of the
             console content pack (SNES parallax, the SNES-only levels, the Genesis
             interludes, languages, SNES sound — README, "Console content") — the

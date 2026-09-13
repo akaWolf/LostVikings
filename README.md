@@ -46,7 +46,11 @@ Each archive contains:
 - `README.md`
 
 SDL2 and the C++ runtime are statically linked, so no extra `.so` / `.dll`
-needs to live next to the executable.
+needs to live next to the executable. The Linux bundles depend on glibc
+alone (2.35 or newer — Ubuntu 22.04, Debian 12 and everything later):
+their SDL2 is built from source with the dlopen'ed backends, so X11,
+Wayland, PulseAudio, PipeWire, ALSA and libdecor are picked up at run time
+from whatever the machine has, none of them is a link-time dependency.
 
 Get the latest from the [Releases page](https://github.com/akaWolf/LostVikings/releases).
 
@@ -396,8 +400,14 @@ More detail: `tests/README.md` and `HEADLESS_MODE_ANALYSIS.md`.
 `.github/workflows/build.yml` runs on every push (any branch) and every
 PR, producing the six artifacts described above. The jobs: `test`
 (x86_64 and arm64: the HEADLESS build, `tests/smoke.sh`, the scenario
-replays), `linux` (x86_64 and arm64), `windows`, `linux-v2only` (both
-architectures), `windows-v2only` and `release`. The tests and the release
+replays), `linux` (a 2×2 matrix: x86_64 and arm64, default mode and
+V2_ONLY — the portable build: ubuntu-22.04 runners for the glibc 2.35
+floor, SDL2 2.30.10 built from source with its dlopen'ed backends and
+cached, clang 18 from apt.llvm.org, and a check that glibc is the only
+dynamic dependency), `windows`, `windows-v2only` and `release`. Ubuntu's
+own `libSDL2.a` links its backends directly, so a bundle built against it
+needed libpulse, libwayland, libdecor and the rest on the target machine;
+the source build costs the job 2–3 min more. The tests and the release
 builds run in parallel — the two compiles of the transpiled VM share no
 objects and take ~19 min each on the hosted runners, so one job doing
 both in sequence was the workflow's critical path (46 min against ~27
