@@ -280,14 +280,120 @@ struct V2DrawCmd {
     uint16_t strips;    // [slot+0xC4D] (type 2: strips per plane)
     uint8_t  late;      // 0 = early layer, 1 = late layer
     uint8_t  type;      // flags & 7
+    uint8_t  mand;      // the handler's column-clip mask ANDed into every strip mask (0xFF = no clip;
+                        // the 1379/138B (type 2) and 0E92/0E9A (type 4) table byte of the draw's side)
+    uint8_t  clip_top;  // strips (type 2: rows, type 4: 2-row units) the handler skipped at the top
+    uint8_t  clip_bot;  // ... and at the bottom — the sprite's window clip at draw time
+    uint32_t epoch;     // page lists: the draw's place in the page's erase order (v2_page_list_draw)
+    uint32_t data_off;  // page lists: the record's strip data in the list's arena (data_len 0 = read the live bank)
+    uint16_t data_len;
+    uint64_t keep[4];   // page lists: the cells this record may show at all — all of them for a draw,
+                        // the copied span's live cells for a span copy (v2_page_cells_copy); same
+                        // layout as dead
+    uint64_t dead[4];   // page lists: the sprite's cells the page has since restored from the background,
+                        // relative to the sprite's top-left cell (8 columns x 32 rows: word row >> 3,
+                        // bit (row & 7) * 8 + column) — baked by v2_compose_page for the composed list
+                        // (a cell outside keep is dead too)
 };
-struct V2DrawList { int n; V2DrawCmd cmd[256]; };
+// type codes beyond the sprite types 1/2/4: a glyph cell of the text plane (sub_1E0C7 painted
+// it at a map cell: x/y = the cell's world position, off = the glyph index, slot = 0xFFFF)
+#define V2_CMD_GLYPH 0x80
+// a page can hold a whole text box (up to 40 x 22 glyph cells) on top of its sprites
+#define V2_DRAWLIST_MAX 1024
+// The pixels of a command are the sprite bytes AS THEY WERE at draw time: the page keeps
+// what was painted, the sprite banks may be reloaded underneath (a level or scene change
+// re-fills the segments while the old pages are still shown — the vikings would change
+// pose, or turn to garbage). Every record carries a copy of its strip data in the list's
+// arena (type 1: 72 bytes, type 4: 288, type 2: 36 x strips, a glyph 72); the raster reads
+// the copy. Lists are copied with v2_drawlist_copy (records + the used arena only).
+#define V2_DRAWLIST_ARENA (768 * 1024)
+struct V2DrawList { int n; uint32_t arena_used; V2DrawCmd cmd[V2_DRAWLIST_MAX]; uint8_t arena[V2_DRAWLIST_ARENA]; };
+extern void v2_drawlist_copy(V2DrawList& dst, const V2DrawList& src);
 extern V2DrawList v2_frame_draws;                  // the game thread's list of the sub-frame being composed
 extern void v2_late_list_begin(void);              // sub_1dd9c mirror: a pass starts (the late set is being decided)
 extern void v2_late_list_add(uint16_t slot);       // sub_1dd9c mirror: this object's type handler ran
 // Draw the list's commands in order, command i at world position (pos_x[i], pos_y[i])
 // (the caller's interpolated positions; the command's own x/y when nothing moves).
-extern void v2_draw_list(const V2DrawList& L, const int16_t* pos_x, const int16_t* pos_y);
+// which: 0 = the sprite commands only, 1 = the glyph commands only, -1 = every command
+extern void v2_draw_list(const V2DrawList& L, const int16_t* pos_x, const int16_t* pos_y, int which = -1);
+
+// The PAGE lists (2026-09-11): what each of the orig's three VGA pages (roles 0 / 0x34 /
+// 0x68, ds:92F7/92F9/92FB) currently holds in sprites — every draw command painted on it,
+// in draw order, each minus the CELLS the page has restored from the background since.
+// The orig erases by cell, never by object: sub_1DE05 pass 1 marks the OLD rect of an object
+// with [114E] != 0 (fs OR 3), the sprite handlers mark their cells at draw time, sub_1E16D
+// marks the glyph cells, and pass 2 of the next sub_1DE05 copies the background page over
+// EVERY bit-0 cell of the window on page [92F7] (sub_1C8F1 clears bit 0 at the end of each
+// pass). So a frame change whose OLD latch lags leaves the previous frame's pixels under the
+// new one, an object drawn without an erase count stays where it was, a box erases the
+// sprites under it and the scan repaints them — all of it per cell. Maintained by the pass
+// mirrors alone:
+//   sub_1DE05 pass 2 (v2_bg_latch_1DE05): each restored span on page [92F7] →
+//     v2_page_list_erase_cells(page, fs offset of the first cell, count): the cells' erase
+//     epoch advances; a command drawn before it loses those cells (its dead mask);
+//   sub_1DD9C (v2_late_sprites_1DD9C): every object it dispatches is drawn on page [92F9]
+//     → v2_page_list_draw(page, cmd): appended with the next epoch, the slot's earlier
+//     commands stay (their surviving pixels are the orig's residue) until their cells die;
+//   sub_1DF6A part 2 (page rotation): the new background page [92FB] gets the clean
+//     background copied into every cell with render-map bit 1 — every sprite handler ORs 3
+//     into its cells at draw time and only pass 2 clears bit 1, so the page loses all its
+//     sprites → v2_page_list_clear(page);
+//   sub_16880 (level transition, clears the VGA) → v2_page_lists_clear_all().
+// The frame of a flip is the composition of the shown page: tiles from the map at the
+// camera, the page's commands in their order with the dead cells skipped, the flagged
+// tiles, the UI (v2_compose_page, called by the sub_16775 mirror right before it publishes;
+// it bakes the dead masks and drops the commands with no live cell left) — the same list
+// the presenter gets.
+// tag: the writer's name for the debug trace (V2_PL_ERASE_TRACE=<from>-<to>: every erase of the
+// game-frame range as "V2-PLE f<frame> <tag> page=.. fs=.. n=.. epoch=..")
+extern void v2_page_list_erase_cells(uint16_t page, uint16_t fs_off, int ncells, const char* tag = "");
+// tiles painted over every page at once (the scroll-in row sub_16DC1 + its copies sub_171DC,
+// the scroll-in column sub_16DD9 + sub_1712B, the full fill of sub_11439): the cells at
+// fs_off, fs_off + step, ... die on all three pages
+extern void v2_page_lists_erase_cells_all(uint16_t fs_off, int ncells, uint16_t step, const char* tag = "");
+// The page's TILES are page state too: each page holds, per cell, the tile word last painted
+// there (g_page_tile: 0xFFFF = never painted since the level's fill → the map's word at
+// composition, 0xFFFE = black, the VGA wiped by sub_16880 and not painted since). Painters:
+//   sub_16DC1 / sub_16DD9 (a row / column of tiles onto the draw page, copied onto the other
+//     two by sub_171DC / sub_1712B) → v2_page_tile_set_all(fs_off, word) per cell;
+//   sub_1406d (an animated-tile quadrant onto [92F9] and [92FB]) → v2_page_tile_set(page, ..);
+//   the span copies — sub_1DE05 pass 2 (background page → [92F7]) and sub_1DF6A part 2 (the
+//     page rotation, [92F9] → [92FB] at the render-map's bit-1 cells) → v2_page_cells_copy:
+//     the destination cells die, the SOURCE page's content moves in — its tile words and its
+//     commands' pixels in those cells (copies restricted to the span; a sprite the background
+//     page had baked in travels on, as on the VGA);
+//   sub_16880 → v2_page_lists_black(): every cell black, every list empty.
+// Glyphs are page content as well: sub_1E0C7 paints each text cell at a MAP cell of [92F9]
+// (the tile window's column + [257F], row + [2581]) — v2_page_list_glyph records a
+// V2_CMD_GLYPH command there; the composition draws them after the flagged tiles, as the
+// pass does (1E0C7 runs after 1C8F1), and v2_draw_ui then paints only the CJK overlay.
+// A pass's span copies are one batch (nothing else touches the pages between the spans of
+// sub_1DE05 pass 2 or of sub_1DF6A part 2): begin names the pages, every span kills its
+// destination cells and moves the tile words, end appends ONE copy per source record with
+// pixels in any of the spans (keep = those cells) — instead of a copy per span per record.
+// fs_off = the render-map offset of the span's first cell, (map_col, map_row) its map cell, fs = the render map
+extern void v2_page_cells_copy_begin(uint16_t dst, uint16_t src, const char* tag = "");
+extern void v2_page_cells_copy_span(uint16_t fs_off, int ncells, int map_col, int map_row, const uint8_t* fs);
+extern void v2_page_cells_copy_end(void);
+extern void v2_page_tile_set(uint16_t page, uint16_t fs_off, uint16_t word);
+extern void v2_page_tile_set_all(uint16_t fs_off, uint16_t word);
+extern void v2_page_lists_black(void);
+extern void v2_page_list_glyph(uint16_t page, int16_t x, int16_t y, uint16_t glyph_index);
+extern void v2_page_list_draw(uint16_t page, const V2DrawCmd& cmd);
+// the composition's tile words: the composed page's per-cell array (index = render-map word)
+// on the game thread, the snapshot's copy on the presenter (thread-local); nullptr = the map
+extern const uint16_t* v2_tile_override;
+extern thread_local const uint16_t* v2_tls_tile_ovr;
+// the text cells come from the page's glyph commands: v2_draw_ui paints only the CJK overlay
+extern thread_local bool v2_tls_ui_cells_from_page;
+extern void v2_page_list_clear(uint16_t page);
+extern void v2_page_lists_clear_all(void);
+extern void v2_compose_page(uint16_t ds_val, uint16_t page);
+extern bool v2_compose_at_flip;   // true while v2_compose_page runs: the layer gates admit it outside a frame (blocking loops)
+// debug: V2_PAGELIST_TRACE=<hex slot> — every page-list event of that slot (erase / draw /
+// clear) and its record at each flip's composition, plus the DS fields the pass mirrors
+// saw ([114D]/[114E], CUR/OLD, sprite offset, the page words) — lines "V2-PL f<frame> ..."
+extern bool v2_pl_trace_on(int slot);
 
 // Single-tile redraw for dirty-rect (sub_1de05 inner loop) — exact orig sub_1689e equivalent
 extern void v2_draw_single_tile(uint16_t ds_val, uint16_t fs_offset, int abs_row, int abs_col);

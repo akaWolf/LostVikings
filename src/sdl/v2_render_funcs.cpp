@@ -24,6 +24,7 @@ extern "C" int v2_objtrace_di;
 
 #ifdef V2_RENDER_FROM_SHADOW
 bool v2_vm_in_frame = false;
+bool v2_compose_at_flip = false;   // render_v2.h: the flip's page composition runs outside a frame too (blocking loops)
 #endif
 
 // Helper: get DS base pointer for v2 rendering.
@@ -35,6 +36,9 @@ thread_local uint8_t*        v2_tls_out = nullptr;
 thread_local const uint8_t*  v2_tls_fs = nullptr;
 thread_local const uint32_t* v2_tls_par_acc = nullptr;
 thread_local bool            v2_tls_presenter = false;
+thread_local const uint16_t* v2_tls_tile_ovr = nullptr;        // render_v2.h: the snapshot's page tile words (presenter)
+thread_local bool            v2_tls_ui_cells_from_page = false; // render_v2.h: text cells are page commands
+const uint16_t*              v2_tile_override = nullptr;        // render_v2.h: the composed page's tile words (game thread)
 bool v2_last_frame_tiles = false;   // the last v2_draw_tiles took the tile path (not a chunk screen)
 
 static inline uint8_t* v2_get_ds_base(uint16_t ds_val) {
@@ -93,26 +97,26 @@ bool v2_chunk_bg_valid = false;
 // ============================================================================
 uint8_t v2_vga[65536 * 4];
 uint8_t v2_vga_cov[65536 * 4];   // 1 = written by a migrated v2 writer
+static long g_vgaw_trap = -2;   // V2_VGAW_TRAP: the shadow-VGA byte address whose writers are reported (-1 none, -2 unparsed)
 static inline void v2_vga_w(uint32_t addr, uint32_t plane, uint8_t val) {
-#ifdef V2_ONLY
-    // Stage 6.2: the shadow-VGA page emulation is the DEFAULT-build verify
-    // oracle (A2 pixel parity vs the real CRTC scan-out). The target engine
-    // composes frames directly (v2_draw_* into the linear buffer) — no
-    // reader exists here, so the Mode-X pixel model dies in V2_ONLY.
-    (void)addr; (void)plane; (void)val;
-    return;
-#endif
+    // Stage 6.2 gated the shadow-VGA writers out of V2_ONLY (no reader there). Since
+    // 2026-09-11 the game build has one: the chunk screens (byte_2AAAF & 0x42 — the logos,
+    // the title with its CRTC scroll to the logo and the menu over it, the password screen)
+    // are presented from this page model (v2_swap_render_buf), exactly like the test build
+    // shows every frame; the tile levels are composed from the page lists.
     uint32_t lin = (addr & 0xFFFFu) * 4u + (plane & 3u);
     // diag (env V2_VGAW_TRAP=vgaaddr): backtrace writers of one VGA byte addr.
+    // (V2_VGA_PIXTRAP=<x>,<y>,<frame> re-arms it at the flips of that game frame with the
+    // address of that screen pixel of the shown page — see v2_vga_fetch_page.)
     {
-        static long _t = -2;
+        long& _t = g_vgaw_trap;
         if (_t == -2) { const char* e = getenv("V2_VGAW_TRAP"); _t = e ? strtol(e, 0, 0) : -1; }
         if (_t >= 0 && (addr & 0xFFFFu) == (uint32_t)_t) {
             static int _n = 0;
             if (_n < 12) { _n++;
-                fprintf(stderr, "VGAW-TRAP addr=%04X pl=%u val=%02X ra=%p %p\n",
-                        addr & 0xFFFF, plane & 3, val,
-                        __builtin_return_address(0), __builtin_return_address(1));
+                fprintf(stderr, "VGAW-TRAP f%d addr=%04X pl=%u val=%02X ra=%p %p %p\n",
+                        v2_dbg_pre_vm_iter, addr & 0xFFFF, plane & 3, val,
+                        __builtin_return_address(0), __builtin_return_address(1), __builtin_return_address(2));
             }
         }
     }
@@ -290,7 +294,22 @@ uint8_t  v2_vga_pan  = 0;
 // Extract the visible 320×176 window from the shadow VGA exactly like the
 // real CRTC unfold (v2_fetch_orig_page): rows from v2_vga_crtc, pitch 0x56,
 // linear = (crtc + y*0x56)*4 + pan.
+extern uint8_t* v2_vm_get_shadow_ds();   // v2_vm.cpp (C++ linkage; declared here at file scope for the C-linkage reader below)
 extern "C" int v2_vga_fetch_page(uint8_t* out, uint32_t count) {
+    // debug: V2_VGA_PIXTRAP=<x>,<y>,<frame> — at every flip of that game frame, arm V2_VGAW_TRAP
+    // with the shadow-VGA byte of screen pixel (x, y) of the page shown now (the writers of the
+    // NEXT frames' passes to that pixel are then reported with their return addresses)
+    {
+        static int on = -1, px = 0, py = 0, pf = -1, pg = -1;   // <x>,<y>,<frame>[,<page hex>]: only the flips showing that page arm it
+        if (on < 0) { const char* e = getenv("V2_VGA_PIXTRAP"); on = 0; if (e && sscanf(e, "%d,%d,%d,%x", &px, &py, &pf, &pg) >= 3) on = 1; }
+        const uint8_t* sh = v2_vm_get_shadow_ds();   // file-scope declaration above (this function has C linkage)
+        if (on == 1 && v2_dbg_pre_vm_iter == pf && (pg < 0 || (sh && *(const uint16_t*)(sh + 0x92F9) == (uint16_t)pg))) {
+            const uint32_t lin = (v2_vga_crtc + (uint32_t)py * 0x56u) * 4u + v2_vga_pan + (uint32_t)px;
+            g_vgaw_trap = (long)(lin >> 2);
+            fprintf(stderr, "VGAW-PIXTRAP f%d pixel (%d,%d) -> vga addr=%04lX plane=%u (crtc=%04X pan=%u)\n",
+                    v2_dbg_pre_vm_iter, px, py, g_vgaw_trap, (unsigned)(lin & 3), v2_vga_crtc, v2_vga_pan);
+        }
+    }
     uint32_t rows = count / 320;
     if (rows * 320 != count) return 0;
     for (uint32_t y = 0; y < rows; y++) {
@@ -384,12 +403,37 @@ void v2_swap_render_buf() {
         // frame lives in the linear composition buffers: viewport in
         // v2_render_buf, HUD in v2_hud_buf — present those.
         extern uint8_t v2_hud_buf[320 * 64];
-        // all 200 rows: rows 176..199 matter only on full-screen LVX scenes
-        memcpy(v2_display_buf, v2_render_buf, (size_t)v2_fbw * 240);
-        v2_display_w = v2_fbw;   // UX stage 9 step 4: the frame's width travels with it
-        { const int r = v2_view_rows(); v2_display_fullscreen = (r > 176) ? r : 0; }   // 0 = HUD layout, else the map rows shown
         extern uint8_t v2_display_hud_buf[];
-        memcpy(v2_display_hud_buf, v2_hud_buf, 320 * 64);
+        // A chunk screen (byte_2AAAF & 0x42: the logos, the title, the password screen) is
+        // presented from the shadow-VGA page model (2026-09-11): the window through the CRTC
+        // start the sub_16775 mirror published (the title's scroll from the art to the logo),
+        // the HUD band from VGA rows 0..63 (the picture's bottom lives there behind the split),
+        // the DAC fade as it is — the frame the DOS build shows, byte for byte. The CJK text
+        // overlay (UX6) is painted over it; the tile levels keep the page-list composition.
+        {
+            extern uint8_t* v2_vm_get_shadow_ds();
+            const uint8_t* sh = v2_vm_get_shadow_ds();
+            const bool chunk_screen = sh && (sh[DS_LEVEL_FLAGS] & 0x42) != 0;
+            if (chunk_screen && v2_vga_fetch_page(v2_display_buf, 320 * 176)) {
+                for (int y = 0; y < 64; y++) memcpy(v2_display_hud_buf + y * 320, v2_vga + (size_t)y * 0x56u * 4u, 320);
+                memset(v2_display_buf + 320 * 176, 0, 320 * 64);
+                v2_display_w = 320;
+                v2_display_fullscreen = 0;
+                // the CJK overlay (v2_draw_ui with the cells from the page) onto the presented frame
+                {
+                    uint8_t* save_out = v2_tls_out; const int save_w = v2_fbw; const bool save_f = v2_compose_at_flip, save_c = v2_tls_ui_cells_from_page;
+                    v2_tls_out = v2_display_buf; v2_fbw = 320; v2_compose_at_flip = true; v2_tls_ui_cells_from_page = true;
+                    v2_draw_ui(0);
+                    v2_tls_out = save_out; v2_fbw = save_w; v2_compose_at_flip = save_f; v2_tls_ui_cells_from_page = save_c;
+                }
+            } else {
+                // all 200 rows: rows 176..199 matter only on full-screen LVX scenes
+                memcpy(v2_display_buf, v2_render_buf, (size_t)v2_fbw * 240);
+                v2_display_w = v2_fbw;   // UX stage 9 step 4: the frame's width travels with it
+                { const int r = v2_view_rows(); v2_display_fullscreen = (r > 176) ? r : 0; }   // 0 = HUD layout, else the map rows shown
+                memcpy(v2_display_hud_buf, v2_hud_buf, 320 * 64);
+            }
+        }
         // UX stage 8 step 2 (co-op): which player holds each viking, and where
         // its portrait sits in the HUD art (ds:[vk-0x7A84] -> the VGA offset of
         // v2_draw_hud_portrait) — the presenter paints the P1/P2/P3 badges.
@@ -419,16 +463,30 @@ void v2_swap_render_buf() {
             static int on = -1; static long flips = 0, bad = 0, badpx = 0; static int lastf = -1;
             if (on < 0) { on = getenv("V2_LINCMP") ? 1 : 0;
                           if (on) atexit([]() { fprintf(stderr, "V2-LINCMP-SUMMARY flips=%ld differing=%ld px=%ld\n", flips, bad, badpx); }); }
-            if (on == 1 && v2_fbw == 320) {
+            extern uint8_t* v2_vm_get_shadow_ds(); const uint8_t* sh = v2_vm_get_shadow_ds();
+            // a chunk screen (byte_2AAAF & 0x42) is presented from this page by the game build too
+            // (2026-09-11) — its linear buffer is not what the user sees: not compared
+            const bool chunk_screen = sh && (sh[DS_LEVEL_FLAGS] & 0x42) != 0;
+            if (on == 1 && v2_fbw == 320 && !chunk_screen) {
                 flips++;
                 int cnt = 0, x0 = 320, x1 = -1, y0 = 176, y1 = -1;
-                for (int y = 0; y < 176; y++) for (int x = 0; x < 320; x++)
-                    if (v2_display_buf[y * 320 + x] != v2_render_buf[y * 320 + x]) { cnt++; if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y; }
+                // the differing pixels by (page index, composition index) pair — the top pairs
+                // name the kind of difference (a tile vs black, a sprite colour vs a tile ...)
+                struct { uint8_t a, b; int n; } pairs[6]; int npairs = 0; int other = 0;
+                for (int y = 0; y < 176; y++) for (int x = 0; x < 320; x++) {
+                    const uint8_t a = v2_display_buf[y * 320 + x], b = v2_render_buf[y * 320 + x];
+                    if (a == b) continue;
+                    cnt++; if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y;
+                    int k = 0; for (; k < npairs; k++) if (pairs[k].a == a && pairs[k].b == b) { pairs[k].n++; break; }
+                    if (k == npairs) { if (npairs < 6) { pairs[npairs].a = a; pairs[npairs].b = b; pairs[npairs].n = 1; npairs++; } else other++; }
+                }
                 if (cnt) { bad++; badpx += cnt;
                     if (v2_dbg_pre_vm_iter != lastf || bad < 200) { lastf = v2_dbg_pre_vm_iter;
-                        extern uint8_t* v2_vm_get_shadow_ds(); const uint8_t* sh = v2_vm_get_shadow_ds();
-                        fprintf(stderr, "V2-LINCMP f%d diff=%d bbox=%d..%d,%d..%d lvl=%04X flags=%02X\n", v2_dbg_pre_vm_iter, cnt, x0, x1, y0, y1,
-                                sh ? *(const uint16_t*)(sh + DS_LEVEL) : 0, sh ? sh[DS_LEVEL_FLAGS] : 0); } }
+                        fprintf(stderr, "V2-LINCMP f%d diff=%d bbox=%d..%d,%d..%d lvl=%04X flags=%02X pairs(page:lin)", v2_dbg_pre_vm_iter, cnt, x0, x1, y0, y1,
+                                sh ? *(const uint16_t*)(sh + DS_LEVEL) : 0, sh ? sh[DS_LEVEL_FLAGS] : 0);
+                        for (int k = 0; k < npairs; k++) fprintf(stderr, " %02X:%02X=%d", pairs[k].a, pairs[k].b, pairs[k].n);
+                        if (other) fprintf(stderr, " +%d", other);
+                        fprintf(stderr, "\n"); } }
             }
         }
         // debug: V2_VGA_DUMP=<dir>:<from>-<to> writes the whole shadow VGA (64K x 4 planes,
@@ -719,7 +777,7 @@ static void v2_draw_parallax(const V2StateViewC& st, uint8_t* buf) { v2_draw_par
 
 void v2_draw_tiles(uint16_t ds_val) {
 #ifdef V2_RENDER_FROM_SHADOW
-    if (!v2_vm_in_frame && !v2_tls_presenter) return;
+    if (!v2_vm_in_frame && !v2_tls_presenter && !v2_compose_at_flip) return;
 #endif
     if (!myDrawInfo_v2 || !v2_m2c_base) return;
 
@@ -844,6 +902,35 @@ void v2_draw_tiles(uint16_t ds_val) {
             uint16_t tile_map_off = (uint16_t)((row_base + col_scrolled) * 2u);
             uint16_t tile_entry = *(uint16_t*)(fs_base + tile_map_off);
 
+            // Screen position (with sub-tile pixel offset)
+            int screen_x = col_vis * 8 - pix_off_x;
+            int screen_y = row_vis * 8 - pix_off_y;
+
+            // The page lists (render_v2.h): the composed page's own word for this cell — the
+            // tile the page still shows (an animation frame behind the map), or black (wiped
+            // by sub_16880 and not painted since).
+            {
+                const uint16_t* ovr = v2_tls_presenter ? v2_tls_tile_ovr : v2_tile_override;
+                if (ovr) {
+                    const uint16_t w = ovr[tile_map_off >> 1];
+                    if (w == 0xFFFE) {
+                        for (int row = 0; row < 8; row++) {
+                            int sy = screen_y + row;
+                            if (sy < 0) continue;
+                            if (sy >= 240) break;
+                            for (int px = 0; px < 8; px++) {
+                                int sx = screen_x + px;
+                                if (sx < 0) continue;
+                                if (sx >= v2_fbw) break;
+                                buf[sy * v2_fbw + sx] = 0;
+                            }
+                        }
+                        continue;
+                    }
+                    if (w != 0xFFFF) tile_entry = w;
+                }
+            }
+
             // Tile graphics offset (64-byte aligned) — bits 15:6
             // Bits 5:0 contain flip flags (4=hflip, 5=vflip) and dirty flag (bit 0)
             // draw_tile (sub_1689e) renders ALL tiles including offset 0 — no skip.
@@ -852,10 +939,6 @@ void v2_draw_tiles(uint16_t ds_val) {
             bool vflip = (tile_entry & 0x20) != 0;
 
             uint8_t* tile = tgfx_base + tile_gfx_off;
-
-            // Screen position (with sub-tile pixel offset)
-            int screen_x = col_vis * 8 - pix_off_x;
-            int screen_y = row_vis * 8 - pix_off_y;
 
             // Decode tile: 4 planes × 8 rows × 2 bytes
             // Normal pixel order per row:
@@ -1038,9 +1121,29 @@ void v2_late_list_add(uint16_t slot) { if (g_late_valid && g_late_n < 128) g_lat
 //   type 4 (sub_1d3b2, jpt_1d514): 16x16, 8 strips/section, 2 rows/strip, 4 bytes/row
 // Sprite data: sprite_off is the 1-based offset of the first data byte, the mask byte sits
 // at offset-1; each strip = 1 mask byte + 8 data bytes, 4 plane sections in a row.
+// dead / ox / oy (page lists): the command's dead-cell mask (render_v2.h V2DrawCmd::dead) and
+// the pixel offset of its top-left corner inside its cell — a pixel whose cell the page has
+// restored since the draw is not painted. The mask follows the sprite (cells relative to its
+// own top-left), so the presenter's shifted positions keep the same holes.
+// mand / clip_top / clip_bot: the handler's window clip at draw time (V2DrawCmd) — the column
+// mask ANDed into every strip mask exactly as the engines do (jpt_1DA02 / jpt_1D514), the
+// strips (type 2: rows, type 4: 2-row units) skipped at the top and the bottom.
+// data (page lists): the record's own copy of the strip bytes (V2DrawCmd::data_off in the
+// list's arena) — the pixels as painted, whatever the bank holds now; nullptr = the live bank
 static void v2_raster_sprite(uint8_t* buf, int type, uint16_t flags, int sx0, int sy0,
-                             uint16_t sprite_seg, uint16_t sprite_off, int strips, int obj, uint16_t cur_lvl) {
-    if (!sprite_seg) return;
+                             uint16_t sprite_seg, uint16_t sprite_off, int strips, int obj, uint16_t cur_lvl,
+                             const uint64_t* dead = nullptr, int ox = 0, int oy = 0,
+                             uint8_t mand = 0xFF, int clip_top = 0, int clip_bot = 0,
+                             const uint8_t* rec_data = nullptr) {
+    if (!sprite_seg && !rec_data) return;
+    // the pixel writer of this rasterisation: the dead-cell test in front of the pixel put
+    auto v2_put_pixel = [&](uint8_t* b, int x, int y, uint8_t v) {
+        if (dead) {
+            const int cc = (ox + (x - sx0)) >> 3, cr = (oy + (y - sy0)) >> 3;
+            if ((unsigned)cc < 8u && (unsigned)cr < 32u && ((dead[cr >> 3] >> (((cr & 7) << 3) | cc)) & 1u)) return;
+        }
+        ::v2_put_pixel(b, x, y, v);
+    };
     int num_strips, rows_per_strip, bytes_per_row;
     if (type == 1) {
         num_strips = 2; rows_per_strip = 4; bytes_per_row = 2;
@@ -1066,10 +1169,10 @@ static void v2_raster_sprite(uint8_t* buf, int type, uint16_t flags, int sx0, in
     // Sprite data: resolve segment to shadow buffer, add offset.
     // sprite_off = 1-based offset to first data byte; mask at offset-1.
 #ifdef V2_RENDER_FROM_SHADOW
-    uint8_t* seg_base = v2_resolve_segment(sprite_seg);
-    if (!seg_base) return;
-    uint8_t* sprite = seg_base + sprite_off - 1;
-    if (!v2_tls_presenter) {
+    uint8_t* seg_base = rec_data ? nullptr : v2_resolve_segment(sprite_seg);
+    if (!seg_base && !rec_data) return;
+    uint8_t* sprite = seg_base ? seg_base + sprite_off - 1 : nullptr;
+    if (!v2_tls_presenter && !rec_data) {
         static int cmp_mismatch = 0;
         // real-vs-shadow compare only meaningful when orig updates real
         // memory (V2_ONLY: dynamic segments in the snapshot buffer stay 0).
@@ -1099,12 +1202,13 @@ static void v2_raster_sprite(uint8_t* buf, int type, uint16_t flags, int sx0, in
         return hflip ? sx0 + sprite_w - 1 - col : sx0 + col;
     };
 
-    uint8_t* ptr = sprite;
+    const uint8_t* ptr = rec_data ? rec_data : sprite;   // the record's own bytes, else the live bank
     for (int section = 0; section < 4; section++) {
         int plane = section;
         for (int strip = 0; strip < num_strips; strip++) {
-            uint8_t mask = ptr[0];
-            uint8_t* data = ptr + 1;
+            uint8_t mask = (uint8_t)(ptr[0] & mand);                 // the handler's column clip (AND on the strip mask)
+            if (type != 1 && (strip < clip_top || strip >= num_strips - clip_bot)) mask = 0;   // the strips the handler skipped
+            const uint8_t* data = ptr + 1;
             int base_y = sy0 + strip * rows_per_strip;
 
             if (mask) {
@@ -1199,6 +1303,8 @@ static void v2_draw_sprite_obj(uint8_t* buf, uint8_t* ds_base, const V2StateView
         V2DrawCmd& c = v2_frame_draws.cmd[v2_frame_draws.n++];
         c.slot = (uint16_t)obj; c.flags = flags; c.x = world_x; c.y = world_y;
         c.seg = sprite_seg; c.off = sprite_off; c.strips = strips; c.late = (uint8_t)(late ? 1 : 0); c.type = (uint8_t)type;
+        c.mand = 0xFF; c.clip_top = 0; c.clip_bot = 0; c.epoch = 0; memset(c.dead, 0, sizeof c.dead);   // the layers' record: no clip, no page history
+        memset(c.keep, 0xFF, sizeof c.keep); c.data_len = 0; c.data_off = 0;                              // ... every cell, the live bank
     }
     v2_raster_sprite(buf, type, flags, world_x - viewport_x, world_y - viewport_y, sprite_seg, sprite_off, (int)strips, obj, st.level());
 }
@@ -1208,7 +1314,37 @@ void v2_draw_sprites(uint16_t ds_val) { if (!v2_tls_presenter) v2_frame_draws.n 
 void v2_draw_sprites_late(uint16_t ds_val) { v2_draw_sprites_impl(ds_val, 1); }
 
 // The presenter: the list's commands in order, command i at world (pos_x[i], pos_y[i]).
-void v2_draw_list(const V2DrawList& L, const int16_t* pos_x, const int16_t* pos_y) {
+// A glyph cell of the text plane at screen (sx0, sy0): the sub_1E16D engine's pixel mapping
+// (the same one v2_draw_ui uses), the dead-cell test as for a sprite.
+static void v2_raster_glyph(uint8_t* buf, const uint8_t* ds_base, uint16_t glyph_index, int sx0, int sy0,
+                            const uint64_t* dead, int ox, int oy, const uint8_t* rec_data) {
+    extern const uint8_t* v2_glyph_bytes(const uint8_t*, uint16_t);
+    const uint8_t* glyph = rec_data ? rec_data : v2_glyph_bytes(ds_base, glyph_index);   // the record's own bytes, else the live page
+    auto put = [&](int lx, int ly, uint8_t v) {
+        const int cc = (ox + lx) >> 3, cr = (oy + ly) >> 3;
+        if ((unsigned)cc < 8u && (unsigned)cr < 32u && ((dead[cr >> 3] >> (((cr & 7) << 3) | cc)) & 1u)) return;
+        v2_put_pixel(buf, sx0 + lx, sy0 + ly, v);
+    };
+    for (int plane = 0; plane < 4; plane++) {
+        for (int strip = 0; strip < 2; strip++) {
+            uint8_t mask = glyph[0];
+            const uint8_t* data = glyph + 1;
+            int base_y = strip * 4;
+            if (mask) {
+                if (mask & 0x80) put(0*4 + plane, base_y + 0, data[0]);
+                if (mask & 0x40) put(1*4 + plane, base_y + 0, data[1]);
+                if (mask & 0x20) put(0*4 + plane, base_y + 1, data[2]);
+                if (mask & 0x10) put(1*4 + plane, base_y + 1, data[3]);
+                if (mask & 0x08) put(0*4 + plane, base_y + 2, data[4]);
+                if (mask & 0x04) put(1*4 + plane, base_y + 2, data[5]);
+                if (mask & 0x02) put(0*4 + plane, base_y + 3, data[6]);
+                if (mask & 0x01) put(1*4 + plane, base_y + 3, data[7]);
+            }
+            glyph += 9;
+        }
+    }
+}
+void v2_draw_list(const V2DrawList& L, const int16_t* pos_x, const int16_t* pos_y, int which) {
     if (!v2_m2c_base || !myDrawInfo_v2) return;
     uint8_t* ds_base = v2_get_ds_base(0);                     // the presenter's snapshot DS (camera)
     uint8_t* buf = v2_tls_out ? v2_tls_out : v2_render_buf;
@@ -1216,9 +1352,418 @@ void v2_draw_list(const V2DrawList& L, const int16_t* pos_x, const int16_t* pos_
     const int viewport_x = (int)(int16_t)cam.x_eff, viewport_y = (int)(int16_t)cam.y_eff;
     for (int i = 0; i < L.n; i++) {
         const V2DrawCmd& c = L.cmd[i];
+        const bool glyph = (c.type == V2_CMD_GLYPH);
+        if (which == 0 && glyph) continue;
+        if (which == 1 && !glyph) continue;
         const int x = pos_x ? pos_x[i] : c.x, y = pos_y ? pos_y[i] : c.y;
-        v2_raster_sprite(buf, c.type, c.flags, x - viewport_x, y - viewport_y, c.seg, c.off, (int)c.strips, c.slot, 0xFFFF);
+        const uint8_t* rec = c.data_len ? L.arena + c.data_off : nullptr;   // the record's own strip bytes
+        if (glyph) { v2_raster_glyph(buf, ds_base, c.off, x - viewport_x, y - viewport_y, c.dead, c.x & 7, c.y & 7, rec); continue; }
+        v2_raster_sprite(buf, c.type, c.flags, x - viewport_x, y - viewport_y, c.seg, c.off, (int)c.strips, c.slot, 0xFFFF,
+                         c.dead, c.x & 7, c.y & 7, c.mand, c.clip_top, c.clip_bot, rec);
     }
+}
+
+// ----------------------------------------------------------------------------
+// The page lists (render_v2.h): the sprites each of the three VGA pages holds, as the
+// pass mirrors put them there and took them away. Page role values 0 / 0x34 / 0x68.
+// ----------------------------------------------------------------------------
+static V2DrawList g_page_list[3];
+static inline int v2_page_idx(uint16_t page) { return page == 0x34 ? 1 : (page == 0x68 ? 2 : 0); }
+// records + the used arena only (the struct is ~850 KB)
+void v2_drawlist_copy(V2DrawList& dst, const V2DrawList& src) {
+    dst.n = src.n;
+    dst.arena_used = src.arena_used;
+    if (src.n > 0) memcpy(dst.cmd, src.cmd, sizeof(V2DrawCmd) * (size_t)src.n);
+    if (src.arena_used > 0) memcpy(dst.arena, src.arena, src.arena_used);
+}
+// the strip bytes a record's pixels come from: their length by type, and the live bank
+// bytes at record time (the rasteriser's own rule: segment + 1-based offset - 1; a glyph's
+// 72 bytes from the language page / seg001)
+static inline uint16_t v2_cmd_data_len(const V2DrawCmd& c) {
+    if (c.type == V2_CMD_GLYPH) return 72;
+    if (c.type == 1) return 72;
+    if (c.type == 4) return 288;
+    if (c.type == 2) return (uint16_t)(36 * (c.strips > 0 ? (c.strips <= 1024 ? c.strips : 1024) : 0));
+    return 0;
+}
+static const uint8_t* v2_cmd_live_data(const V2DrawCmd& c) {
+    if (c.type == V2_CMD_GLYPH) {
+        extern const uint8_t* v2_glyph_bytes(const uint8_t*, uint16_t);
+        return v2_glyph_bytes(v2_get_ds_base(0), c.off);
+    }
+    if (!c.seg) return nullptr;
+#ifdef V2_RENDER_FROM_SHADOW
+    uint8_t* seg_base = v2_resolve_segment(c.seg);
+    if (!seg_base) return nullptr;
+    return seg_base + c.off - 1;
+#else
+    return v2_m2c_base + ((uint32_t)c.seg << 4) + c.off - 1;
+#endif
+}
+// room in a list's arena for len bytes: compact (the bake drops dead records and rebuilds
+// the arena), then fail if the live records alone fill it
+static void v2_page_list_bake(uint16_t page, const uint8_t* s);
+static bool v2_drawlist_reserve(V2DrawList& L, uint16_t page, uint32_t len) {
+    if (L.arena_used + len <= V2_DRAWLIST_ARENA) return true;
+    v2_page_list_bake(page, v2_get_ds_base(0));
+    return L.arena_used + len <= V2_DRAWLIST_ARENA;
+}
+// The cells' erase epochs per page, indexed by the render-map word of the cell (fs offset
+// LUT_ROW[row] + col * 2, halved — the same offsets the pass mirrors scan). A command is
+// dead in a cell whose epoch is newer than the command's own.
+static uint32_t g_cell_epoch[3][32768];
+static uint32_t g_epoch = 1;
+static bool v2_ple_trace_on(void);   // below (V2_PL_ERASE_TRACE)
+// The pages' tile words (render_v2.h): per cell the word last painted there; 0xFFFF = the
+// map's word (never painted since the fill), 0xFFFE = black (wiped, unpainted).
+static uint16_t g_page_tile[3][32768];
+static bool g_page_tile_init = false;
+static void v2_page_tile_init(void) { if (!g_page_tile_init) { g_page_tile_init = true; memset(g_page_tile, 0xFF, sizeof g_page_tile); } }
+// debug: V2_PL_CELL_TRACE=<render-map offset hex> — every tile word written to that cell of
+// any page (fills, quadrants, span copies) and the words the composition sees there
+static long g_pl_cell_trace = -2;            // the traced render-map word index; -3 = "col,row" given, resolved at the first composition
+static int g_pl_cell_col = 0, g_pl_cell_row = 0;
+static inline bool v2_pl_cell_on(uint32_t wi) {
+    if (g_pl_cell_trace == -2) {
+        const char* e = getenv("V2_PL_CELL_TRACE"); g_pl_cell_trace = -1;
+        if (e && strchr(e, ',')) { if (sscanf(e, "%d,%d", &g_pl_cell_col, &g_pl_cell_row) == 2) g_pl_cell_trace = -3; }   // a map cell (col,row)
+        else if (e) g_pl_cell_trace = strtol(e, nullptr, 16) >> 1;                                                        // a render-map offset (hex)
+    }
+    return g_pl_cell_trace >= 0 && (long)wi == g_pl_cell_trace;
+}
+void v2_page_tile_set(uint16_t page, uint16_t fs_off, uint16_t word) {
+    v2_page_tile_init();
+    g_page_tile[v2_page_idx(page)][(uint16_t)fs_off >> 1] = word;
+    if (v2_pl_cell_on((uint16_t)fs_off >> 1)) fprintf(stderr, "V2-PLC f%d tile-set page=%02X fs=%04X word=%04X\n", v2_dbg_pre_vm_iter, page, fs_off, word);
+}
+void v2_page_tile_set_all(uint16_t fs_off, uint16_t word) {
+    v2_page_tile_init();
+    for (int p = 0; p < 3; p++) g_page_tile[p][(uint16_t)fs_off >> 1] = word;
+    if (v2_pl_cell_on((uint16_t)fs_off >> 1)) fprintf(stderr, "V2-PLC f%d tile-set page=all fs=%04X word=%04X\n", v2_dbg_pre_vm_iter, fs_off, word);
+}
+// sub_16880: the VGA wiped — every cell black, every list empty
+void v2_page_lists_black(void) {
+    v2_page_tile_init();
+    for (int p = 0; p < 3; p++) { g_page_list[p].n = 0; for (int i = 0; i < 32768; i++) g_page_tile[p][i] = 0xFFFE; }
+}
+// the sprite's pixel extent (the rasteriser's rules: type 1 = 8x8, type 2 = 32 x strips, type 4 = 16x16, a glyph cell 8x8)
+static inline void v2_cmd_extent(const V2DrawCmd& c, int& w, int& h) {
+    if (c.type == 2) { w = 32; h = (int)c.strips; }
+    else if (c.type == 1 || c.type == V2_CMD_GLYPH) { w = 8; h = 8; }
+    else { w = 16; h = 16; }
+}
+// sub_1E0C7: a glyph cell painted at a map cell of page [92F9]
+void v2_page_list_glyph(uint16_t page, int16_t x, int16_t y, uint16_t glyph_index) {
+    V2DrawCmd c;
+    memset(&c, 0, sizeof c);
+    c.slot = 0xFFFF; c.x = x; c.y = y; c.off = glyph_index; c.type = V2_CMD_GLYPH; c.mand = 0xFF; c.late = 1;
+    v2_page_list_draw(page, c);
+}
+// A span of cells copied from one page to another (sub_1DE05 pass 2: background → [92F7];
+// sub_1DF6A part 2: [92F9] → the rotated-in background at the bit-1 cells): the destination
+// cells die, and whatever the source page shows there — its tile words, its commands' pixels
+// in those cells — is painted onto the destination: a copy of each source command with pixels
+// in the span, its keep mask = the span's cells where the source still showed it.
+// the batch of one pass's span copies (render_v2.h): pages, the kill epoch, the spans
+static struct { uint16_t dst, src; int di, si; uint32_t epoch; const char* tag; int nspans; bool on;
+                struct { uint32_t w0; int n, col, row; } span[1100]; } g_copy;
+void v2_page_cells_copy_begin(uint16_t dst, uint16_t src, const char* tag) {
+    v2_page_tile_init();
+    g_copy.dst = dst; g_copy.src = src; g_copy.di = v2_page_idx(dst); g_copy.si = v2_page_idx(src);
+    g_copy.epoch = ++g_epoch; g_copy.tag = tag; g_copy.nspans = 0; g_copy.on = true;
+}
+void v2_page_cells_copy_span(uint16_t fs_off, int ncells, int map_col, int map_row, const uint8_t* fs) {
+    if (!g_copy.on) return;
+    const int di = g_copy.di, si = g_copy.si;
+    const uint32_t e = g_copy.epoch;
+    const uint32_t w0 = (uint32_t)fs_off >> 1;
+    for (int i = 0; i < ncells; i++) {
+        const uint32_t wi = w0 + (uint32_t)i;
+        if (wi >= 32768u) continue;
+        g_cell_epoch[di][wi] = e;
+        uint16_t tw = g_page_tile[si][wi];
+        if (tw == 0xFFFF && fs) tw = *(const uint16_t*)(fs + wi * 2);   // the source shows the map's word as it is now
+        g_page_tile[di][wi] = tw;
+        if (v2_pl_cell_on(wi)) fprintf(stderr, "V2-PLC f%d %s copy %02X<-%02X fs=%04X word=%04X (src raw %04X)\n", v2_dbg_pre_vm_iter, g_copy.tag, g_copy.dst, g_copy.src, (unsigned)(wi * 2), tw, g_page_tile[si][wi]);
+    }
+    if (v2_ple_trace_on()) fprintf(stderr, "V2-PLE f%d %s copy %02X<-%02X fs=%04X n=%d cell=(%d,%d) epoch=%u\n", v2_dbg_pre_vm_iter, g_copy.tag, g_copy.dst, g_copy.src, fs_off, ncells, map_col, map_row, e);
+    if (g_copy.nspans < 1100) { auto& sp = g_copy.span[g_copy.nspans++]; sp.w0 = w0; sp.n = ncells; sp.col = map_col; sp.row = map_row; }
+}
+// debug: V2_PL_HIST=<n> — when a list reaches n records, once per page: the records by slot/kind
+static void v2_pl_hist(uint16_t page, const V2DrawList& L) {
+    static int thr = -2; static bool done[3] = {false, false, false};
+    if (thr == -2) { const char* e = getenv("V2_PL_HIST"); thr = e ? atoi(e) : -1; }
+    const int pi = v2_page_idx(page);
+    if (thr < 0 || L.n < thr || done[pi]) return;
+    done[pi] = true;
+    int by_slot[0x100 + 1] = {0}, copies = 0, glyphs = 0;
+    for (int i = 0; i < L.n; i++) { const V2DrawCmd& c = L.cmd[i]; if (c.late == 2) copies++; if (c.type == V2_CMD_GLYPH) glyphs++; by_slot[c.slot == 0xFFFF ? 0x100 : (c.slot & 0xFF)]++; }
+    fprintf(stderr, "V2-PL-HIST f%d page=%02X n=%d arena=%u copies=%d glyphs=%d top:", v2_dbg_pre_vm_iter, page, L.n, L.arena_used, copies, glyphs);
+    for (int k = 0; k < 12; k++) { int best = -1, bn = 0; for (int s = 0; s <= 0x100; s++) if (by_slot[s] > bn) { bn = by_slot[s]; best = s; } if (best < 0 || bn == 0) break; fprintf(stderr, " %s%02X:%d", best == 0x100 ? "glyph" : "", best & 0xFF, bn); by_slot[best] = 0; }
+    fprintf(stderr, "\n");
+}
+void v2_page_cells_copy_end(void) {
+    if (!g_copy.on) return;
+    g_copy.on = false;
+    const int di = g_copy.di, si = g_copy.si;
+    const V2DrawList& S = g_page_list[si];
+    if (S.n == 0 || g_copy.nspans == 0) return;
+    V2DrawList& D = g_page_list[di];
+    const uint32_t e2 = ++g_epoch;   // the copies are alive from after the kills
+    for (int i = 0; i < S.n; i++) {
+        const V2DrawCmd& o = S.cmd[i];
+        const int cx0 = (int)o.x >> 3, cy0 = (int)o.y >> 3;
+        uint64_t keep[4] = {0, 0, 0, 0};
+        bool any = false;
+        for (int sidx = 0; sidx < g_copy.nspans; sidx++) {
+            const auto& sp = g_copy.span[sidx];
+            const int r = sp.row - cy0;
+            if (r < 0 || r >= 32) continue;
+            for (int k = 0; k < sp.n; k++) {
+                const int cc = sp.col + k - cx0;
+                if (cc < 0 || cc >= 8) continue;
+                const uint32_t wi = sp.w0 + (uint32_t)k;
+                if (wi >= 32768u) continue;
+                const uint64_t bit = (uint64_t)1 << (((r & 7) << 3) | cc);
+                if (!(o.keep[r >> 3] & bit)) continue;                 // the source never showed it there
+                if (g_cell_epoch[si][wi] > o.epoch) continue;          // the source had restored that cell
+                keep[r >> 3] |= bit; any = true;
+            }
+        }
+        if (!any) continue;
+        // an earlier copy of the same image on the destination whose cells are all copied again
+        // now is redundant (its every cell is re-alive from e2 in the new copy)
+        {
+            int w = 0;
+            for (int j = 0; j < D.n; j++) {
+                const V2DrawCmd& p = D.cmd[j];
+                bool same = (p.late == 2 && p.slot == o.slot && p.x == o.x && p.y == o.y && p.seg == o.seg && p.off == o.off &&
+                             p.flags == o.flags && p.strips == o.strips && p.type == o.type &&
+                             p.mand == o.mand && p.clip_top == o.clip_top && p.clip_bot == o.clip_bot &&
+                             p.data_len == o.data_len &&
+                             (o.data_len == 0 || memcmp(D.arena + p.data_off, S.arena + o.data_off, o.data_len) == 0));
+                if (same) { bool sub = true; for (int q = 0; q < 4; q++) if (p.keep[q] & ~keep[q]) { sub = false; break; } if (sub) continue; }
+                D.cmd[w++] = p;
+            }
+            D.n = w;
+        }
+        V2DrawCmd c = o;
+        c.epoch = e2;                // alive on the destination from this copy on
+        c.late = 2;                  // a span copy
+        memcpy(c.keep, keep, sizeof keep);
+        memset(c.dead, 0, sizeof c.dead);
+        // the strip bytes travel with the copy (from the source list's arena)
+        c.data_len = 0; c.data_off = 0;
+        if (o.data_len && v2_drawlist_reserve(D, g_copy.dst, o.data_len)) {
+            c.data_off = D.arena_used; c.data_len = o.data_len;
+            memcpy(D.arena + D.arena_used, S.arena + o.data_off, o.data_len);
+            D.arena_used += o.data_len;
+        }
+        if (D.n < V2_DRAWLIST_MAX) D.cmd[D.n++] = c;
+        else { static int warned = 0; if (warned < 5) { warned++; fprintf(stderr, "V2-PL f%d page=%02X list full, span copy dropped (slot=%02X)\n", v2_dbg_pre_vm_iter, g_copy.dst, o.slot); } }
+        v2_pl_hist(g_copy.dst, D);
+    }
+}
+// debug (render_v2.h): V2_PAGELIST_TRACE=<hex slot>
+static int g_pl_trace_slot = -2;
+bool v2_pl_trace_on(int slot) {
+    if (g_pl_trace_slot == -2) { const char* e = getenv("V2_PAGELIST_TRACE"); g_pl_trace_slot = e ? (int)strtol(e, nullptr, 16) : -1; }
+    return g_pl_trace_slot >= 0 && slot == g_pl_trace_slot;
+}
+// Bake the dead masks of a page's commands against the cell epochs (the map's row table
+// and clip limits from the DS) and drop every command with no live cell left.
+static void v2_page_list_bake(uint16_t page, const uint8_t* s) {
+    const int pi = v2_page_idx(page);
+    V2DrawList& L = g_page_list[pi];
+    const uint32_t* E = g_cell_epoch[pi];
+    const int clipx = (int)(int16_t)v2gs(s).clip_limit_x(), clipy = (int)(int16_t)v2gs(s).clip_limit_y();
+    int w = 0;
+    for (int i = 0; i < L.n; i++) {
+        V2DrawCmd c = L.cmd[i];
+        int ew, eh; v2_cmd_extent(c, ew, eh);
+        const int cx0 = (int)c.x >> 3, cy0 = (int)c.y >> 3;          // SAR: the orig's cell of a pixel
+        int ncols = ((c.x & 7) + ew + 7) >> 3, nrows = ((c.y & 7) + eh + 7) >> 3;
+        if (ncols > 8) ncols = 8;
+        if (nrows > 32) nrows = 32;
+        memset(c.dead, 0, sizeof c.dead);
+        int alive = 0;
+        uint32_t killer = 0;   // debug: the newest erase epoch among the dead cells
+        for (int r = 0; r < nrows; r++) {
+            const int row = cy0 + r;
+            if (row < 0 || row >= clipy) { alive += ncols; continue; }   // off the map: the erase clips there, nothing restores such a cell
+            const uint16_t rowbase = *(const uint16_t*)(s + (uint16_t)(row * 2 - LUT_ROW_BASE));   // the row's first cell INDEX (words; the mirrors add the column, then shift left)
+            for (int cc = 0; cc < ncols; cc++) {
+                const int col = cx0 + cc;
+                if (col < 0 || col >= clipx) { alive++; continue; }
+                const uint32_t wi = (uint16_t)((rowbase + col) << 1) >> 1;
+                const uint64_t bit = (uint64_t)1 << (((r & 7) << 3) | cc);
+                if (!(c.keep[r >> 3] & bit)) { c.dead[r >> 3] |= bit; continue; }   // outside a span copy's cells
+                if (E[wi] > c.epoch) { c.dead[r >> 3] |= bit; if (E[wi] > killer) killer = E[wi]; }
+                else alive++;
+            }
+        }
+        if (v2_pl_trace_on(c.slot)) {
+            const uint8_t* rd = c.data_len ? L.arena + c.data_off : nullptr;
+            const uint8_t* lv = v2_cmd_live_data(c);
+            fprintf(stderr, "V2-PL f%d bake page=%02X slot=%02X xy=(%d,%d) seg=%04X off=%04X fl=%04X epoch=%u late=%d clip=%02X/%d/%d cells=%dx%d alive=%d keep=%016llx dead=%016llx killer-epoch=%u%s data[%u]=%02X%02X%02X%02X%02X%02X%02X%02X%02X live=%02X%02X%02X%02X%02X%02X%02X%02X%02X\n",
+                    v2_dbg_pre_vm_iter, page, c.slot, c.x, c.y, c.seg, c.off, c.flags, c.epoch, (int)c.late, c.mand, (int)c.clip_top, (int)c.clip_bot, ncols, nrows, alive,
+                    (unsigned long long)c.keep[0], (unsigned long long)c.dead[0], killer, alive == 0 ? " dropped" : "", (unsigned)c.data_len,
+                    rd ? rd[0] : 0, rd ? rd[1] : 0, rd ? rd[2] : 0, rd ? rd[3] : 0, rd ? rd[4] : 0, rd ? rd[5] : 0, rd ? rd[6] : 0, rd ? rd[7] : 0, rd ? rd[8] : 0,
+                    lv ? lv[0] : 0, lv ? lv[1] : 0, lv ? lv[2] : 0, lv ? lv[3] : 0, lv ? lv[4] : 0, lv ? lv[5] : 0, lv ? lv[6] : 0, lv ? lv[7] : 0, lv ? lv[8] : 0);
+        }
+        if (alive == 0) continue;
+        L.cmd[w++] = c;
+    }
+    L.n = w;
+    // the arena follows the surviving records (dropped ones leave holes; dedupe too)
+    {
+        static uint8_t scratch[V2_DRAWLIST_ARENA];
+        uint32_t used = 0;
+        for (int i = 0; i < L.n; i++) {
+            V2DrawCmd& c = L.cmd[i];
+            if (!c.data_len) continue;
+            memcpy(scratch + used, L.arena + c.data_off, c.data_len);
+            c.data_off = used;
+            used += c.data_len;
+        }
+        if (used) memcpy(L.arena, scratch, used);
+        L.arena_used = used;
+    }
+}
+// sub_1DE05 pass 2: a span of window cells on page [92F7] is restored from the background
+// debug: V2_PL_ERASE_TRACE=<from>-<to> — every erase of the game-frame range, with its writer
+static bool v2_ple_trace_on(void) {
+    static int on = -1, f0 = 0, f1 = -1;
+    if (on < 0) { const char* e = getenv("V2_PL_ERASE_TRACE"); on = 0; if (e && sscanf(e, "%d-%d", &f0, &f1) == 2) on = 1; }
+    return on == 1 && v2_dbg_pre_vm_iter >= f0 && v2_dbg_pre_vm_iter <= f1;
+}
+void v2_page_list_erase_cells(uint16_t page, uint16_t fs_off, int ncells, const char* tag) {
+    uint32_t* E = g_cell_epoch[v2_page_idx(page)];
+    const uint32_t e = ++g_epoch;
+    for (int i = 0; i < ncells; i++) {
+        const uint32_t wi = ((uint32_t)fs_off >> 1) + (uint32_t)i;
+        if (wi < 32768u) E[wi] = e;
+    }
+    if (v2_ple_trace_on()) fprintf(stderr, "V2-PLE f%d %s page=%02X fs=%04X n=%d epoch=%u\n", v2_dbg_pre_vm_iter, tag, page, fs_off, ncells, e);
+}
+// tiles painted over all three pages (scroll-in rows/columns, the full fill): the cells die everywhere
+void v2_page_lists_erase_cells_all(uint16_t fs_off, int ncells, uint16_t step, const char* tag) {
+    const uint32_t e = ++g_epoch;
+    for (int i = 0; i < ncells; i++) {
+        const uint32_t wi = (uint16_t)(fs_off + (uint16_t)(i * step)) >> 1;
+        for (int p = 0; p < 3; p++) g_cell_epoch[p][wi] = e;
+    }
+    if (v2_ple_trace_on()) fprintf(stderr, "V2-PLE f%d %s page=all fs=%04X n=%d step=%u epoch=%u\n", v2_dbg_pre_vm_iter, tag, fs_off, ncells, step, e);
+}
+// sub_1DD9C: the object is drawn on this page — appended with the next epoch; the slot's
+// earlier commands stay until their cells are restored (their surviving pixels are the
+// orig's residue under the new image)
+void v2_page_list_draw(uint16_t page, const V2DrawCmd& cmd0) {
+    V2DrawList& L = g_page_list[v2_page_idx(page)];
+    V2DrawCmd cmd = cmd0;
+    cmd.epoch = ++g_epoch;
+    memset(cmd.dead, 0, sizeof cmd.dead);
+    memset(cmd.keep, 0xFF, sizeof cmd.keep);   // a draw may show every one of its cells
+    // the record's strip bytes, copied into the arena (the page keeps what was painted)
+    cmd.data_len = 0; cmd.data_off = 0;
+    {
+        const uint16_t len = v2_cmd_data_len(cmd);
+        const uint8_t* src = len ? v2_cmd_live_data(cmd) : nullptr;
+        if (src && v2_drawlist_reserve(L, page, len)) {
+            cmd.data_off = L.arena_used; cmd.data_len = len;
+            memcpy(L.arena + L.arena_used, src, len);
+            L.arena_used += len;
+        } else if (len) {
+            static int warned = 0;
+            if (warned < 5) { warned++; fprintf(stderr, "V2-PL f%d page=%02X no arena room / no bank for slot=%02X type=%d len=%u: the record reads the live bank\n", v2_dbg_pre_vm_iter, page, cmd.slot, (int)cmd.type, (unsigned)len); }
+        }
+    }
+    // The same image at the same place again (a static object the scan repaints every pass,
+    // a looping animation back on a frame): the new draw covers every pixel the earlier one
+    // could still show, so the earlier record is redundant — dropped, pixel for pixel the
+    // page is the same. This bounds a page's list by its distinct images. (A span copy of the
+    // same image is covered too: its keep is a subset of the full draw's.) "The same image"
+    // means the same BYTES: a sprite whose frames are written into one fixed slot of the bank
+    // (same segment:offset, new data — a puff of smoke) leaves the earlier frame's pixels
+    // under the new one where the new one is transparent, so those records stay.
+    {
+        int w = 0;
+        for (int i = 0; i < L.n; i++) {
+            const V2DrawCmd& o = L.cmd[i];
+            if (o.slot == cmd.slot && o.x == cmd.x && o.y == cmd.y && o.seg == cmd.seg && o.off == cmd.off &&
+                o.flags == cmd.flags && o.strips == cmd.strips && o.type == cmd.type &&
+                o.mand == cmd.mand && o.clip_top == cmd.clip_top && o.clip_bot == cmd.clip_bot &&
+                o.data_len == cmd.data_len &&
+                (cmd.data_len == 0 || memcmp(L.arena + o.data_off, L.arena + cmd.data_off, cmd.data_len) == 0)) continue;
+            L.cmd[w++] = o;
+        }
+        L.n = w;
+    }
+    if (L.n >= V2_DRAWLIST_MAX) {
+        v2_page_list_bake(page, v2_get_ds_base(0));                 // drop what is fully erased
+        if (L.n >= V2_DRAWLIST_MAX) {                                // still full: the oldest goes (a divergence — report it)
+            static int warned = 0;
+            if (warned < 5) { warned++; fprintf(stderr, "V2-PL f%d page=%02X list full, oldest command dropped (slot=%02X)\n", v2_dbg_pre_vm_iter, page, L.cmd[0].slot); }
+            memmove(&L.cmd[0], &L.cmd[1], sizeof(V2DrawCmd) * (V2_DRAWLIST_MAX - 1));
+            L.n = V2_DRAWLIST_MAX - 1;
+        }
+    }
+    L.cmd[L.n++] = cmd;
+    v2_pl_hist(page, L);
+    if (v2_pl_trace_on(cmd.slot)) fprintf(stderr, "V2-PL f%d draw page=%02X slot=%02X xy=(%d,%d) off=%04X t=%d epoch=%u n=%d\n", v2_dbg_pre_vm_iter, page, cmd.slot, cmd.x, cmd.y, cmd.off, cmd.type, cmd.epoch, L.n);
+}
+// sub_1DF6A part 2: the rotated-in background page is cleaned of every cell that ever
+// carried a sprite (render-map bit 1) — no sprite survives on it
+void v2_page_list_clear(uint16_t page) {
+    if (g_pl_trace_slot >= 0) fprintf(stderr, "V2-PL f%d clear page=%02X n=%d\n", v2_dbg_pre_vm_iter, page, g_page_list[v2_page_idx(page)].n);
+    g_page_list[v2_page_idx(page)].n = 0;
+}
+// sub_16880: the level transition clears the VGA
+void v2_page_lists_clear_all(void) {
+    if (g_pl_trace_slot >= 0) fprintf(stderr, "V2-PL f%d clear-all\n", v2_dbg_pre_vm_iter);
+    for (int i = 0; i < 3; i++) g_page_list[i].n = 0;
+}
+
+// The frame of a flip: what the shown page holds. Tiles from the map at the camera (the
+// chunk picture on a chunk screen), the page's sprite list in its order, the flagged
+// tiles, the UI — into v2_render_buf, and the list becomes the flip's display list
+// (v2_frame_draws) for the presenter. Called by the sub_16775 mirror before it publishes;
+// the layer gates admit it outside a frame (blocking loops flip without a frame).
+void v2_compose_page(uint16_t ds_val, uint16_t page) {
+    if (!v2_m2c_base || !myDrawInfo_v2) return;
+    v2_compose_at_flip = true;
+    v2_page_tile_init();
+    v2_tile_override = g_page_tile[v2_page_idx(page)];   // the page's own tile words (render_v2.h)
+    v2_tls_ui_cells_from_page = true;                     // the text cells are the page's glyph commands
+    v2_draw_tiles(ds_val);
+    v2_page_list_bake(page, v2_get_ds_base(ds_val));   // the dead masks as of this flip; fully erased commands go
+    if (g_pl_cell_trace == -3) {   // debug V2_PL_CELL_TRACE=<col>,<row>: resolve the cell through the map's row table
+        const uint8_t* s = v2_get_ds_base(ds_val);
+        const uint16_t rowbase = *(const uint16_t*)(s + (uint16_t)(g_pl_cell_row * 2 - LUT_ROW_BASE));
+        g_pl_cell_trace = (uint16_t)((rowbase + g_pl_cell_col) << 1) >> 1;
+        fprintf(stderr, "V2-PLC f%d cell (%d,%d) = render-map offset %04lX\n", v2_dbg_pre_vm_iter, g_pl_cell_col, g_pl_cell_row, g_pl_cell_trace * 2);
+    }
+    if (g_pl_cell_trace >= 0) {   // debug V2_PL_CELL_TRACE: the composed page's word for the cell and the map's
+        const uint8_t* fsb = v2_tls_fs ? v2_tls_fs : nullptr;
+        extern uint8_t v2_vm_shadow_fs[];
+        if (!fsb) fsb = v2_vm_shadow_fs;
+        fprintf(stderr, "V2-PLC f%d compose page=%02X word=%04X map=%04X\n", v2_dbg_pre_vm_iter, page,
+                g_page_tile[v2_page_idx(page)][g_pl_cell_trace], *(const uint16_t*)(fsb + g_pl_cell_trace * 2));
+    }
+    const V2DrawList& L = g_page_list[v2_page_idx(page)];
+    if (g_pl_trace_slot >= 0) {
+        int at = -1;
+        for (int i = 0; i < L.n; i++) if (L.cmd[i].slot == (uint16_t)g_pl_trace_slot) at = i;
+        if (at >= 0) fprintf(stderr, "V2-PL f%d compose page=%02X n=%d slot=%02X at=%d xy=(%d,%d) off=%04X\n", v2_dbg_pre_vm_iter, page, L.n, g_pl_trace_slot, at, L.cmd[at].x, L.cmd[at].y, L.cmd[at].off);
+        else fprintf(stderr, "V2-PL f%d compose page=%02X n=%d slot=%02X absent\n", v2_dbg_pre_vm_iter, page, L.n, g_pl_trace_slot);
+    }
+    v2_draw_list(L, nullptr, nullptr, 0);     // the page's sprites, in their order
+    v2_draw_flagged_tiles(ds_val);            // sub_1C8F1: the flagged tiles over them
+    v2_draw_list(L, nullptr, nullptr, 1);     // sub_1E0C7: the page's glyph cells over those
+    v2_draw_ui(ds_val);                       // the CJK overlay only (v2_tls_ui_cells_from_page)
+    v2_drawlist_copy(v2_frame_draws, L);      // the flip's list for the presenter (records + arena)
+    v2_tls_ui_cells_from_page = false;
+    v2_compose_at_flip = false;
 }
 
 // late_gate=1: repaint only what orig sub_1dd9c draws in this sub-frame —
@@ -1237,7 +1782,7 @@ static void v2_draw_sprites_impl(uint16_t ds_val, int late_gate, int only_obj) {
           fprintf(stderr, "V2-SPRPASS f%d %s in_frame=%d base=%d late_list=%d/%d\n", v2_dbg_pre_vm_iter, late_gate ? "late " : "early",
                   (int)v2_vm_in_frame, (int)(v2_m2c_base != nullptr && myDrawInfo_v2 != nullptr), (int)g_late_valid, g_late_n); }
 #ifdef V2_RENDER_FROM_SHADOW
-    if (!v2_vm_in_frame && !v2_tls_presenter) return;
+    if (!v2_vm_in_frame && !v2_tls_presenter && !v2_compose_at_flip) return;
 #endif
     if (!v2_m2c_base || !myDrawInfo_v2) return;
 
@@ -1465,7 +2010,7 @@ static void v2_render_tile_masked(uint8_t* buf, const uint8_t* tgfx_base,
 
 void v2_draw_flagged_tiles(uint16_t ds_val) {
 #ifdef V2_RENDER_FROM_SHADOW
-    if (!v2_vm_in_frame && !v2_tls_presenter) return;
+    if (!v2_vm_in_frame && !v2_tls_presenter && !v2_compose_at_flip) return;
 #endif
     if (!myDrawInfo_v2 || !v2_m2c_base) return;
 
@@ -1521,6 +2066,15 @@ void v2_draw_flagged_tiles(uint16_t ds_val) {
             uint16_t col_scrolled = (uint16_t)(col_vis + scroll_y + extra_tile_x);
             uint16_t tile_map_off = (uint16_t)((row_base + col_scrolled) * 2u);
             uint16_t tile_entry = *(uint16_t*)(fs_base + tile_map_off);
+            // The page lists (render_v2.h): the composed page's own word for the cell
+            {
+                const uint16_t* ovr = v2_tls_presenter ? v2_tls_tile_ovr : v2_tile_override;
+                if (ovr) {
+                    const uint16_t w = ovr[tile_map_off >> 1];
+                    if (w == 0xFFFE) continue;          // black cell: nothing painted there yet
+                    if (w != 0xFFFF) tile_entry = w;
+                }
+            }
 
             // Original sub_1c8f1 ANDs entry with ax=0xFFFE (clears dirty bit 0)
             // then draws if bit 3 (foreground) is set. v2 draws all foreground
@@ -1550,7 +2104,7 @@ void v2_draw_flagged_tiles(uint16_t ds_val) {
 // ============================================================================
 void v2_draw_ui(uint16_t ds_val) {
 #ifdef V2_RENDER_FROM_SHADOW
-    if (!v2_vm_in_frame && !v2_tls_presenter) return;
+    if (!v2_vm_in_frame && !v2_tls_presenter && !v2_compose_at_flip) return;
 #endif
     if (!myDrawInfo_v2 || !v2_m2c_base) return;
 
@@ -1599,7 +2153,9 @@ void v2_draw_ui(uint16_t ds_val) {
         }
     }
 
-    for (int pos = 0; pos < 0x370; pos++) {
+    // the page lists (render_v2.h): on a tile level the cells are the page's glyph commands
+    // (drawn by the composition in their place); this pass then paints only the CJK overlay
+    for (int pos = 0; pos < 0x370 && !v2_tls_ui_cells_from_page; pos++) {
         uint8_t ch = ui_list[pos];
         if (ch == 0) continue;
 

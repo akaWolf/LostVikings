@@ -84,6 +84,8 @@ struct Snap {
     uint8_t ds[DS_SIZE];
     uint8_t fs[FS_SIZE];
     V2DrawList draws;           // the sub-frame's display list (render_v2.h): what the sprite layers drew, in order
+    uint16_t tile_ovr[32768];   // the shown page's tile words (render_v2.h page lists; index = render-map word)
+    bool tile_ovr_valid;
     uint32_t par_acc_x, par_acc_y;
     uint64_t t;                 // SDL_GetPerformanceCounter at capture
     bool valid, tile_frame, fullscreen;
@@ -121,7 +123,9 @@ extern int v2_dbg_pre_vm_iter;   // the game-frame counter (pre-VM barrier)
 static void fill(Snap& S, const uint8_t* s) {
     memcpy(S.ds, s, DS_SIZE);
     memcpy(S.fs, v2_vm_shadow_fs, FS_SIZE);
-    S.draws = v2_frame_draws;      // the layers' display list of this sub-frame
+    v2_drawlist_copy(S.draws, v2_frame_draws);   // the flip's display list (records + the used arena)
+    S.tile_ovr_valid = (v2_tile_override != nullptr);   // the page lists: the composed page's tile words
+    if (S.tile_ovr_valid) memcpy(S.tile_ovr, v2_tile_override, sizeof S.tile_ovr);
     S.par_acc_x = v2_parallax.acc_x;
     S.par_acc_y = v2_parallax.acc_y;
     S.t = SDL_GetPerformanceCounter();
@@ -169,10 +173,13 @@ static void selftest_dump(const Snap& C) {
         uint32_t acc[2] = { C.par_acc_x, C.par_acc_y };
         const int savew = v2_fbw;
         v2_tls_ds = g_work; v2_tls_out = out; v2_fbw = C.w; v2_tls_fs = C.fs; v2_tls_par_acc = acc; v2_tls_presenter = true;
+        v2_tls_tile_ovr = C.tile_ovr_valid ? C.tile_ovr : nullptr; v2_tls_ui_cells_from_page = C.tile_ovr_valid;
         v2_draw_tiles(0);
-        v2_draw_list(C.draws, nullptr, nullptr);   // t = 1: the flip's commands at their own positions
+        v2_draw_list(C.draws, nullptr, nullptr, 0);   // t = 1: the flip's sprite commands at their own positions
         v2_draw_flagged_tiles(0);
+        v2_draw_list(C.draws, nullptr, nullptr, 1);   // the page's glyph cells over the flagged tiles
         v2_draw_ui(0);
+        v2_tls_tile_ovr = nullptr; v2_tls_ui_cells_from_page = false;
         v2_tls_presenter = false; v2_tls_par_acc = nullptr; v2_tls_fs = nullptr; v2_tls_out = nullptr; v2_tls_ds = nullptr; v2_fbw = savew;
         const double ms = (double)(SDL_GetPerformanceCounter() - t0) / (double)SDL_GetPerformanceFrequency() * 1000.0;
         t_sum += ms; t_n++; if (ms > t_max) t_max = ms;
@@ -351,8 +358,12 @@ bool v2_smooth_render(uint8_t* out) {
         const V2DrawCmd& c = C.draws.cmd[i];
         g_pos_x[i] = c.x; g_pos_y[i] = c.y;
         if (!interp) continue;
+        // the page lists keep a slot's earlier commands while their residue lives: only the
+        // slot's LAST command is the object as it stands, the earlier ones stay where they are
+        { bool last = true; for (int k = i + 1; k < C.draws.n; k++) if (C.draws.cmd[k].slot == c.slot) { last = false; break; }
+          if (!last) continue; }
         const V2DrawCmd* p = nullptr;
-        for (int j = 0; j < P.draws.n; j++) if (P.draws.cmd[j].slot == c.slot) { p = &P.draws.cmd[j]; break; }
+        for (int j = P.draws.n - 1; j >= 0; j--) if (P.draws.cmd[j].slot == c.slot) { p = &P.draws.cmd[j]; break; }
         if (!p) continue;
         const int16_t ax = c.x, bx = p->x, ay = c.y, by = p->y;
         if (ax == bx && ay == by) continue;
@@ -402,10 +413,13 @@ bool v2_smooth_render(uint8_t* out) {
     v2_tls_fs = C.fs;
     v2_tls_par_acc = acc;
     v2_tls_presenter = true;
+    v2_tls_tile_ovr = C.tile_ovr_valid ? C.tile_ovr : nullptr; v2_tls_ui_cells_from_page = C.tile_ovr_valid;
     v2_draw_tiles(0);
-    v2_draw_list(C.draws, g_pos_x, g_pos_y);   // the flip's own sprite commands, in its order, at the moved positions
+    v2_draw_list(C.draws, g_pos_x, g_pos_y, 0);   // the flip's own sprite commands, in its order, at the moved positions
     v2_draw_flagged_tiles(0);
+    v2_draw_list(C.draws, g_pos_x, g_pos_y, 1);   // the page's glyph cells over the flagged tiles
     v2_draw_ui(0);
+    v2_tls_tile_ovr = nullptr; v2_tls_ui_cells_from_page = false;
     v2_tls_presenter = false;
     v2_tls_par_acc = nullptr;
     v2_tls_fs = nullptr;

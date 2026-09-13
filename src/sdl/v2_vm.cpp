@@ -4340,7 +4340,11 @@ static void v2_tile_row_16dc1(uint8_t* s, uint16_t bx_fs, uint16_t /*unused*/) {
         uint16_t tw = (moff < V2_FS_SHADOW_SIZE - 1)
                     ? *(uint16_t*)(v2_vm_shadow_fs + moff) : 0;
         v2_vga_tile_1689E(s, tw, (uint16_t)(di_vga + c * 2));
+        v2_page_tile_set_all(moff, tw);   // the page lists (render_v2.h): the word every page now shows there
     }
+    // The page lists (render_v2.h): the row's 43 cells are tiles again on the draw page
+    // and, through sub_171DC right after, on the other two.
+    v2_page_lists_erase_cells_all(bx_fs, 0x2B, 2, "16DC1");
 }
 
 // sub_171dc (seg000): VGA page copy for COLUMN tiles. Verified with seg000 lines 14709+.
@@ -4382,10 +4386,14 @@ static void v2_tile_col_16dd9(uint8_t* s, uint16_t bx_fs) {
     // band mirror stores it in DS_PAGE_COPY_SRC1 right before this call).
     uint16_t di_vga = v2gs(s).page_copy_src1();
     uint16_t stride = v2gs(s).fs_page_stride();
+    // The page lists (render_v2.h): the column's 25 cells are tiles again on the draw page
+    // and, through sub_1712B right after, on the other two.
+    v2_page_lists_erase_cells_all(bx_fs, 0x19, stride, "16DD9");
     for (int r = 0; r < 0x19; r++) {
         uint16_t tw = (bx_fs < V2_FS_SHADOW_SIZE - 1)
                     ? *(uint16_t*)(v2_vm_shadow_fs + bx_fs) : 0;
         v2_vga_tile_1689E(s, tw, di_vga);
+        v2_page_tile_set_all(bx_fs, tw);   // the page lists (render_v2.h): the word every page now shows there
         bx_fs = (uint16_t)(bx_fs + stride);
         di_vga = (uint16_t)(di_vga + 0x2B0);
     }
@@ -4853,6 +4861,7 @@ static void v2_glyph_flush_1E0C7(uint8_t* s) {
         dx += v2gs(s).scroll_col();                              // ADD dx, ds:257Fh
         // line 3070: ax += ds:0x2581                                ; add viewport row scroll
         ax += v2gs(s).scroll_row();                              // ADD ax, ds:2581h
+        uint16_t pl_col = dx, pl_row = ax;                       // the page lists: the run's first MAP cell
 
         // Tile map lookup:
         // line 3071-3072: di = ax; SHL di, 1                       ; row word index
@@ -4908,7 +4917,10 @@ static void v2_glyph_flush_1E0C7(uint8_t* s) {
             // line 3094-3095: TEST word ds:9569h; JNZ loc_1E158
             if (v2gs(s).text_fullscreen() == 0) {
                 v2_glyph_draw_1E16D(s, si_glyph, di);  // VGA glyph pixel render
+                // The page lists (render_v2.h): the glyph cell painted at map cell (pl_col, pl_row) of [92F9]
+                v2_page_list_glyph(v2gs(s).page_shown(), (int16_t)(pl_col * 8), (int16_t)(pl_row * 8), si_glyph);
             }
+            pl_col++;
 
             // loc_1E158:
             // line 3105: INC bx                                     ; next glyph position
@@ -4947,11 +4959,25 @@ static void v2_glyph_flush_1E0C7(uint8_t* s) {
 //   v2_vga_copy_span into shadow VGA at the exact orig addresses).
 //
 // Exact replica of the orig DS/fs side effects; VGA OUTs commented in place.
+// debug (render_v2.h V2_PAGELIST_TRACE): the traced slot's DS fields as a pass mirror sees them
+static void v2_pl_trace_ds(const char* where, const uint8_t* s, int slot) {
+    if (!v2_pl_trace_on(slot)) return;
+    fprintf(stderr, "V2-PL f%d %s slot=%02X 114D=%02X 114E=%02X fl=%04X cur=(%d,%d) old=(%d,%d) off=%04X force=%02X pages=%02X/%02X/%02X\n",
+            v2_dbg_pre_vm_iter, where, slot, s[slot + OBJ_DIRTY_MODE], s[slot + OBJ_DIRTY_CNT],
+            *(const uint16_t*)(s + slot + OBJ_SPRITE_FLAGS),
+            *(const int16_t*)(s + slot + OBJ_SPRITE_CUR_X), *(const int16_t*)(s + slot + OBJ_SPRITE_CUR_Y),
+            *(const int16_t*)(s + slot + OBJ_SPRITE_OLD_X), *(const int16_t*)(s + slot + OBJ_SPRITE_OLD_Y),
+            *(const uint16_t*)(s + slot + OBJ_SPRITE_OFF), s[0x9568],
+            *(const uint16_t*)(s + 0x92F7), *(const uint16_t*)(s + 0x92F9), *(const uint16_t*)(s + 0x92FB));
+}
 static void v2_bg_latch_1DE05(uint8_t* s) {
     v2_cc_v2_hit(9);   // M1 call-parity CC_1DE05 (#65)
     // ---- Pass 1: per-object background restore (orig 38051-38086) ----
     for (int16_t slot = 0xFE; slot >= 0; slot -= 2) {
         if (s[slot + OBJ_DIRTY_CNT] == 0) continue;          // 38054 test byte [di+114Eh]
+        // The page lists (render_v2.h): nothing to record here — this pass only MARKS the
+        // object's OLD rect (sub_1CD7D below, fs OR 3); the pixels go in pass 2, per cell.
+        v2_pl_trace_ds("1DE05-mark", s, slot);
         // Redraw size class = strip_count/8 + 1; >5 means "large sprite"
         // (orig 38056-38061: bp forced to 5 on the large path).
         uint16_t size = (*(uint16_t*)(s + slot + OBJ_STRIP_COUNT) >> 3) + 1;
@@ -4973,6 +4999,7 @@ static void v2_bg_latch_1DE05(uint8_t* s) {
     // OUT(0x3C4, 0x0F02); — VGA sequencer: all planes (orig 38089, commented)
     // OUT(0x3CE, 0x0008); — VGA graphics: bit mask (orig 38093, commented)
     {
+        v2_page_cells_copy_begin(v2gs(s).page_draw(), v2gs(s).page_bg(), "1DE05p2");   // the page lists: this pass's span copies BG → [92F7]
         uint16_t cols_left = 0x2B;                           // 38096 mov cx, 2Bh
         uint16_t rows_left = 0x19;                           // 38097 mov bx, 19h
         // fs cursor at the window's top-left tile (orig 38098-38102):
@@ -5010,6 +5037,7 @@ static void v2_bg_latch_1DE05(uint8_t* s) {
             // clear its bit1, remember the tile's window coordinates.
             if (fs_cur < V2_FS_SHADOW_SIZE - 1)
                 *(uint16_t*)(v2_vm_shadow_fs + fs_cur) &= 0xFFFD;
+            const uint16_t span_fs0 = fs_cur;                // the page lists: the span's first cell (render-map offset)
             fs_cur += 2;
             uint16_t span_bytes = 2;                         // 2 VGA bytes per tile
             uint16_t tile_row = 0x19 - rows_left + v2gs(s).scroll_row();
@@ -5062,10 +5090,14 @@ static void v2_bg_latch_1DE05(uint8_t* s) {
                 for (int r = 0; r < 8; r++)
                     v2_vga_copy_span((uint16_t)(dst_row + byte_col + r * 0x56),
                                      (uint16_t)(src_row + byte_col + r * 0x56), span_bytes);
+                // The page lists (render_v2.h): these cells of page [92F7] now show what the
+                // background page [92FB] shows there — its tile words, its (baked) sprites.
+                v2_page_cells_copy_span(span_fs0, (int)(span_bytes >> 1), (int)tile_col, (int)tile_row, v2_vm_shadow_fs);
             }
         }
     }
 
+    v2_page_cells_copy_end();   // the page lists: one copy per background record with pixels in this pass's spans
     // loc_1DF5C (orig 38211-38217):
     // OUT(0x3CE, 0xFF08); — VGA graphics: bit mask reset, commented
     v2gs(s).sprite_force_b(0);                                  // 38215 mov byte ds:9568h, 0
@@ -5137,6 +5169,10 @@ static bool v2_sprite_visible_1CDEF(uint8_t* s, int16_t slot) {
 // Type-1 sprite pass, orig seg003_648_proc @0E25:0648 (lines 36433-36451,
 // exit 36722): fixed 8×8 sprite. The early gates guarantee full visibility —
 // no partial clip exists for type 1 (word_1C830 stays FFFF → mask 0xFF).
+// The page lists (render_v2.h): what the type handler just painted — nothing (a window gate
+// returned), or the sprite with this column mask and these top/bottom strip clips. Filled
+// by the three handlers, read by the sub_1DD9C mirror right after the dispatch.
+static struct { uint8_t drawn, mand, clip_top, clip_bot; } g_draw_clip;
 static void v2_draw_type1_1CE78(uint8_t* s, int16_t slot) {
     int16_t px = (int16_t)*(uint16_t*)(s + slot + OBJ_SPRITE_X);
     int16_t py = (int16_t)*(uint16_t*)(s + slot + OBJ_SPRITE_Y);
@@ -5153,6 +5189,7 @@ static void v2_draw_type1_1CE78(uint8_t* s, int16_t slot) {
     if (py < edge)         { v2_objmem_w8(s, (uint16_t)((slot) + OBJ_DIRTY_MODE), (uint8_t)(2)); return; }   // 36449
     // In viewport → sub_1CD7B(si=2)
     v2_sprite_draw_1CD7D(s, px, py, 2, 2);                         // 36450-36451
+    g_draw_clip.drawn = 1; g_draw_clip.mand = 0xFF; g_draw_clip.clip_top = 0; g_draw_clip.clip_bot = 0;   // the page lists: whole sprite
     // shadow-VGA: exact type-1 VGA render (seg003 eips 0x698..0x704 +
     // hflip 0x945..0x95B).
     uint16_t y = *(uint16_t*)(s + slot + OBJ_SPRITE_Y);            // + word_1C834(=0)
@@ -5270,6 +5307,7 @@ static void v2_draw_type2_1D8A8(uint8_t* s, int16_t slot) {
             // hflip variant: SHR word_1C830, 8 (high byte holds the
             // mirrored clip mask — the 1379/138B LUT words carry both).
             uint8_t mand = hflip ? (uint8_t)(col_mask >> 8) : (uint8_t)(col_mask & 0xFF);
+            g_draw_clip.drawn = 1; g_draw_clip.mand = mand; g_draw_clip.clip_top = (uint8_t)clip_top; g_draw_clip.clip_bot = (uint8_t)clip_bot;   // the page lists
             v2_vga_sprite32_type2(sp + (uint16_t)(spr_off + skip_top - 1),
                                   di_vga, pan, hflip, mand, rows, skip_tail);
         }
@@ -5354,6 +5392,7 @@ static void v2_draw_type4_1D3B2(uint8_t* s, int16_t slot) {
             extern void v2_vga_sprite16_type4(const uint8_t*, uint16_t, int, int, uint8_t, int, uint16_t);
             int hflip = (*(uint16_t*)(s + slot + OBJ_SPRITE_FLAGS) & 0x200) ? 1 : 0; // 37060
             uint8_t mand = hflip ? (uint8_t)(col_mask >> 8) : (uint8_t)(col_mask & 0xFF);
+            g_draw_clip.drawn = 1; g_draw_clip.mand = mand; g_draw_clip.clip_top = (uint8_t)clip_top; g_draw_clip.clip_bot = (uint8_t)clip_bot;   // the page lists (units)
             v2_vga_sprite16_type4(sp + (uint16_t)(spr_off + skip_top - 1),
                                   di_vga, pan, hflip, mand, units, skip_tail);
         }
@@ -5405,10 +5444,32 @@ static void v2_late_sprites_1DD9C(uint8_t* s) {
                                        + sprite_type * 2 + 0x15CB);
             if (handler == 0x0648 || handler == 0x1078 || handler == 0x0B82)
                 v2_late_list_add((uint16_t)slot);   // the display list: this object is drawn by the late layer
+            g_draw_clip.drawn = 0;                  // the page lists: the handler reports what it paints
             if      (handler == 0x0648) v2_draw_type1_1CE78(s, slot);
             else if (handler == 0x1078) v2_draw_type2_1D8A8(s, slot);
             else if (handler == 0x0B82) v2_draw_type4_1D3B2(s, slot);
-            else if (handler != 0) {
+            if (g_draw_clip.drawn) {
+                // The page lists (render_v2.h): the handler painted this object on page
+                // es=[92F9] — record the draw with the fields the layer's rasterizer uses
+                // and the handler's window clip (column mask, top/bottom strips).
+                V2DrawCmd c;
+                c.slot = (uint16_t)slot;
+                c.flags = *(uint16_t*)(s + slot + OBJ_SPRITE_FLAGS);
+                c.x = *(int16_t*)(s + slot + OBJ_SPRITE_X);
+                c.y = *(int16_t*)(s + slot + OBJ_SPRITE_Y);
+                c.seg = *(uint16_t*)(s + slot + OBJ_SPRITE_SEG);
+                c.off = *(uint16_t*)(s + slot + OBJ_SPRITE_OFF);
+                c.strips = *(uint16_t*)(s + slot + OBJ_STRIP_COUNT);
+                c.late = 1;
+                c.type = (uint8_t)sprite_type;
+                c.mand = g_draw_clip.mand;
+                c.clip_top = g_draw_clip.clip_top;
+                c.clip_bot = g_draw_clip.clip_bot;
+                v2_pl_trace_ds(force_render ? "1DD9C-draw(force)" : (mode_pending ? "1DD9C-draw(114D)" : "1DD9C-draw(scan)"), s, slot);
+                v2_page_list_draw(*(uint16_t*)(s + 0x92F9), c);
+            } else
+                v2_pl_trace_ds("1DD9C-out", s, slot);
+            if (handler != 0 && handler != 0x0648 && handler != 0x1078 && handler != 0x0B82) {   // the dispatch chain's last leg
                 // Unknown non-zero handler — not implemented, fatal
                 fprintf(stderr, "FATAL: unknown render handler 0x%04X for type %d slot %d flags=%04X\n",
                     handler, sprite_type, slot, *(uint16_t*)(s + slot + OBJ_SPRITE_FLAGS));
@@ -5446,6 +5507,9 @@ static void v2_dirty_obj_pos_1DF6A(uint8_t* s) {
         ObjMem{s, (uint16_t)(di)}.w16(OBJ_SPRITE_OLD_X, *(uint16_t*)(s + di + OBJ_SPRITE_CUR_X));  // MOV [0F4Dh], cx
         ObjMem{s, (uint16_t)(di)}.w16(OBJ_SPRITE_OLD_Y, *(uint16_t*)(s + di + OBJ_SPRITE_CUR_Y));  // MOV [104Dh], dx
     }
+    // The page lists (render_v2.h): part 2 below copies the shown page's content into every
+    // bit-1 cell of the rotated-in background page [92FB] — hooked span by span in the loop
+    // (v2_page_cells_copy): the cells lose the sprites drawn there and take what [92F9] shows.
     // Part 2: tile redraw from dirty page flags — VGA rendering only.
     // shadow-VGA: exact replica of seg003 eips 0x17A0..0x1875 (loc_1DFF0..): scan the
     // visible 25x43 window for BIT1 cells, span-copy 8 rows × span bytes from the
@@ -5461,6 +5525,7 @@ static void v2_dirty_obj_pos_1DF6A(uint8_t* s) {
         di_fs <<= 1;
         int16_t bp_fs = (int16_t)v2gs(s).map_bp();
         bp_fs <<= 2; bp_fs -= 0x56;
+        v2_page_cells_copy_begin(v2gs(s).page_bg(), v2gs(s).page_shown(), "1DF6A");   // the page lists: this rotation's span copies [92F9] → the new background
         while (bx != 0) {
             bool found = false;
             while (cx != 0) {
@@ -5473,6 +5538,7 @@ static void v2_dirty_obj_pos_1DF6A(uint8_t* s) {
                 cx = 0x2B; bx--;
                 continue;
             }
+            const uint16_t span_fs0 = di_fs;   // the page lists: the span's first cell (render-map offset)
             di_fs += 2;
             uint16_t dx_tl = 2;
             uint16_t si_row = 0x19 - bx + v2gs(s).scroll_row();
@@ -5502,7 +5568,11 @@ static void v2_dirty_obj_pos_1DF6A(uint8_t* s) {
             for (int r8 = 0; r8 < 8; r8++)
                 v2_vga_copy_span((uint16_t)(dstrow + offb + r8 * 0x56),
                                  (uint16_t)(srcrow + offb + r8 * 0x56), dx_tl);
+            // The page lists (render_v2.h): these cells of the rotated-in background page
+            // [92FB] now show what the shown page [92F9] shows there.
+            v2_page_cells_copy_span(span_fs0, (int)(dx_tl >> 1), (int)ax_col, (int)si_row, v2_vm_shadow_fs);
         }
+        v2_page_cells_copy_end();   // the page lists: one copy per shown-page record with pixels in the rotation's spans
     }
 }
 
@@ -6964,6 +7034,7 @@ static void v2_clear_pages_16880(uint8_t* s) {
     // REP STOSW ax=0, cx=0x8000 words (64KB) to es:0 (VGA 0xA000)
     memset(v2_render_buf, 0, 320 * 240);
     memset(v2_hud_buf, 0, 320 * 64);
+    v2_page_lists_black();       // the page lists (render_v2.h): the wiped pages are black, they hold no sprites
     // shadow-VGA: mirror the m2c-port drawBuffer hook, NOT the DOS STOSW. The orig
     // REP STOSW (cx=0x8000 words) wipes the full 64K VGA segment, but the port
     // hook is `for (i=0; i<0x8000; i++) drawPixel(j, i, (dw)0)` — and the dw
@@ -11094,14 +11165,19 @@ static void v2_anim_queue_1406d(uint8_t* shadow) {
                         return (mo < V2_FS_SHADOW_SIZE - 1)
                              ? *(uint16_t*)(v2_vm_shadow_fs + mo) : 0;
                     };
-                    if (!(clip & 8)) v2_vga_tile_1689E(shadow, rd_fs(0), dip);
+                    // The page lists (render_v2.h): each quadrant painted is a cell of this
+                    // page that is a tile again (the page role value of this pass).
+                    const uint16_t pl_page = *(uint16_t*)(shadow + pg_roles[pass]);
+                    // (the page lists: the quadrant's cell shows this word now, its sprite pixels are gone)
+                    auto pl_quad = [&](uint16_t fs_cell) { v2_page_tile_set(pl_page, fs_cell, rd_fs((uint16_t)(fs_cell - bp2))); v2_page_list_erase_cells(pl_page, fs_cell, 1, "1406d"); };
+                    if (!(clip & 8)) { v2_vga_tile_1689E(shadow, rd_fs(0), dip); pl_quad((uint16_t)(bp2 + 0)); }
                     dip = (uint16_t)(dip + 2);
-                    if (!(clip & 4)) v2_vga_tile_1689E(shadow, rd_fs(2), dip);
+                    if (!(clip & 4)) { v2_vga_tile_1689E(shadow, rd_fs(2), dip); pl_quad((uint16_t)(bp2 + 2)); }
                     dip = (uint16_t)(dip + 0x2AE);
                     bp2 = (uint16_t)(bp2 + stride);
-                    if (!(clip & 2)) v2_vga_tile_1689E(shadow, rd_fs(0), dip);
+                    if (!(clip & 2)) { v2_vga_tile_1689E(shadow, rd_fs(0), dip); pl_quad((uint16_t)(bp2 + 0)); }
                     dip = (uint16_t)(dip + 2);
-                    if (!(clip & 1)) v2_vga_tile_1689E(shadow, rd_fs(2), dip);
+                    if (!(clip & 1)) { v2_vga_tile_1689E(shadow, rd_fs(2), dip); pl_quad((uint16_t)(bp2 + 2)); }
                 }
             }
         } while (0);
@@ -20578,9 +20654,9 @@ static void v2_page_flip_16775(uint8_t* s) {
     if (getenv("V2_FLIPTRACE")) {
         static long _ftn = 0;
         // v2_dbg_pre_vm_iter: file-scope extern (top of file)
-        fprintf(stderr, "V2-FLIP[%ld] f=%d a39c=%04X lv=%04X\n",
+        fprintf(stderr, "V2-FLIP[%ld] f=%d a39c=%04X lv=%04X ra=%p\n",   // ra = the loop that flipped (addr2line -e vikings)
                 ++_ftn, v2_dbg_pre_vm_iter,
-                v2gs(s).vsync_count(), v2gs(s).level());
+                v2gs(s).vsync_count(), v2gs(s).level(), __builtin_return_address(0));
     }
     {
         // #32 groove trap: always record (user decision 2026-07-22 — keep the
@@ -20637,6 +20713,12 @@ static void v2_page_flip_16775(uint8_t* s) {
     v2gs(s).saved_vp_y(v2gs(s).viewport_y());               // save viewport Y
     v2gs(s).scroll_disp_x(v2gs(s).scroll_col());             // scroll row state
     v2gs(s).scroll_disp_y(v2gs(s).scroll_row());             // scroll col state
+    // The frame of this flip = the shown page [92F9]: tiles at the camera, the page's
+    // sprite list, flagged tiles, UI (render_v2.h, the page lists). Composed here, at the
+    // orig's publish point, in both builds — the flips of the blocking loops included.
+    { static int tr = -2; if (tr == -2) { const char* e = getenv("V2_PAGELIST_TRACE"); tr = e ? (int)strtol(e, nullptr, 16) : -1; }
+      if (tr >= 0) v2_pl_trace_ds("16775-flip", s, tr); }
+    v2_compose_page(v2_current_ds_val, *(uint16_t*)(s + 0x92F9));
     // VGA buffer swap (equivalent of page flip)
     v2_swap_render_buf();
 }
@@ -23606,15 +23688,14 @@ static bool v2_pw_iter_body(uint8_t* shadow) {
     v2_blocking_loop_tick();  // #180: counter + HEADLESS max-frames (see v2_run_viking_switch_loop)
     v2gs(shadow).vsync_count(1);            // word_3287C
     v2_vsync_wait_10130(shadow);
-    // m2c-inline at orig line 2746: v2_draw_tiles/sprites/ui before sub_1DE05
-    v2_draw_tiles(v2_current_ds_val);
-    v2_draw_sprites(v2_current_ds_val);
-    v2_draw_ui(v2_current_ds_val);
-    // Per-iter swap to display: orig sub_104a1 loc_104c3 doesn't call sub_16775
-    // (only inside blink branch), but v2 needs swap to make dialog visible since
-    // SDL displays v2_display_buf, not v2_render_buf. Without per-iter swap,
-    // dialog drawn but invisible (only blink branch swaps every ~16 iters).
-    v2_swap_render_buf();
+    // The orig loc_104c3 iteration draws nothing and flips nothing: sub_16775 ran once before
+    // the loop (the box is on the shown page — the sub_1E0C7 mirror recorded its glyph cells,
+    // the flip composed them, render_v2.h page lists) and runs again only inside the blink
+    // branch (sub_10555, every 16 iterations). The m2c-inline composition + per-iteration
+    // publish that lived here painted a fresh "all active objects" frame every iteration —
+    // objects the passes had not drawn appeared, the priority tiles were missing, and the
+    // erased sprites of this pass's sub_1DE05 lingered (the TLPT bomb / Olaf-behind-the-column
+    // divergence, 2026-09-11). Gone: the display keeps the page of the last flip, as on DOS.
     v2_bg_latch_1DE05(shadow);
     v2gs(shadow).vsync_count(1);
     v2_vsync_wait_10130(shadow);
