@@ -1445,6 +1445,7 @@ void v2_page_tile_set_all(uint16_t fs_off, uint16_t word) {
 void v2_page_lists_black(void) {
     v2_page_tile_init();
     for (int p = 0; p < 3; p++) { g_page_list[p].n = 0; for (int i = 0; i < 32768; i++) g_page_tile[p][i] = 0xFFFE; }
+    if (v2_ple_trace_on()) fprintf(stderr, "V2-PLE f%d 16880 black (all pages)\n", v2_dbg_pre_vm_iter);
 }
 // the sprite's pixel extent (the rasteriser's rules: type 1 = 8x8, type 2 = 32 x strips, type 4 = 16x16, a glyph cell 8x8)
 static inline void v2_cmd_extent(const V2DrawCmd& c, int& w, int& h) {
@@ -1734,6 +1735,13 @@ void v2_compose_page(uint16_t ds_val, uint16_t page) {
     v2_compose_at_flip = true;
     v2_page_tile_init();
     v2_tile_override = g_page_tile[v2_page_idx(page)];   // the page's own tile words (render_v2.h)
+    if (v2_ple_trace_on()) {   // debug V2_PL_ERASE_TRACE: the flip in the writers' order — page, camera, window origin, level
+        const uint8_t* s = v2_get_ds_base(ds_val);
+        fprintf(stderr, "V2-PLE f%d 16775 flip page=%02X pages=%02X/%02X/%02X cam=(%d,%d) win=(%d,%d) lvl=%04X flags=%02X n=%d\n", v2_dbg_pre_vm_iter, page,
+                *(const uint16_t*)(s + 0x92F7), *(const uint16_t*)(s + 0x92F9), *(const uint16_t*)(s + 0x92FB),
+                *(const int16_t*)(s + 0x44), *(const int16_t*)(s + 0x46), *(const int16_t*)(s + 0x257F), *(const int16_t*)(s + 0x2581),
+                *(const uint16_t*)(s + DS_LEVEL), s[DS_LEVEL_FLAGS], g_page_list[v2_page_idx(page)].n);
+    }
     v2_tls_ui_cells_from_page = true;                     // the text cells are the page's glyph commands
     v2_draw_tiles(ds_val);
     v2_page_list_bake(page, v2_get_ds_base(ds_val));   // the dead masks as of this flip; fully erased commands go
