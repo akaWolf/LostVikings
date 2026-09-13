@@ -9229,6 +9229,22 @@ static void v2_ui_service(uint8_t* s) {
         if (last_par >= 0) { if (par) v2_parallax_load(s); else v2_parallax.on = false; }
         last_par = par;
     }
+    // Debug hook: V2_TEST_SOUND_MODE=<pre-VM frame>:<mode> switches the SOUND option
+    // at that frame as the F1 menu would (the late-arming worlds — MT32 / SC55
+    // turned on in the title or in a level — are testable without a keyboard).
+    {
+        static int t_frame = -2, t_mode = 0;
+        if (t_frame == -2) {
+            t_frame = -1;
+            const char* e = getenv("V2_TEST_SOUND_MODE");
+            if (e && *e) { int f = -1, m = -1; if (sscanf(e, "%d:%d", &f, &m) == 2 && m >= 0 && m <= 3) { t_frame = f; t_mode = m; } }
+        }
+        if (t_frame >= 0 && v2_dbg_pre_vm_iter >= t_frame) {
+            fprintf(stderr, "V2: TEST_SOUND_MODE hook -> sound_mode=%d (f%d)\n", t_mode, v2_dbg_pre_vm_iter);
+            v2_options.sound_mode = t_mode;
+            t_frame = -1;
+        }
+    }
     // UX stage 6: the language (a bank swap on the game thread; the next text
     // command reads the new strings/glyphs)
     {

@@ -46,6 +46,23 @@ struct Ent { uint8_t kind; uint8_t argc; uint16_t code; uint16_t ret; uint16_t a
 const size_t RING = 4096;
 Ent g_ring[RING];
 std::atomic<size_t> g_wr{0}, g_rd{0};
+bool ring_push(const Ent& e) {
+    const size_t wr = g_wr.load(std::memory_order_relaxed), nx = (wr + 1) & (RING - 1);
+    if (nx == g_rd.load(std::memory_order_acquire)) return false;
+    g_ring[wr] = e;
+    g_wr.store(nx, std::memory_order_release);
+    return true;
+}
+// The music memo (game thread only): the registration of the sequence playing
+// now — its track chunk, the fn97 that registered it and the fnAA that started
+// it — kept whether or not the option is on. A world that starts later (the
+// option switched on in the title or in a level) is built from the boot
+// transcript alone; the music's calls went by before it listened, so once the
+// module took over the mix nothing played until the next track. At arming
+// (v2_mt32_service) the track is staged again and the two calls re-queued
+// ahead of everything else: the module plays the sequence from its top.
+struct MusicMemo { bool have = false, live = false; uint16_t rel = 0xFFFF; Ent reg{}, start{}; };
+MusicMemo g_memo;
 std::atomic<bool> g_armed{false};       // the option is on: the producers queue
 Ent  g_init[24]; int g_init_n = 0; bool g_init_done = false;   // the boot chain (fn64 .. fn9A), captured always
 uint64_t g_drops = 0;
@@ -475,6 +492,15 @@ void v2_mt32_note_call(uint16_t fn_code, const uint16_t* args, int argc, uint16_
         if (g_init_n < 24) g_init[g_init_n++] = e;
         if (fn_code == 0x9A || (fn_code == 0x99 && ret == 0)) g_init_done = true;
     }
+    // the music memo: a registration with the track paragraph (sub_176bd), its start, its stop
+    if (g_published.load(std::memory_order_acquire)) {
+        if (fn_code == 0x97 && argc >= 3 && args[2] == g_pub.track_para) {
+            g_memo.have = (ret != 0xFFFF); g_memo.live = false; g_memo.reg = e;
+        } else if (g_memo.have && argc >= 2 && args[1] == g_memo.reg.ret) {
+            if (fn_code == 0xAA) { g_memo.live = true; g_memo.start = e; }
+            else if (fn_code == 0xAB || fn_code == 0x98) g_memo.live = false;
+        }
+    }
     if (!g_armed.load(std::memory_order_acquire)) return;
     const size_t wr = g_wr.load(std::memory_order_relaxed), nx = (wr + 1) & (RING - 1);
     if (nx == g_rd.load(std::memory_order_acquire)) { g_drops++; if ((g_drops & (g_drops - 1)) == 0) fprintf(stderr, "V2-MT32: call ring FULL — %llu dropped\n", (unsigned long long)g_drops); return; }
@@ -483,6 +509,7 @@ void v2_mt32_note_call(uint16_t fn_code, const uint16_t* args, int argc, uint16_
 }
 
 void v2_mt32_note_track(uint16_t chunk_rel) {
+    g_memo.rel = chunk_rel;                  // the music memo: the track the registration that follows will play
     if (!g_armed.load(std::memory_order_acquire)) return;
     const int slot = g_trk_next; g_trk_next = (g_trk_next + 1) % TRACK_SLOTS;
     const uint16_t cid = (uint16_t)(chunk_rel + 3);       // the music set of card 8
@@ -496,6 +523,7 @@ void v2_mt32_note_track(uint16_t chunk_rel) {
 }
 
 void v2_mt32_note_stop_all(uint16_t si_start, uint16_t fm_slot0_handle) {
+    if (si_start == 0) g_memo.live = false;  // the music memo: sub_17912 from slot 0 stops the music
     if (!g_armed.load(std::memory_order_acquire)) return;
     Ent e; memset(&e, 0, sizeof e); e.kind = K_STOPALL; e.args[0] = si_start; e.args[1] = fm_slot0_handle;
     const size_t wr = g_wr.load(std::memory_order_relaxed), nx = (wr + 1) & (RING - 1);
@@ -522,6 +550,14 @@ void v2_mt32_service() {
         if (!load_data()) { v2_ui_toast(g_status); v2_options.sound_mode = 0; last = 0; return; }
         snprintf(g_status, sizeof g_status, munt_mode() ? "MT-32: starting" : "MT-32 world -> SC-55: starting");
         g_armed.store(true, std::memory_order_release);
+        // the music memo: the sequence playing now was registered and started before the
+        // world listened — stage its track and queue the two calls ahead of everything else
+        if (g_memo.have && g_memo.live && g_memo.rel != 0xFFFF) {
+            v2_mt32_note_track(g_memo.rel);
+            if (ring_push(g_memo.reg) && ring_push(g_memo.start))
+                fprintf(stderr, "V2-MT32: resuming the music playing now (track %04X, FM handle %04X) from its top\n",
+                        (unsigned)(g_memo.rel + 3), g_memo.reg.ret);
+        }
     } else {
         g_armed.store(false, std::memory_order_release);       // the audio thread tears the instance down
     }
