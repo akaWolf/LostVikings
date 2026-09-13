@@ -23,11 +23,9 @@
 #include "v2_obj_view.h"      // ObjRef (its u16/w16 are defined in v2_vm.cpp)
 
 extern int v2_dbg_pre_vm_iter;        // game-frame counter (v2_vm.cpp)
-// UX stage 6: the text accessors of sub_12515 / sub_12529 (v2_vm.cpp) — the
-// active language bank first, the canonical seg001 table otherwise; the
-// inlined op 41/44 of the executors read through them like the interpreter.
-uint16_t v2_text_ptr_of(const uint8_t* seg001, uint16_t idx);
-uint8_t  v2_text_byte(const uint8_t* seg001, uint16_t ptr);
+// (the text accessors v2_text_ptr_of / v2_text_byte the inlined op 41/44 call
+// are declared with the other helpers in v2_vm_gen_decls.gen.inc, generated
+// by tools/data/gen_vm_decls.py from the executors' calls)
 extern uint8_t* v2_vm_acc_base;       // the active shadow the accumulator lives in (v2_vm.cpp)
 
 // Shadow of DS segment (animation table + globals): the full 64KB DS segment.

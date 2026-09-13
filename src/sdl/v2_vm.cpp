@@ -2436,6 +2436,11 @@ struct V2Locale { char code[8]; uint16_t cid; };
 static V2Locale v2_locales[16];
 static int v2_locale_n = 0;                  // slot 0 = the original English (no bank)
 static uint8_t v2_lang_bank[0x10000];       // records < 0x8000 (virtual pointers), the wide-glyph table beyond
+// the bank's XTRA table: (text index >= the 390 of the EXE table, record offset)
+// pairs for the strings the content build appends past the table — the scene
+// lines of the Genesis interludes at 0x3BA0+ (build_locale.xtra_trailer)
+static const uint16_t* v2_lang_xtra = nullptr;
+static uint16_t v2_lang_xtra_n = 0;
 static bool v2_lang_on = false;
 static uint16_t v2_lang_nstr = 0, v2_lang_nglyph = 0, v2_lang_g0 = 0x60, v2_lang_nascii = 0;
 static const uint16_t* v2_lang_offs = nullptr;
@@ -2496,9 +2501,18 @@ static bool v2_locale_activate(int idx) {
     v2_lang_offs = (const uint16_t*)(v2_lang_bank + 0x14);
     v2_lang_page = v2_lang_bank + 0x14 + 2 * v2_lang_nstr;
     v2_lang_wide = nullptr; v2_lang_wide_n = 0;
-    if (len >= 8 && memcmp(v2_lang_bank + len - 4, "WGLY", 4) == 0) {
-        uint32_t off = (uint32_t)(v2_lang_bank[len - 8] | (v2_lang_bank[len - 7] << 8) | (v2_lang_bank[len - 6] << 16) | (v2_lang_bank[len - 5] << 24));
-        if (off + 2 <= len) { v2_lang_wide_n = (uint16_t)(v2_lang_bank[off] | (v2_lang_bank[off + 1] << 8)); v2_lang_wide = v2_lang_bank + off + 2; }
+    v2_lang_xtra = nullptr; v2_lang_xtra_n = 0;
+    // the trailers, last first: [u32 offset]"XTRA" (the records past the EXE table), then
+    // [u32 offset]"WGLY" (the wide-glyph table of a CJK bank) in front of it
+    uint32_t end = len;
+    if (end >= 8 && memcmp(v2_lang_bank + end - 4, "XTRA", 4) == 0) {
+        uint32_t off = (uint32_t)(v2_lang_bank[end - 8] | (v2_lang_bank[end - 7] << 8) | (v2_lang_bank[end - 6] << 16) | (v2_lang_bank[end - 5] << 24));
+        if (off + 2 <= end) { v2_lang_xtra_n = (uint16_t)(v2_lang_bank[off] | (v2_lang_bank[off + 1] << 8)); v2_lang_xtra = (const uint16_t*)(v2_lang_bank + off + 2); }
+        end = off;
+    }
+    if (end >= 8 && memcmp(v2_lang_bank + end - 4, "WGLY", 4) == 0) {
+        uint32_t off = (uint32_t)(v2_lang_bank[end - 8] | (v2_lang_bank[end - 7] << 8) | (v2_lang_bank[end - 6] << 16) | (v2_lang_bank[end - 5] << 24));
+        if (off + 2 <= end) { v2_lang_wide_n = (uint16_t)(v2_lang_bank[off] | (v2_lang_bank[off + 1] << 8)); v2_lang_wide = v2_lang_bank + off + 2; }
     }
     v2_text_items_clear();
     v2_lang_on = true; v2_lang_current = idx;
@@ -2511,8 +2525,14 @@ static bool v2_locale_activate(int idx) {
 // and must read through the same two accessors, or the level dialogues of the
 // canonical worlds stay English while the interpreted ones translate.
 uint16_t v2_text_ptr_of(const uint8_t* seg001, uint16_t idx) {
-    if (v2_lang_on && idx < v2_lang_nstr && v2_lang_offs[idx])
-        return (uint16_t)(0x8000 + v2_lang_offs[idx]);
+    if (v2_lang_on) {
+        if (idx < v2_lang_nstr) {
+            if (v2_lang_offs[idx]) return (uint16_t)(0x8000 + v2_lang_offs[idx]);
+        } else if (v2_lang_xtra) {              // past the EXE table: the scene lines (XTRA pairs)
+            for (uint16_t k = 0; k < v2_lang_xtra_n; k++)
+                if (v2_lang_xtra[2 * k] == idx) return (uint16_t)(0x8000 + v2_lang_xtra[2 * k + 1]);
+        }
+    }
     return *(const uint16_t*)(seg001 + (uint16_t)(idx << 1));
 }
 // one byte of a text record by its (possibly virtual) seg001 pointer
@@ -5670,6 +5690,21 @@ static uint16_t v2_text_item_row_after(const uint8_t* s, uint16_t row) {
     }
     return 0;
 }
+// the cells a live wide-glyph item spans on its first line (its UTF-8 text through the bank's advances)
+static uint16_t v2_text_item_cells(const V2TextItem& it) {
+    uint32_t px = 0, best = 0;
+    for (size_t i = 0; it.utf8[i]; ) {
+        uint8_t c = (uint8_t)it.utf8[i];
+        if (c == 0x0D) { if (px > best) best = px; px = 0; i++; continue; }
+        uint32_t cp; int len = 1;
+        if (c < 0x80) cp = c; else if ((c & 0xE0) == 0xC0) { cp = ((c & 0x1F) << 6) | (it.utf8[i+1] & 0x3F); len = 2; }
+        else { cp = ((c & 0x0F) << 12) | ((it.utf8[i+1] & 0x3F) << 6) | (it.utf8[i+2] & 0x3F); len = 3; }
+        uint8_t w = 8; v2_lang_wide_glyph(cp, &w); px += w; i += len;
+    }
+    if (px > best) best = px;
+    return (uint16_t)((best + 7) / 8);
+}
+
 static void v2_text_render_124c5(uint8_t* s, uint16_t si, uint16_t di, uint16_t bx) {
     if (!v2_m2c_base) return;
     uint8_t* seg001 = v2_m2c_base + 0x9480;
@@ -5677,6 +5712,16 @@ static void v2_text_render_124c5(uint8_t* s, uint16_t si, uint16_t di, uint16_t 
     if (v2_lang_on && v2_lang_wide && bx >= 0x8000 && v2_text_byte(seg001, bx) == 0x01) {   // UX6 phase 2
         v2_text_item_add(s, si, di, (uint16_t)(bx + 1));
         return;
+    }
+    // a plain string drawn from a cell a live wide item holds replaces the item
+    // (the title script prints its 16-space blank over the NEW GAME / QUIT rows
+    // in the password mode; the cells stay spaces, so the item would stay lit)
+    if (v2_lang_on && v2_lang_wide) {
+        for (auto& it : v2_text_items) {
+            if (!it.on) continue;
+            uint16_t lines = 1; for (size_t i = 0; it.utf8[i]; i++) if ((uint8_t)it.utf8[i] == 0x0D) lines++;
+            if (di >= it.row && di < it.row + 2 * lines && si >= it.col && si < it.col + v2_text_item_cells(it)) it.on = 0;
+        }
     }
     uint16_t cx = v2gs(s).scratch_34() - 2;                       // MOV cx, word_28514; SUB cx, 2
 

@@ -213,8 +213,10 @@ Arcade Collection and are not in the repository either: copy
 `strings/locale.strings` and `lv_snes_strings.json` from the
 collection's `assets/` folder next to `DATA.DAT` (or pass `--bac <its
 assets dir>`; a Steam or Battle.net installation in the usual place is
-found by itself) and the build adds the language banks. Without them the
-pack has the English original only. The extra levels have no switch — they
+found by itself) and the build adds the language banks — the level and
+intro dialogues, the title menu (NEW GAME / PASSWORD / QUIT TO DOS,
+INVALID PASSWORD), the game-over prompt and the lines of the Genesis
+interludes. Without them the pack has the English original only. The extra levels have no switch — they
 are simply in the progression. `V2_CONTENT=0` runs the plain archive
 with the same binary; `V2_ASSETS_DIR=<dir>/.compiled
 V2_EXE_STATIC=<dir>/exe_static.bin` point at a pack elsewhere (the

@@ -38,6 +38,14 @@ CJK_NO_LEAD = set("。、，．！？」』）〕】〉》・ー…：；!?,.)")
 PASSWORD_IDX = 269         # the level letters are typed at box row 2 (row 12 of the 10x4 box at
                            # (15,10)); the CJK title takes box rows 0-1 (one 16-px line)
 RAW_IDX = {4, 5, 6}
+# the title / options words: raw strings the world scripts print with op 45 at
+# fixed cells (NEW GAME / PASSWORD / QUIT TO DOS at column 14, INVALID PASSWORD
+# at column 10 — up to 26 cells free); 257 is the 16-space blank the title
+# script prints over the NEW GAME / QUIT rows in the password mode, so its
+# width follows the longest translated item
+RAW_IDX |= {i for i in range(255, 273) if i not in (257, 269, 271)}
+BLANK_IDX = 257
+MENU_IDX = (255, 256, 272)
 GLYPH0 = 0x60
 TRY_AGAIN_IDX = 271      # class D2 draws YES/NO at fixed cells (15,11)/(21,11) under a box at (13,8):
                          # keep the title within 2 lines, the box >= 12 wide, two rows below the title
@@ -162,11 +170,18 @@ def build_bank_cjk(code, strings, G, orig=None):
     if 4 in recs and 5 in recs:
         blank = max(sum(G[c]["w"] for c in strings[4]), sum(G[c]["w"] for c in strings[5]))
         recs[6] = b"\x01" + (" " * (blank // 8)).encode() + b"\0"; used.add(" ")
+    # the title's blank line: plain spaces (no item) as wide as the widest menu word in cells, never below the 16 of the original
+    menu_cells = [-(-sum(G[c]["w"] for c in strings[i]) // 8) for i in MENU_IDX if i in strings]
+    recs[BLANK_IDX] = b"\x20" * max([16] + menu_cells) + b"\0"
     head_len = 0x14 + 2 * n
     offsets = [0] * n
     body = bytearray()
+    xtra = []                                   # (index >= n, offset): the scene lines, found through the XTRA trailer
     for i in sorted(recs):
-        offsets[i] = head_len + len(body)
+        if i < n:
+            offsets[i] = head_len + len(body)
+        else:
+            xtra.append((i, head_len + len(body)))
         body += recs[i]
     assert head_len + len(body) < 0x8000, (code, head_len + len(body))
     table = bytearray(struct.pack("<H", len(used)))
@@ -178,8 +193,21 @@ def build_bank_cjk(code, strings, G, orig=None):
     payload = hdr + struct.pack("<%dH" % n, *offsets) + bytes(body)
     wide_off = len(payload)
     payload += bytes(table) + struct.pack("<I", wide_off) + b"WGLY"
+    payload = xtra_trailer(payload, xtra)
     assert len(payload) <= 0x10000, (code, len(payload))
     return payload, len(recs), len(used)
+
+
+def xtra_trailer(payload, xtra):
+    """The records of text indices beyond the 390 of the EXE table (the scene
+    lines at 0x3BA0+): [u16 count][count x (u16 index, u16 offset)] closed by
+    the 8-byte trailer [u32 offset]"XTRA" — the LAST trailer of the bank
+    (v2_locale_activate reads it first, then WGLY in front of it)."""
+    if not xtra:
+        return payload
+    xoff = len(payload)
+    table = struct.pack("<H", len(xtra)) + b"".join(struct.pack("<HH", i, o) for i, o in xtra)
+    return payload + table + struct.pack("<I", xoff) + b"XTRA"
 
 
 def build_bank(code, strings, glyphs, orig=None):
@@ -221,22 +249,29 @@ def build_bank(code, strings, glyphs, orig=None):
     if 4 in recs and 5 in recs:
         blank = max(len(recs[4]), len(recs[5])) - 1
         recs[6] = b"\x20" * blank + b"\0"
+    # the title's blank line: as wide as the longest menu word, never below the 16 of the original
+    recs[BLANK_IDX] = b"\x20" * max([16] + [len(strings[i]) for i in MENU_IDX if i in strings]) + b"\0"
     head_len = 0x14 + 2 * n
     page = b"".join(dos_glyph(glyphs[c]) for c in charset)
     page += b"".join(dos_glyph(glyphs[c]) if c in glyphs else dos_glyph([0] * 8) for c in ASCII_PAGE)
     off = head_len + len(page)
     offsets = [0] * n
     body = bytearray()
+    xtra = []                                   # (index >= n, offset): the scene lines, found through the XTRA trailer
     for i in sorted(recs):
-        offsets[i] = off + len(body)
+        if i < n:
+            offsets[i] = off + len(body)
+        else:
+            xtra.append((i, off + len(body)))
         body += recs[i]
     assert off + len(body) < 0x8000, (code, off + len(body))
     hdr = b"LVLB" + code.encode("ascii").ljust(8, b"\0") + struct.pack("<HHHH", n, len(charset), GLYPH0, len(ASCII_PAGE))
     payload = hdr + struct.pack("<%dH" % n, *offsets) + page + bytes(body)
+    payload = xtra_trailer(payload, xtra)
     return payload, len(recs), len(charset)
 
 
-def banks(texts_path=None, locale_path=None):
+def banks(texts_path=None, locale_path=None, extra=None):
     """texts_path: the texts_exe.json whose box sizes are the floor (default the
     canonical extraction assets/texts_exe.json; build_content.py's tree carries
     its own copy of the same extraction). locale_path: the translation table
@@ -251,6 +286,18 @@ def banks(texts_path=None, locale_path=None):
     out = {}
     for k, code in enumerate(LANGS):
         strings = {int(i): s for i, s in L["pc"][code].items() if s is not None}
+        # extra: {text index >= 390: the English record bytes [w][h][text][0]} — the scene lines of
+        # the Genesis interludes the content build appends past the EXE table; their translation
+        # is looked up in the collection's pool by the normalised English text (bac_strings "pool")
+        if extra:
+            from bac_strings import norm
+            pool = L.get("pool", {})
+            for idx, rec in extra.items():
+                en = rec[2:].split(b"\0", 1)[0].decode("latin-1").replace("\r", "\n")
+                tr = pool.get(norm(en), {}).get(code)
+                if tr:
+                    strings[idx] = tr
+                    orig[idx] = (rec[0], rec[1])
         if code in CJK:
             payload, nrec, ng = build_bank_cjk(code, strings, G16, orig)
         else:
@@ -259,8 +306,9 @@ def banks(texts_path=None, locale_path=None):
     return out
 
 
-def integrate(scratch):
-    """Write the banks into the scratch tree (role unreferenced -> raw chunk)."""
+def integrate(scratch, extra=None):
+    """Write the banks into the scratch tree (role unreferenced -> raw chunk).
+    extra: the records of text indices past the EXE table (banks extra)."""
     ex_path = os.path.join(scratch, "extras.json")
     extras = json.load(open(ex_path)) if os.path.exists(ex_path) else {}
     os.makedirs(os.path.join(scratch, "unreferenced"), exist_ok=True)
@@ -274,7 +322,7 @@ def integrate(scratch):
         print("language banks: no BAC translation table (bac_lv_locale.json) — English only")
         return
     print(f"language banks ({lp}):")
-    for cid, (code, payload, nrec, ng) in sorted(banks(tp if os.path.exists(tp) else None, lp).items()):
+    for cid, (code, payload, nrec, ng) in sorted(banks(tp if os.path.exists(tp) else None, lp, extra).items()):
         with open(os.path.join(scratch, "unreferenced", f"{cid:04X}.bin"), "wb") as f:
             f.write(payload)
         extras[f"{cid:04X}"] = {"role": "unreferenced"}

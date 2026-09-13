@@ -11,11 +11,32 @@ import json, os
 from PIL import Image, ImageFont, ImageDraw
 ROOT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..")
 CJK = ["ja", "ko", "zh-CN", "zh-TW"]
-L = json.load(open(os.path.join(ROOT, "tools/assets/bac_lv_locale.json")))
+# The translation table is a build artifact now (build_content.py writes it
+# into the content tree from the user's collection; it is not in the repo):
+# content/bac_lv_locale.json, or the path given as the first argument. The
+# characters: the CJK strings of the EXE table (menu words included) and the
+# scene lines of the Genesis interludes, read from the content image at
+# SCENE_TEXT_BANK (integrate_snes.write_scene_texts) and looked up in the
+# table's pool by their normalised English text (build_locale.banks extra).
+import sys
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from bac_strings import norm
+TABLE = sys.argv[1] if len(sys.argv) > 1 else os.path.join(ROOT, "content/bac_lv_locale.json")
+IMAGE = sys.argv[2] if len(sys.argv) > 2 else os.path.join(ROOT, "content/exe_static.bin")
+L = json.load(open(TABLE))
 chars = set()
 for code in CJK:
     for s in L["pc"][code].values():
-        chars |= set(s)
+        if s: chars |= set(s)
+if os.path.exists(IMAGE) and "pool" in L:
+    img = open(IMAGE, "rb").read(); base = 0x10BC0            # SCENE_TEXT_BANK
+    n = 18; ptrs = [int.from_bytes(img[base + 2 * k: base + 2 * k + 2], "little") for k in range(n)]
+    for p in ptrs:
+        q = 0x9480 + p + 2; e = q
+        while img[e]: e += 1
+        row = L["pool"].get(norm(img[q:e].decode("latin-1").replace("\r", "\n")), {})
+        for code in CJK:
+            if row.get(code): chars |= set(row[code])
 chars |= set("ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789 .,!?'-:;()/")
 chars = {c for c in chars if c not in "\n\r"}
 font = ImageFont.truetype(os.path.join(ROOT, "fonts/unifont.otf"), 16)

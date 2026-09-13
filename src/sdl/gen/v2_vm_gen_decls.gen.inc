@@ -6,6 +6,8 @@ uint32_t v2_ds_hash(uint8_t* ds);
 uint32_t v2_obj_hash(uint8_t* ds, uint16_t obj_idx);
 void v2_pcdump_note(uint8_t* shadow, uint16_t pc_before, uint8_t opcode);
 int32_t v2_spawn_object_13809(uint8_t* s, uint16_t code_seg_idx, uint16_t di_spawn, uint16_t si_anim);
+uint8_t v2_text_byte(const uint8_t* seg001, uint16_t ptr);
+uint16_t v2_text_ptr_of(const uint8_t* seg001, uint16_t idx);
 void v2_vm_anim_interp_1303a(V2VM& vm);
 void v2_vm_anim_tail_135cf(V2VM& vm);
 bool v2_vm_collision_155d6_f(V2VM& vm, uint8_t filter);

@@ -233,16 +233,22 @@ def build(locale_path, keys_path, texts_path, out_path):
     # the PC EXE holds YES / NO / the blank as raw 3-byte strings without the
     # [w][h] head (texts_exe.json shows them as 'S' / '' / ' '); the BAC keys
     # msg4 / msg3 / msg5 are those words
-    pc_key, pc_unmatched = {5: "msg4", 4: "msg3", 6: "msg5"}, []
+    # The title / options words (255..272 except the 269 / 271 boxes) are RAW
+    # strings without the [w][h] head — texts_exe.json shows their first two
+    # letters as w / h ('NE' + 'W GAME'); QUIT TO DOS (272) has no key in the
+    # collection (a DOS-only item) and takes EXIT.
+    RAW_MENU = {i for i in range(255, 273) if i not in (269, 271)}
+    pc_key, pc_unmatched = {5: "msg4", 4: "msg3", 6: "msg5", 272: "g_msg_13"}, []
     for e in pc:
-        k = norm(e["text"])
+        text = (chr(e["w"]) + chr(e["h"]) + e["text"]) if e["i"] in RAW_MENU else e["text"]
+        k = norm(text)
         if e["i"] in pc_key:
             continue
         if not k:
             continue
         if k in key_by_norm:
             pc_key[e["i"]] = key_by_norm[k]; continue
-        w = words_blind(e["text"]); best, bs = None, 0.0
+        w = words_blind(text); best, bs = None, 0.0
         for e2 in js:
             if e2["name"] not in name_idx:
                 continue
@@ -255,7 +261,7 @@ def build(locale_path, keys_path, texts_path, out_path):
         if best and bs >= 0.6:
             pc_key[e["i"]] = best
         else:
-            pc_unmatched.append((e["i"], e["text"][:40]))
+            pc_unmatched.append((e["i"], text[:40]))
     print(f"PC strings mapped to BAC keys: {len(pc_key)}/{sum(1 for e in pc if norm(e['text']))}; unmatched: {pc_unmatched}")
     placeholders = sorted({p for n in by_name for s in by_name[n].values() if s for p in PLACEHOLDER_RE.findall(s)})
     print("placeholders used:", placeholders)
@@ -268,7 +274,23 @@ def build(locale_path, keys_path, texts_path, out_path):
             s = by_name[name].get(code)
             if s is not None:
                 pc_table[code][str(pi)] = render(s)
+    # every string of the collection's pool with its counterpart in each
+    # language, keyed by the normalised English text: the content build looks
+    # up the strings outside the EXE table here (the Genesis interlude lines
+    # the scenes carry, build_locale.banks extra)
+    pool = {}
+    for i, s in enumerate(E):
+        k = norm(s)
+        if not k or k in pool:
+            continue
+        row = {}
+        for kk, code in enumerate(LANGS):
+            j = maps[code][i]
+            if j is not None and j < len(pools[kk]) and pools[kk][j] is not None:
+                row[code] = render(pools[kk][j])
+        pool[k] = row
     json.dump({"languages": LANGS, "by_name": by_name, "pc": pc_table, "pc_key": {str(k): v for k, v in pc_key.items()},
+               "pool": pool,
                "pc_unmatched": pc_unmatched, "placeholders": placeholders},
               open(out_path, "w"), ensure_ascii=False, indent=0)
     print("wrote", out_path)

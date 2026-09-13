@@ -1354,7 +1354,11 @@ def do_integrate(scratch, music=None):
     build_lvx(scratch, lvx)
     # UX stage 6: the language banks (BAC translations, Press Start 2P glyph pages)
     import build_locale
-    build_locale.integrate(scratch)
+    # the scene lines (write_scene_texts: text indices 0x3BA0+ past the EXE table)
+    # get their records into the language banks too — the XTRA table of the bank
+    rom_smd = SM.SmdRom().rom
+    extra = {idx: smd_text_record(rom_smd, ln) for ln, idx in text_idx.items()}
+    build_locale.integrate(scratch, extra)
     return [e["slot"] for e in PLAN + PLAN_SMD]
 
 
