@@ -498,7 +498,12 @@ bool v2_ui_draw(uint32_t* rgba, int w, int h, SDL_PixelFormat* fmt, bool transpa
         drew = true;
     }
     if (v2_ui_menu_open.load()) {
-        char lines[28][48]; int n = 0;          // title + up to 22 items (debug mode) + the network status
+        // the title, every item of the enum (IT_COUNT in debug mode, IT_LEVEL otherwise), the
+        // REWIND hint of debug mode and the network status — sized from the enum so a new item
+        // grows the buffer: a fixed 28 (written for 22 items) overflowed by three rows in debug
+        // mode once the items reached 28 (2026-10-07: a SIGSEGV at F1 on an ARM build)
+        enum { MENU_LINES = 1 + IT_COUNT + 1 + 1 };
+        char lines[MENU_LINES][48]; int n = 0;
         snprintf(lines[n++], 40, "OPTIONS  (F1/ESC CLOSE)");
         snprintf(lines[n++], 40, "PARALLAX  [%s]", v2_options.parallax.load() ? "ON " : "OFF");
         snprintf(lines[n++], 40, "SCENES    [%s]", v2_options.scenes.load() ? "ON " : "OFF");
