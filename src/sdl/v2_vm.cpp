@@ -6001,6 +6001,16 @@ static void v2_scroll_limits_113b0(uint8_t* s) {
     const V2LvxEntry* lx = v2_lvx_find(v2gs(s).level());
     const uint16_t fl = lx ? lx->flags : 0;
     if (fl & LVX_CAMLOCK) v2_view_w = 0x140;
+    // 2026-10-07: every NON-INTERACTIVE slot keeps the 320 frame too — the mode word 0x8000
+    // at this load (the intro chain of slots 0x2B..0x2F and the attract demo play a recorded
+    // input stream, sub_12d72) and the PC's own scene slots 37..47 (logos, title, the story
+    // cards, the finale). Their choreography was recorded against the 320 camera: with a
+    // wider view the follow starts later (the dead zone is W/2 +- 16), the activation window
+    // reaches W + 16 ahead and the in-viewport probes test W - 0x1F, so the same key stream
+    // meets another world — on the intro's slot 0x2B at 426 px Erik is knocked down at
+    // x = 664 by an object the 320 run has not activated yet, and the scene never scrolls past
+    // 661 where the original reaches 1724. Interactive levels keep the WIDE width.
+    if (v2gs(s).game_mode_ac() == 0x8000 || (v2gs(s).level() >= 37 && v2gs(s).level() < 48)) v2_view_w = 0x140;
     if (v2_view_w > (int)width * 16) v2_view_w = (int)width * 16;
     if (v2_view_w < 0x140) v2_view_w = 0x140;
     v2gs(s).clip_limit_x(width * 2);         // word_31648

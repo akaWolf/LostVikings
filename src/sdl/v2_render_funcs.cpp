@@ -1896,6 +1896,25 @@ static void v2_page_list_bake(uint16_t page, const uint8_t* s) {
         for (int i = 0; i < L.n; i++) {
             V2DrawCmd& c = L.cmd[i];
             if (!c.data_len) continue;
+            // the live records' data must fit the arena they came from; a record whose range
+            // reaches past it, or a sum past the arena, is a bookkeeping fault — the overflow
+            // of 2026-10-07 (the end of the first Genesis interlude) wrote past this scratch
+            // into other files' statics: diagnose, and drop the record's copy (it reads the
+            // live bank, as a record the arena had no room for does)
+            if ((uint32_t)c.data_off + c.data_len > V2_DRAWLIST_ARENA || used + c.data_len > V2_DRAWLIST_ARENA) {
+                static int warned = 0;
+                if (warned < 3) {
+                    warned++;
+                    fprintf(stderr, "V2-PL f%d page=%02X ARENA FAULT: record %d/%d slot=%02X type=%d strips=%d late=%d epoch=%u data_off=%u data_len=%u, arena_used=%u, compacted so far %u\n",
+                            v2_dbg_pre_vm_iter, page, i, L.n, c.slot, (int)c.type, (int)c.strips, (int)c.late, c.epoch, c.data_off, (unsigned)c.data_len, L.arena_used, used);
+                    for (int j = 0; j < L.n; j++) {
+                        const V2DrawCmd& d = L.cmd[j];
+                        if (d.data_len) fprintf(stderr, "V2-PL   rec %d slot=%02X type=%d strips=%d late=%d epoch=%u off=%u len=%u\n", j, d.slot, (int)d.type, (int)d.strips, (int)d.late, d.epoch, d.data_off, (unsigned)d.data_len);
+                    }
+                }
+                c.data_len = 0; c.data_off = 0;
+                continue;
+            }
             memcpy(scratch + used, L.arena + c.data_off, c.data_len);
             c.data_off = used;
             used += c.data_len;
@@ -1938,6 +1957,24 @@ void v2_page_list_draw(uint16_t page, const V2DrawCmd& cmd0) {
     cmd.epoch = ++g_epoch;
     memset(cmd.dead, 0, sizeof cmd.dead);
     memset(cmd.keep, 0xFF, sizeof cmd.keep);   // a draw may show every one of its cells
+    // Room in the record list FIRST (2026-10-07). This block sat after the arena append: a
+    // full list then baked the page with the new record's bytes already in the arena but the
+    // record itself not yet in the list — the bake's compaction rebuilt the arena from the
+    // listed records only, so the new record kept a data_off that now pointed into another
+    // record's bytes, two records shared one range, the sum of the live lengths outgrew the
+    // arena, and the next compaction wrote past its scratch buffer into other files'
+    // statics (the end of the first Genesis interlude: ~900 records with ~660 span copies
+    // fill a page's list; the crash in v2_smooth_capture's fprintf on a smashed static).
+    // With the list handled before the append, a bake never sees an unlisted record's data.
+    if (L.n >= V2_DRAWLIST_MAX) {
+        v2_page_list_bake(page, v2_get_ds_base(0));                 // drop what is fully erased
+        if (L.n >= V2_DRAWLIST_MAX) {                                // still full: the oldest goes (a divergence — report it)
+            static int warned = 0;
+            if (warned < 5) { warned++; fprintf(stderr, "V2-PL f%d page=%02X list full, oldest command dropped (slot=%02X)\n", v2_dbg_pre_vm_iter, page, L.cmd[0].slot); }
+            memmove(&L.cmd[0], &L.cmd[1], sizeof(V2DrawCmd) * (V2_DRAWLIST_MAX - 1));
+            L.n = V2_DRAWLIST_MAX - 1;
+        }
+    }
     // the record's strip bytes, copied into the arena (the page keeps what was painted)
     cmd.data_len = 0; cmd.data_off = 0;
     {
@@ -1973,16 +2010,7 @@ void v2_page_list_draw(uint16_t page, const V2DrawCmd& cmd0) {
         }
         L.n = w;
     }
-    if (L.n >= V2_DRAWLIST_MAX) {
-        v2_page_list_bake(page, v2_get_ds_base(0));                 // drop what is fully erased
-        if (L.n >= V2_DRAWLIST_MAX) {                                // still full: the oldest goes (a divergence — report it)
-            static int warned = 0;
-            if (warned < 5) { warned++; fprintf(stderr, "V2-PL f%d page=%02X list full, oldest command dropped (slot=%02X)\n", v2_dbg_pre_vm_iter, page, L.cmd[0].slot); }
-            memmove(&L.cmd[0], &L.cmd[1], sizeof(V2DrawCmd) * (V2_DRAWLIST_MAX - 1));
-            L.n = V2_DRAWLIST_MAX - 1;
-        }
-    }
-    L.cmd[L.n++] = cmd;
+    L.cmd[L.n++] = cmd;   // room guaranteed above (the dedupe only shortens the list; nothing baked since the append)
     v2_pl_hist(page, L);
     if (v2_pl_trace_on(cmd.slot)) fprintf(stderr, "V2-PL f%d draw page=%02X slot=%02X xy=(%d,%d) off=%04X t=%d epoch=%u n=%d\n", v2_dbg_pre_vm_iter, page, cmd.slot, cmd.x, cmd.y, cmd.off, cmd.type, cmd.epoch, L.n);
 }
