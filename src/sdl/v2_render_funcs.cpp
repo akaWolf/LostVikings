@@ -44,6 +44,7 @@ thread_local int             v2_tls_kx_margin = 0;              // render_v2.h: 
 thread_local int             v2_tls_kx_lead = 0;                // render_v2.h: presentation camera — pixels of margin left of / above the frame (a multiple of 8): the buffer's (0, 0) is the frame's (-lead, -lead)
 thread_local int             v2_tls_rows_max = 240;             // render_v2.h: the rows of the buffer the world passes may write (the frame's 240; the presenter's layers are taller)
 thread_local bool            v2_tls_par_separate = false;       // render_v2.h: the presenter composes the parallax layers itself — the tile pass leaves index 0 uncovered, the flagged-tile pass skips the priority pass
+thread_local bool            v2_tls_sprites_unclipped = false;  // render_v2.h: the frame's camera is not the flip's — the records without the engine's window clip
 thread_local const int*      v2_tls_par_view = nullptr;         // render_v2.h: the parallax pass's camera {x, y} in place of the DS viewport (the presentation camera)
 const uint16_t*              v2_tile_override = nullptr;        // render_v2.h: the composed page's tile words (game thread)
 static void v2_vga_bg_readout(uint8_t* buf, int fbw, int x0, int y0, int rows, const uint8_t* bg, uint32_t crtc, uint8_t pan, bool par_on);   // below (the background VGA)
@@ -1529,7 +1530,8 @@ void v2_draw_list(const V2DrawList& L, const int16_t* pos_x, const int16_t* pos_
         }
         if (glyph) { v2_raster_glyph(buf, ds_base, c.off, x - viewport_x, y - viewport_y, c.dead, c.x & 7, c.y & 7, rec); continue; }
         v2_raster_sprite(buf, c.type, c.flags, x - viewport_x, y - viewport_y, c.seg, c.off, (int)c.strips, c.slot, 0xFFFF,
-                         c.dead, c.x & 7, c.y & 7, c.mand, c.clip_top, c.clip_bot, rec);
+                         c.dead, c.x & 7, c.y & 7, v2_tls_sprites_unclipped ? (uint8_t)0xFF : c.mand,
+                         v2_tls_sprites_unclipped ? 0 : c.clip_top, v2_tls_sprites_unclipped ? 0 : c.clip_bot, rec);   // render_v2.h v2_tls_sprites_unclipped
     }
 }
 
@@ -1716,7 +1718,8 @@ void v2_raster_cmd_bitmap(const V2DrawList& L, int i, uint8_t* px, uint8_t* cov,
         v2_raster_glyph(px, ds_base, c.off, 0, 0, c.dead, c.x & 7, c.y & 7, rec);
     } else {
         v2_raster_sprite(px, c.type, c.flags, 0, 0, c.seg, c.off, (int)c.strips, c.slot, 0xFFFF,
-                         c.dead, c.x & 7, c.y & 7, c.mand, c.clip_top, c.clip_bot, rec);
+                         c.dead, c.x & 7, c.y & 7, v2_tls_sprites_unclipped ? (uint8_t)0xFF : c.mand,
+                         v2_tls_sprites_unclipped ? 0 : c.clip_top, v2_tls_sprites_unclipped ? 0 : c.clip_bot, rec);   // render_v2.h v2_tls_sprites_unclipped
     }
     v2_tls_out = save_out; v2_tls_cov = save_cov; v2_fbw = save_w; v2_clip_h = save_clip;
 }

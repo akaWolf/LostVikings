@@ -417,6 +417,9 @@ static void compose_layers(const Snap& C, const int* dev_x, const int* dev_y, co
     v2_tls_fs = C.fs;
     v2_tls_par_acc = acc;
     v2_tls_presenter = true;
+    // the layers' camera is the presentation camera: when it is not the flip's, the records are
+    // drawn without the engine's window clip (render_v2.h v2_tls_sprites_unclipped)
+    v2_tls_sprites_unclipped = pcam[0] != (double)Vr[0] || pcam[1] != (double)Vr[1];
     v2_tls_tile_ovr = C.tile_ovr_valid ? C.tile_ovr : nullptr; v2_tls_ui_cells_from_page = C.tile_ovr_valid; v2_tls_vga_bg = C.vga;
     const bool par = v2_parallax.on;
     L->par0 = V2PresentLayer{ nullptr, nullptr, 0, 0, 0, 0, 0 };
@@ -511,6 +514,7 @@ static void compose_layers(const Snap& C, const int* dev_x, const int* dev_y, co
     if (!cov_any(s_ui_cov, (size_t)W * (size_t)clip_h)) L->ui.px = nullptr;   // no text this frame: no layer
     v2_tls_cov = nullptr;
     v2_tls_tile_ovr = nullptr; v2_tls_ui_cells_from_page = false; v2_tls_vga_bg = nullptr;
+    v2_tls_sprites_unclipped = false;
     v2_tls_presenter = false;
     v2_tls_par_acc = nullptr;
     v2_tls_fs = nullptr;
@@ -907,7 +911,11 @@ static bool compose_snapshot(const Snap& C, const Snap* P, double t, bool interp
         }
     }
     if (!L || out_too) {
+        // the flat frame's camera is the interpolated whole one: when it is not the flip's, the
+        // records are drawn without the engine's window clip (render_v2.h v2_tls_sprites_unclipped)
+        v2_tls_sprites_unclipped = (vx != cx || vy != cy);
         compose_map(C, pos_x, pos_y, acc, work, out);
+        v2_tls_sprites_unclipped = false;
         memcpy(hud, C.hud, sizeof C.hud);
     }
     bool cam_moving = false;

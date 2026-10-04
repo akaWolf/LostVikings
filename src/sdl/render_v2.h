@@ -132,6 +132,16 @@ extern thread_local int             v2_clip_h;
 extern thread_local int             v2_tls_kx_lead;
 extern thread_local int             v2_tls_rows_max;
 extern thread_local bool            v2_tls_par_separate;
+// The presenter composes a frame whose camera is not the flip's (an interpolated camera under
+// SMOOTH, the presentation camera under CAMERA SMOOTH): the records are drawn WITHOUT the
+// engine's window clip (V2DrawCmd mand / clip_top / clip_bot — the handler's cut at the edges
+// of the engine's own 320 x 176 window), from their full strip data, clipped by the frame
+// alone; the engine's clip is a property of its window, not of the sprite, and a frame that
+// shows the world past that window must show the sprite there whole (2026-10-08: a hint sign
+// at the right edge under CAMERA SMOOTH — the camera 16 px ahead of the engine's — came out as
+// its clipped record, columns missing). With the flip's own camera the clip stays: the frame
+// is the engine's page, the test build's oracle.
+extern thread_local bool            v2_tls_sprites_unclipped;
 extern thread_local const int*      v2_tls_par_view;
 extern void v2_draw_parallax_layer(uint16_t ds_val, int prio);   // prio 0 = under the tiles, 1 = the priority-1 cells over the sprites
 extern "C" int v2_view_rows(void);           // v2_vm.cpp: 176 / 200 (LVX scene) / 224 (LVX_TALL224 level)
