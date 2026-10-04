@@ -531,13 +531,26 @@ static void compose_layers(const Snap& C, const int* dev_x, const int* dev_y, co
 // stand V2_KX_SELFTEST compares the two at t = 1; the flat frame then stands on the layers'
 // whole camera, which is the flip's own when nothing is interpolated); a chunk screen always
 // lands in `out` (L->k stays 0).
-// MOTION EXACT (render_v2.h): the presenter's per-object history — the whole position, the
-// previous whole position and the fraction of the frame last seen, and the fraction of the frame
-// before it (F_prev), per axis; stamped by the composition that updated it
+// MOTION EXACT (render_v2.h): the presenter's per-object history — the object as the engine left
+// it at the end of a game frame: the whole position W, the whole position of the frame before
+// (X_PREV, the integrator's), the fraction F, and the fraction F_prev the frame's trajectory
+// started from (the engine does not keep it); `chain` = the trajectory continues from the entry
+// before it (that entry's W is this frame's X_PREV: the integrator ran, nothing moved the object
+// behind its back and no frame was missed). Two frames deep: the newest frame seen and the one
+// before it, so the previous flip of an interpolation pair finds its own frame. Keyed by the game
+// frame of the snapshot — the counter the VM and the integrator run once per — never by a change
+// of the fields: a frame in which W, X_PREV and F all stayed is a frame the object stood still in
+// (2026-10-08: the change-detecting history of 2026-09-15 could not see such a frame, so an
+// object stopping right after a sub-pixel step — a tap of a direction key: the first step of a
+// walk moves the fraction alone — kept F_prev of the step for ever, a phantom velocity of
+// (F - F_prev) / 256 per frame, and its sprite ran a quarter, a half, three quarters of a pixel
+// through every frame and snapped back: a standing Olaf trembled).
 namespace {
-struct MotionHist { uint32_t stamp; bool valid; int16_t W[2], XP[2]; int F[2], Fprev[2]; };
+struct MotionFrame { int frame; bool chain; int16_t W[2], XP[2]; int F[2], Fprev[2]; };
+struct MotionHist { uint32_t stamp; int n; MotionFrame f[2]; };   // f[0] the newest frame, f[1] the one before; n = frames held
 thread_local MotionHist g_mhist[0x80];   // per object slot (di / 2)
 thread_local uint32_t g_mhist_comp = 0;  // the composition counter
+std::atomic<int> g_mtrace{-1};           // debug: V2_MOTION_TRACE (read on the presenter thread and by the flip dump's compositions on the game thread)
 // the sub-sprite catch-up steps applied by the renders up to sub-frame r (0 = none)
 inline int catchup_sum(int r, int d) { int s = 0; for (int i = 0; i < r && i < 3; i++) s += v2_subsprite_delta_fn(i, (int16_t)d); return s; }
 // the correction of a sprite's whole position at sub-frame r to the exact trajectory (render_v2.h):
@@ -561,30 +574,64 @@ int owner_of(const uint8_t* ds, uint16_t slot) {
     }
     return -1;
 }
-// the history entry of object `own`, brought up to the snapshot's frame (once per composition:
-// the stamp): a new frame — the whole position, the previous whole position or the fraction
-// changed (an object slower than a pixel per frame moves its fraction alone) — shifts F to F_prev
-// when the chain holds (the whole position last seen is this frame's X_PREV), else F_prev := F
-MotionHist* mhist_touch(int own, const uint8_t* ds) {
+// the history of object `own`, brought up to the snapshot's game frame (once per composition:
+// the stamp). The snapshot's frame is the newest entry's: nothing to do — the renders of a
+// frame see one object state (the VM and the integrator ran before render1; under the trace a
+// state that differs here is reported: it would be a model error). A newer frame: the newest
+// entry is the frame before it — the chain holds when that entry's W is this frame's X_PREV,
+// and then this frame's trajectory starts at the fraction that entry ended with (F_prev := its
+// F); a broken chain (a spawn, a teleport, a snap, a frame not seen) starts at F itself — a
+// constant offset, no jump. A frame older than the newest seen has no place in a history that
+// runs forward: it starts the history over (the world generation already resets it on every
+// load, image and rewind — this is the guard behind that).
+MotionHist* mhist_touch(int own, const uint8_t* ds, int frame) {
     MotionHist* h = &g_mhist[(own >> 1) & 0x7F];
     if (h->stamp == g_mhist_comp) return h;
     h->stamp = g_mhist_comp;
     const int16_t W[2] = { rd16(ds, (uint16_t)(own + OBJ_WORLD_X)), rd16(ds, (uint16_t)(own + OBJ_WORLD_Y)) };
     const int16_t XP[2] = { rd16(ds, (uint16_t)(own + OBJ_X_PREV)), rd16(ds, (uint16_t)(own + OBJ_Y_PREV)) };
     const int F[2] = { ds[(uint16_t)(own + OBJ_FRAC_X)], ds[(uint16_t)(own + OBJ_FRAC_Y)] };   // the byte the integrator adds to
-    if (!h->valid || h->W[0] != W[0] || h->W[1] != W[1] || h->XP[0] != XP[0] || h->XP[1] != XP[1] || h->F[0] != F[0] || h->F[1] != F[1]) {
-        const bool chain = h->valid && h->W[0] == XP[0] && h->W[1] == XP[1];
-        for (int a = 0; a < 2; a++) { h->Fprev[a] = chain ? h->F[a] : F[a]; h->W[a] = W[a]; h->XP[a] = XP[a]; h->F[a] = F[a]; }
-        h->valid = true;
+    if (h->n > 0 && frame == h->f[0].frame) {
+        if (g_mtrace > 0) {
+            const MotionFrame& e = h->f[0];
+            if (e.W[0] != W[0] || e.W[1] != W[1] || e.XP[0] != XP[0] || e.XP[1] != XP[1] || e.F[0] != F[0] || e.F[1] != F[1])
+                fprintf(stderr, "V2-MOTION: object %02X changed within game frame %d: W %d,%d->%d,%d XP %d,%d->%d,%d F %d,%d->%d,%d\n", own, frame,
+                        e.W[0], e.W[1], W[0], W[1], e.XP[0], e.XP[1], XP[0], XP[1], e.F[0], e.F[1], F[0], F[1]);
+        }
+        return h;
     }
+    if (h->n > 0 && frame < h->f[0].frame) {
+        if (g_mtrace > 0) fprintf(stderr, "V2-MOTION: object %02X seen at game frame %d after frame %d: the history starts over\n", own, frame, h->f[0].frame);
+        h->n = 0;
+    }
+    MotionFrame nf;
+    nf.frame = frame;
+    nf.chain = h->n > 0 && h->f[0].W[0] == XP[0] && h->f[0].W[1] == XP[1];
+    for (int a = 0; a < 2; a++) { nf.W[a] = W[a]; nf.XP[a] = XP[a]; nf.F[a] = F[a]; nf.Fprev[a] = nf.chain ? h->f[0].F[a] : F[a]; }
+    h->f[1] = h->f[0]; h->f[0] = nf;
+    if (h->n < 2) h->n++;
     return h;
 }
-// the object's exact position at sub-frame r (render_v2.h MOTION EXACT): P(n-1) + r v / 3
-double obj_exact(const MotionHist* h, int axis, int r) {
+// the game frame whose object state a snapshot shows: its own for the flips of render1..3 (the
+// VM and the integrator of the frame ran before them); the frame BEFORE for a flip of sub-frame 0
+// — the level load's flips inside PRE_VM of frame N, a blocking loop's iterations — which precede
+// the frame's VM and show the objects as the previous frame left them (as cam_exact takes such a
+// flip for the previous frame's camera end: 2026-10-07)
+inline int obj_frame_of(const Snap& S) { return S.subframe <= 0 ? S.frame - 1 : S.frame; }
+// the frame of a snapshot in the history: the newest entry, or the one before it while the
+// newest continues its trajectory (an interpolation across a broken chain would travel the
+// teleport); nullptr when the frame is older than that or not seen
+const MotionFrame* mhist_frame(const MotionHist* h, int frame) {
+    if (h->n > 0 && h->f[0].frame == frame) return &h->f[0];
+    if (h->n > 1 && h->f[1].frame == frame && h->f[0].chain) return &h->f[1];
+    return nullptr;
+}
+// the object's exact position at sub-frame r of that frame (render_v2.h MOTION EXACT): P(n-1) + r v / 3
+double obj_exact(const MotionFrame* f, int axis, int r) {
     const int rr = (r <= 0 || r > 3) ? 3 : r;
-    const int d = (int)(int16_t)(h->W[axis] - h->XP[axis]);
-    const double v = (double)d + (double)(h->F[axis] - h->Fprev[axis]) / 256.0;
-    return (double)h->XP[axis] + (double)h->Fprev[axis] / 256.0 + (double)rr * v / 3.0;
+    const int d = (int)(int16_t)(f->W[axis] - f->XP[axis]);
+    const double v = (double)d + (double)(f->F[axis] - f->Fprev[axis]) / 256.0;
+    return (double)f->XP[axis] + (double)f->Fprev[axis] / 256.0 + (double)rr * v / 3.0;
 }
 
 // The presentation camera (render_v2.h CAMERA SMOOTH): its state, and the exact logical camera
@@ -745,11 +792,12 @@ static bool compose_snapshot(const Snap& C, const Snap* P, double t, bool interp
     // a snapshot of another world generation (render_v2.h v2_world_gen): the object histories and
     // the presentation camera start over — nothing of this world came from where the old one stood
     if (!g_hist_gen_valid || g_hist_gen != C.gen) {
-        for (MotionHist& h : g_mhist) h.valid = false;
+        for (MotionHist& h : g_mhist) h.n = 0;
         g_cam_valid = false;
         g_hist_gen = C.gen; g_hist_gen_valid = true;
     }
-    static int mtrace = -1; if (mtrace < 0) mtrace = getenv("V2_MOTION_TRACE") ? 1 : 0;   // debug: the active viking's first sub-sprite per composition
+    if (g_mtrace.load() < 0) g_mtrace = getenv("V2_MOTION_TRACE") ? 1 : 0;   // debug: the active viking's first sub-sprite per composition
+    const int mtrace = g_mtrace.load();
     const uint16_t trace_slot = mtrace ? (uint16_t)rd16(C.ds, (uint16_t)(rd16(C.ds, DS_ACTIVE_VIKING) + OBJ_SUB_SLOT)) : 0xFFFF;
     for (int i = 0; i < C.draws.n; i++) {
         const V2DrawCmd& c = C.draws.cmd[i];
@@ -764,14 +812,16 @@ static bool compose_snapshot(const Snap& C, const Snap* P, double t, bool interp
         bool last = sprite && (interp || exact);
         if (last) for (int j = i + 1; j < C.draws.n; j++) if (C.draws.cmd[j].slot == c.slot) { last = false; break; }
         // MOTION EXACT: the correction of this command's own position (the newest flip) — the
-        // owner object's whole step, fraction and previous fraction (the history), the flip's sub-frame
-        double dxC = 0.0, dyC = 0.0; int own = -1; MotionHist* h = nullptr;
+        // owner object's frame in the history (its whole step, fraction and previous fraction),
+        // the flip's sub-frame
+        double dxC = 0.0, dyC = 0.0; int own = -1; const MotionHist* h = nullptr; const MotionFrame* fc = nullptr;
         if (exact && last) {
             own = owner_of(C.ds, c.slot);
             if (own >= 0) {
-                h = mhist_touch(own, C.ds);   // the object's frame in the history (once per composition)
-                dxC = exact_delta(C.subframe, (int16_t)(h->W[0] - h->XP[0]), h->F[0], h->Fprev[0]);
-                dyC = exact_delta(C.subframe, (int16_t)(h->W[1] - h->XP[1]), h->F[1], h->Fprev[1]);
+                h = mhist_touch(own, C.ds, obj_frame_of(C));   // brought up to the frame the snapshot shows (once per composition)
+                fc = &h->f[0];
+                dxC = exact_delta(C.subframe, (int16_t)(fc->W[0] - fc->XP[0]), fc->F[0], fc->Fprev[0]);
+                dyC = exact_delta(C.subframe, (int16_t)(fc->W[1] - fc->XP[1]), fc->F[1], fc->Fprev[1]);
                 xf = c.x + dxC; yf = c.y + dyC;
                 moved = dxC != 0.0 || dyC != 0.0;
             }
@@ -779,35 +829,43 @@ static bool compose_snapshot(const Snap& C, const Snap* P, double t, bool interp
         if (interp && last) {
             const V2DrawCmd* p = nullptr;
             for (int j = P->draws.n - 1; j >= 0; j--) if (P->draws.cmd[j].slot == c.slot) { p = &P->draws.cmd[j]; break; }
-            if (p) {
-                const int16_t ax = c.x, bx = p->x, ay = c.y, by = p->y;
-                // MOTION EXACT: the previous flip's own correction — in the same frame of the object
-                // (its whole and previous whole positions equal) the same F_prev; in an earlier frame
-                // its own fraction stands in (at its frame's end the correction is F / 256 anyway)
-                double dxP = 0.0, dyP = 0.0;
-                if (own >= 0) {
-                    const int16_t WP[2] = { rd16(P->ds, (uint16_t)(own + OBJ_WORLD_X)), rd16(P->ds, (uint16_t)(own + OBJ_WORLD_Y)) };
-                    const int16_t XPP[2] = { rd16(P->ds, (uint16_t)(own + OBJ_X_PREV)), rd16(P->ds, (uint16_t)(own + OBJ_Y_PREV)) };
-                    const int FP[2] = { P->ds[(uint16_t)(own + OBJ_FRAC_X)], P->ds[(uint16_t)(own + OBJ_FRAC_Y)] };
-                    const bool same = WP[0] == h->W[0] && WP[1] == h->W[1] && XPP[0] == h->XP[0] && XPP[1] == h->XP[1];
-                    dxP = exact_delta(P->subframe, (int16_t)(WP[0] - XPP[0]), FP[0], same ? h->Fprev[0] : FP[0]);
-                    dyP = exact_delta(P->subframe, (int16_t)(WP[1] - XPP[1]), FP[1], same ? h->Fprev[1] : FP[1]);
+            if (p && fc) {
+                // MOTION EXACT: between the flips an owned sprite travels with its object — from the
+                // owner's exact position at the previous flip's sub-frame, on the trajectory of that
+                // flip's frame (the newest frame or the one before it while the chain holds), to its
+                // position at this flip — keeping THIS command's offset from the object: a change of
+                // the pose (another anchor, another image) is no motion and switches at once, as it
+                // does in the original (2026-10-08: the command's own positions were interpolated
+                // before, and a standing object whose pose changed its anchor slid between the two).
+                // No frame for the previous flip (a spawn, a teleport, a snap, a frame not seen):
+                // the newest position
+                const MotionFrame* fp = mhist_frame(h, obj_frame_of(*P));
+                if (fp) {
+                    const double ox = obj_exact(fc, 0, C.subframe) - obj_exact(fp, 0, P->subframe);
+                    const double oy = obj_exact(fc, 1, C.subframe) - obj_exact(fp, 1, P->subframe);
+                    if (ox != 0.0 || oy != 0.0) { xf = c.x + dxC - ox * (1.0 - t); yf = c.y + dyC - oy * (1.0 - t); moved = true; }
                 }
-                const double axf = c.x + dxC, bxf = p->x + dxP, ayf = c.y + dyC, byf = p->y + dyP;
-                if ((axf != bxf || ayf != byf) &&
+            } else if (p) {
+                // no owner (MOTION ORIGINAL, or a command outside the object table): the command's own
+                // positions, within the step a sprite takes in a sub-frame — beyond it a spawn, a
+                // teleport, a wrap: the newest position
+                const int16_t ax = c.x, bx = p->x, ay = c.y, by = p->y;
+                if ((ax != bx || ay != by) &&
                     !(ax - bx > V2_SMOOTH_MAX_STEP || bx - ax > V2_SMOOTH_MAX_STEP ||
-                      ay - by > V2_SMOOTH_MAX_STEP || by - ay > V2_SMOOTH_MAX_STEP)) {   // else spawn / teleport / wrap
-                    xf = bxf + (axf - bxf) * t; yf = byf + (ayf - byf) * t;
+                      ay - by > V2_SMOOTH_MAX_STEP || by - ay > V2_SMOOTH_MAX_STEP)) {
+                    xf = bx + (double)(ax - bx) * t; yf = by + (double)(ay - by) * t;
                     moved = true;
                 }
             }
         }
+        // (the frame is the snapshot's own — the game thread's counter, read here before, could already
+        // be the next frame's, and a stand comparing two runs by frame saw phantom differences)
         if (mtrace && c.slot == trace_slot && last) {
-            if (own >= 0 && h)
-                fprintf(stderr, "V2-MOTION f%d r%d t=%.2f slot=%02X own=%02X eng=%d,%d exact=%.3f,%.3f d=%d,%d F=%d,%d Fprev=%d,%d\n", v2_dbg_pre_vm_iter, C.subframe, interp ? t : 1.0,
-                        c.slot, own, c.x, c.y, xf, yf, (int)(int16_t)(h->W[0] - h->XP[0]), (int)(int16_t)(h->W[1] - h->XP[1]), h->F[0], h->F[1], h->Fprev[0], h->Fprev[1]);
+            if (fc)
+                fprintf(stderr, "V2-MOTION f%d r%d t=%.2f slot=%02X own=%02X eng=%d,%d exact=%.3f,%.3f d=%d,%d F=%d,%d Fprev=%d,%d\n", C.frame, C.subframe, interp ? t : 1.0,
+                        c.slot, own, c.x, c.y, xf, yf, (int)(int16_t)(fc->W[0] - fc->XP[0]), (int)(int16_t)(fc->W[1] - fc->XP[1]), fc->F[0], fc->F[1], fc->Fprev[0], fc->Fprev[1]);
             else
-                fprintf(stderr, "V2-MOTION f%d r%d t=%.2f slot=%02X eng=%d,%d exact=%.3f,%.3f (no owner)\n", v2_dbg_pre_vm_iter, C.subframe, interp ? t : 1.0, c.slot, c.x, c.y, xf, yf);
+                fprintf(stderr, "V2-MOTION f%d r%d t=%.2f slot=%02X eng=%d,%d exact=%.3f,%.3f (no owner)\n", C.frame, C.subframe, interp ? t : 1.0, c.slot, c.x, c.y, xf, yf);
         }
         if (moved) {
             pos_x[i] = (int16_t)(vx + lround(xf - camx_f));
@@ -889,9 +947,9 @@ static bool compose_snapshot(const Snap& C, const Snap* P, double t, bool interp
                                      !(v2_lvx_flags(level) & LVX_SCENE_FLAGS) &&
                                      !(level >= 37 && level < 48);
             if (has_vk && interactive && !rd16(C.ds, DS_SCROLL_LOCK_X)) {
-                const MotionHist* hv = mhist_touch((int)vk, C.ds);
-                const double ox = obj_exact(hv, 0, C.subframe);
-                const double vpf = (double)(int16_t)(hv->W[0] - hv->XP[0]) + (double)(hv->F[0] - hv->Fprev[0]) / 256.0;   // px per game frame
+                const MotionFrame* fv = &mhist_touch((int)vk, C.ds, obj_frame_of(C))->f[0];
+                const double ox = obj_exact(fv, 0, C.subframe);
+                const double vpf = (double)(int16_t)(fv->W[0] - fv->XP[0]) + (double)(fv->F[0] - fv->Fprev[0]) / 256.0;   // px per game frame
                 T[0] = ox - (double)C.w / 2.0 + vpf * 20.0 * CAM_TAU;
             }
             for (int a = 0; a < 2; a++) { const double lim = (double)(uint16_t)rd16(C.ds, a ? DS_SCROLL_LIMIT_Y : DS_SCROLL_LIMIT_X); if (T[a] < 0.0) T[a] = 0.0; if (T[a] > lim) T[a] = lim; }
