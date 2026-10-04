@@ -106,6 +106,7 @@ struct Snap {
     uint8_t ds[DS_SIZE];
     uint8_t fs[FS_SIZE];
     V2DrawList draws;           // the sub-frame's display list (render_v2.h): what the sprite layers drew, in order
+    V2StripList strip;          // the strip sprites of the flip (render_v2.h): the active sprites near the engine's window, whole
     uint16_t tile_ovr[32768];   // the shown page's tile words (render_v2.h page lists; index = render-map word)
     bool tile_ovr_valid;
     // one shadow-VGA plane: the BACKGROUND VGA on a tile frame (render_v2.h: the tile layer's
@@ -170,6 +171,9 @@ static void fill(Snap& S, const uint8_t* s) {
     memcpy(S.ds, s, DS_SIZE);
     memcpy(S.fs, v2_vm_shadow_fs, FS_SIZE);
     v2_drawlist_copy(S.draws, v2_frame_draws);   // the flip's display list (records + the used arena)
+    S.strip.n = v2_frame_strip.n; S.strip.used = v2_frame_strip.used;   // the strip sprites (records + the used arena)
+    memcpy(S.strip.cmd, v2_frame_strip.cmd, (size_t)v2_frame_strip.n * sizeof(V2DrawCmd));
+    memcpy(S.strip.arena, v2_frame_strip.arena, v2_frame_strip.used);
     S.tile_ovr_valid = (v2_tile_override != nullptr);   // the page lists: the composed page's tile words
     if (S.tile_ovr_valid) memcpy(S.tile_ovr, v2_tile_override, sizeof S.tile_ovr);
     // A tile frame: the frame-kind decision of this flip took the tile path (v2_compose_page:
@@ -407,6 +411,7 @@ bool cov_any(const uint8_t* cov, size_t n) {
 // Vr = the flip's logical camera, which `work` (the snapshot's DS) holds — the world layers are
 // composed around it with CAM_MARGIN px on every side and placed by their distance to pcam.
 static void compose_layers(const Snap& C, const int* dev_x, const int* dev_y, const uint32_t* acc, int k, const double pcam[2], const int Vr[2],
+                           const SDL_Rect& win, int rec_clip,
                            uint8_t* work, uint8_t* hud, V2DisplayBadge* badges, V2PresentLayers* L) {
     const int W = C.w, rows = C.rows;
     const int clip_h = (rows == 200) ? 187 : rows;   // v2_draw_tiles' sprite / text clip of this frame
@@ -417,9 +422,6 @@ static void compose_layers(const Snap& C, const int* dev_x, const int* dev_y, co
     v2_tls_fs = C.fs;
     v2_tls_par_acc = acc;
     v2_tls_presenter = true;
-    // the layers' camera is the presentation camera: when it is not the flip's, the records are
-    // drawn without the engine's window clip (render_v2.h v2_tls_sprites_unclipped)
-    v2_tls_sprites_unclipped = pcam[0] != (double)Vr[0] || pcam[1] != (double)Vr[1];
     v2_tls_tile_ovr = C.tile_ovr_valid ? C.tile_ovr : nullptr; v2_tls_ui_cells_from_page = C.tile_ovr_valid; v2_tls_vga_bg = C.vga;
     const bool par = v2_parallax.on;
     L->par0 = V2PresentLayer{ nullptr, nullptr, 0, 0, 0, 0, 0 };
@@ -458,9 +460,14 @@ static void compose_layers(const Snap& C, const int* dev_x, const int* dev_y, co
     // 2. the commands: each alone in a bitmap of its extent, at its own device position, in the
     //    list's order — on a parallax level the sprites first, then the priority layer, then the
     //    glyphs and repaints (compose_map's two passes); else every command in order
+    //    The strip sprites (render_v2.h V2StripList) follow the records of their group with clip 2
+    //    (outside the engine's window only); the records take clip `rec_clip` (1 = inside it only
+    //    when the presentation camera is not the flip's, else 0: the frame is the window)
     size_t used = 0; int n = 0;
-    auto add = [&](int i) {
-        const V2DrawCmd& c = C.draws.cmd[i];
+    const int nD = C.draws.n;
+    auto add = [&](int i) {   // i < nD: a record; else the strip sprite i - nD
+        const bool strip = i >= nD;
+        const V2DrawCmd& c = strip ? C.strip.cmd[i - nD] : C.draws.cmd[i];
         if (c.type == V2_CMD_FGTILE && (c.dead[0] & 1u)) return;   // its one cell restored since the repaint (v2_draw_list skips it)
         int cw = 0, ch = 0; v2_cmd_extent_of(c, &cw, &ch);
         if (cw <= 0 || ch <= 0) return;
@@ -472,15 +479,16 @@ static void compose_layers(const Snap& C, const int* dev_x, const int* dev_y, co
         }
         uint8_t* px = s_cmd_px + used; uint8_t* cov = s_cmd_cov + used; used += need;
         memset(px, 0, need); memset(cov, 0, need);
-        v2_raster_cmd_bitmap(C.draws, i, px, cov, cw, ch);
-        s_cmd[n] = V2PresentLayer{ px, cov, cw, ch, cw, dev_x[i], dev_y[i] };
+        v2_raster_cmd_bitmap(c, strip ? C.strip.arena : C.draws.arena, px, cov, cw, ch);
+        s_cmd[n] = V2PresentLayer{ px, cov, cw, ch, cw, dev_x[i], dev_y[i], strip ? 2 : rec_clip };
         n++;
     };
-    for (int i = 0; i < C.draws.n; i++) {
+    for (int i = 0; i < nD; i++) {
         const V2DrawCmd& c = C.draws.cmd[i];
         if (par && (c.type == V2_CMD_GLYPH || c.type == V2_CMD_FGTILE)) continue;
         add(i);
     }
+    for (int j = 0; j < C.strip.n; j++) if (!C.strip.cmd[j].late) add(nD + j);   // the strip's early sprites
     L->prio_after = n;
     L->prio = V2PresentLayer{ nullptr, nullptr, 0, 0, 0, 0, 0 };
     if (par) {
@@ -499,11 +507,13 @@ static void compose_layers(const Snap& C, const int* dev_x, const int* dev_y, co
         v2_draw_flagged_tiles(0);
         L->prio = V2PresentLayer{ s_prio, s_prio_cov, LW, rows + 2 * M, LW, bg_dx, bg_dy };
         if (!cov_any(s_prio_cov, (size_t)LW * (size_t)(rows + 2 * M))) L->prio.px = nullptr;   // nothing painted: no layer
-        for (int i = 0; i < C.draws.n; i++) {
+        for (int i = 0; i < nD; i++) {
             const V2DrawCmd& c = C.draws.cmd[i];
             if (c.type == V2_CMD_GLYPH || c.type == V2_CMD_FGTILE) add(i);
         }
     }
+    for (int j = 0; j < C.strip.n; j++) if (C.strip.cmd[j].late) add(nD + j);   // the strip's late sprites (over the priority tiles)
+    L->win = win;
     v2_tls_kx_lead = 0; v2_tls_kx_margin = 0; v2_tls_rows_max = 240; v2_tls_par_separate = false;
     // 4. the text plane (its cells when they are not page commands) and the CJK overlay: screen-
     //    anchored, no shift, the frame's own width and clip
@@ -514,7 +524,6 @@ static void compose_layers(const Snap& C, const int* dev_x, const int* dev_y, co
     if (!cov_any(s_ui_cov, (size_t)W * (size_t)clip_h)) L->ui.px = nullptr;   // no text this frame: no layer
     v2_tls_cov = nullptr;
     v2_tls_tile_ovr = nullptr; v2_tls_ui_cells_from_page = false; v2_tls_vga_bg = nullptr;
-    v2_tls_sprites_unclipped = false;
     v2_tls_presenter = false;
     v2_tls_par_acc = nullptr;
     v2_tls_fs = nullptr;
@@ -788,9 +797,9 @@ static bool compose_snapshot(const Snap& C, const Snap* P, double t, bool interp
     // distance to the background is the rounded exact one (a camera-locked viking stays
     // still on the screen, as in the original; no ±1 px shimmer). At t = 1 every command
     // keeps its own position: the frame is the flip.
-    static thread_local int16_t pos_x[V2_DRAWLIST_MAX], pos_y[V2_DRAWLIST_MAX];
-    static thread_local int dev_x[V2_DRAWLIST_MAX], dev_y[V2_DRAWLIST_MAX];
-    static thread_local double xfa[V2_DRAWLIST_MAX], yfa[V2_DRAWLIST_MAX];   // each command's exact world position for the layers
+    static thread_local int16_t pos_x[V2_DRAWLIST_MAX + V2_STRIP_MAX], pos_y[V2_DRAWLIST_MAX + V2_STRIP_MAX];
+    static thread_local int dev_x[V2_DRAWLIST_MAX + V2_STRIP_MAX], dev_y[V2_DRAWLIST_MAX + V2_STRIP_MAX];
+    static thread_local double xfa[V2_DRAWLIST_MAX + V2_STRIP_MAX], yfa[V2_DRAWLIST_MAX + V2_STRIP_MAX];   // each command's exact world position for the layers (the records, then the strip sprites)
     // MOTION EXACT / CAMERA SMOOTH (render_v2.h): this composition's stamp for the object history, the trace
     if (exact || cam_smooth) g_mhist_comp++;
     // a snapshot of another world generation (render_v2.h v2_world_gen): the object histories and
@@ -803,8 +812,13 @@ static bool compose_snapshot(const Snap& C, const Snap* P, double t, bool interp
     if (g_mtrace.load() < 0) g_mtrace = getenv("V2_MOTION_TRACE") ? 1 : 0;   // debug: the active viking's first sub-sprite per composition
     const int mtrace = g_mtrace.load();
     const uint16_t trace_slot = mtrace ? (uint16_t)rd16(C.ds, (uint16_t)(rd16(C.ds, DS_ACTIVE_VIKING) + OBJ_SUB_SLOT)) : 0xFFFF;
-    for (int i = 0; i < C.draws.n; i++) {
-        const V2DrawCmd& c = C.draws.cmd[i];
+    // the records of the flip's list, then (the layers only) the strip sprites past the engine's
+    // window (render_v2.h V2StripList) — the same motion treatment, so a sprite half inside the
+    // window (the record) and half outside (the strip) is one picture
+    const int nD = C.draws.n, nS = L ? C.strip.n : 0;
+    for (int i = 0; i < nD + nS; i++) {
+        const bool in_strip = i >= nD;
+        const V2DrawCmd& c = in_strip ? C.strip.cmd[i - nD] : C.draws.cmd[i];
         pos_x[i] = c.x; pos_y[i] = c.y;
         double xf = c.x, yf = c.y;   // the command's exact world position: its own, or moved back below
         bool moved = false;
@@ -813,8 +827,9 @@ static bool compose_snapshot(const Snap& C, const Snap* P, double t, bool interp
         const bool sprite = c.type != V2_CMD_GLYPH && c.type != V2_CMD_FGTILE;
         // the page lists keep a slot's earlier commands while their residue lives: only the
         // slot's LAST command is the object as it stands, the earlier ones stay where they are
+        // (a strip sprite is the object as it stands by construction: one per slot)
         bool last = sprite && (interp || exact);
-        if (last) for (int j = i + 1; j < C.draws.n; j++) if (C.draws.cmd[j].slot == c.slot) { last = false; break; }
+        if (last && !in_strip) for (int j = i + 1; j < nD; j++) if (C.draws.cmd[j].slot == c.slot) { last = false; break; }
         // MOTION EXACT: the correction of this command's own position (the newest flip) — the
         // owner object's frame in the history (its whole step, fraction and previous fraction),
         // the flip's sub-frame
@@ -832,7 +847,8 @@ static bool compose_snapshot(const Snap& C, const Snap* P, double t, bool interp
         }
         if (interp && last) {
             const V2DrawCmd* p = nullptr;
-            for (int j = P->draws.n - 1; j >= 0; j--) if (P->draws.cmd[j].slot == c.slot) { p = &P->draws.cmd[j]; break; }
+            if (in_strip) { for (int j = P->strip.n - 1; j >= 0; j--) if (P->strip.cmd[j].slot == c.slot) { p = &P->strip.cmd[j]; break; } }
+            else for (int j = P->draws.n - 1; j >= 0; j--) if (P->draws.cmd[j].slot == c.slot) { p = &P->draws.cmd[j]; break; }
             if (p && fc) {
                 // MOTION EXACT: between the flips an owned sprite travels with its object — from the
                 // owner's exact position at the previous flip's sub-frame, on the trajectory of that
@@ -875,8 +891,7 @@ static bool compose_snapshot(const Snap& C, const Snap* P, double t, bool interp
             pos_x[i] = (int16_t)(vx + lround(xf - camx_f));
             pos_y[i] = (int16_t)(vy + lround(yf - camy_f));
             // the DS copy carries the same position (the V2_SMOOTH_DUMP lines read it)
-            wr16(work, c.slot + OBJ_SPRITE_X, pos_x[i]);
-            wr16(work, c.slot + OBJ_SPRITE_Y, pos_y[i]);
+            if (!in_strip) { wr16(work, c.slot + OBJ_SPRITE_X, pos_x[i]); wr16(work, c.slot + OBJ_SPRITE_Y, pos_y[i]); }
         }
         xfa[i] = xf; yfa[i] = yf;   // the layers place the command by this (below, once the presentation camera is known)
     }
@@ -911,11 +926,7 @@ static bool compose_snapshot(const Snap& C, const Snap* P, double t, bool interp
         }
     }
     if (!L || out_too) {
-        // the flat frame's camera is the interpolated whole one: when it is not the flip's, the
-        // records are drawn without the engine's window clip (render_v2.h v2_tls_sprites_unclipped)
-        v2_tls_sprites_unclipped = (vx != cx || vy != cy);
         compose_map(C, pos_x, pos_y, acc, work, out);
-        v2_tls_sprites_unclipped = false;
         memcpy(hud, C.hud, sizeof C.hud);
     }
     bool cam_moving = false;
@@ -987,11 +998,17 @@ static bool compose_snapshot(const Snap& C, const Snap* P, double t, bool interp
         // the device positions: the distance to the presentation camera rounded once at k x (a
         // camera-locked sprite stays still, as on the flat frame); a command with a whole world
         // position lands exactly where the shifted background puts that point
-        for (int i = 0; i < C.draws.n; i++) {
+        for (int i = 0; i < nD + nS; i++) {
             dev_x[i] = (int)lround((xfa[i] - pcam[0]) * (double)k) - sdx * k;
             dev_y[i] = (int)lround((yfa[i] - pcam[1]) * (double)k) - sdy * k;
         }
-        compose_layers(C, dev_x, dev_y, acc, k, pcam, Vr, work, hud, badges, L);
+        // the engine's window in device pixels (render_v2.h V2StripList): the records show inside
+        // it, the strip sprites outside — when the presentation camera is the flip's, the window
+        // is the frame and the records take the frame's clip (clip 0: nothing to round)
+        const SDL_Rect win = { (int)lround(((double)Vr[0] - pcam[0]) * (double)k) - sdx * k, (int)lround(((double)Vr[1] - pcam[1]) * (double)k) - sdy * k,
+                               C.w * k, (C.rows == 200 ? 187 : C.rows) * k };
+        const int rec_clip = (pcam[0] != (double)Vr[0] || pcam[1] != (double)Vr[1]) ? 1 : 0;
+        compose_layers(C, dev_x, dev_y, acc, k, pcam, Vr, win, rec_clip, work, hud, badges, L);
     }
     *w = C.w;
     *rows = C.rows > 176 ? C.rows : 0;

@@ -545,6 +545,48 @@ void kx_layer(const V2PresentLayer& L, const Uint32* lut, int k, const SDL_Rect*
     op.clipped = clip != nullptr; op.clip = clip ? *clip : SDL_Rect{ 0, 0, 0, 0 }; op.blend = L.cov != nullptr;
     g_kx_ops.push_back(op);
 }
+// a command layer by its clip mode (render_v2.h V2PresentLayer::clip): 0 — the frame's clip;
+// 1 — inside the engine's window only (the page's records); 2 — outside it only (the strip
+// sprites): the complement of the window within the frame's clip is up to four rectangles,
+// the layer packed once and copied under each (kx_layer_rects)
+void kx_layer_rects(const V2PresentLayer& L, const Uint32* lut, int k, const SDL_Rect* rects, int n) {
+    if (!L.px || L.w <= 0 || L.h <= 0 || n <= 0) return;
+    int ax = 0, ay = 0;
+    if (!kx_pack(L.w, L.h, &ax, &ay)) { kx_flush(); if (!kx_pack(L.w, L.h, &ax, &ay)) return; }
+    for (int y = 0; y < L.h; y++) {
+        const uint8_t* p = L.px + (size_t)y * L.stride;
+        const uint8_t* c = L.cov ? L.cov + (size_t)y * L.stride : nullptr;
+        uint32_t* o = g_kx_stage.data() + (size_t)(ay + y) * KX_ATLAS_W + ax;
+        if (c) for (int x = 0; x < L.w; x++) o[x] = c[x] ? lut[p[x]] : 0u;
+        else   for (int x = 0; x < L.w; x++) o[x] = lut[p[x]];
+    }
+    for (int i = 0; i < n; i++) {
+        if (rects[i].w <= 0 || rects[i].h <= 0) continue;
+        KxOp op; op.src = SDL_Rect{ ax, ay, L.w, L.h }; op.dst = SDL_Rect{ L.dx, L.dy, L.w * k, L.h * k };
+        op.clipped = true; op.clip = rects[i]; op.blend = L.cov != nullptr;
+        g_kx_ops.push_back(op);
+    }
+}
+static SDL_Rect kx_rect_and(const SDL_Rect& a, const SDL_Rect& b) {
+    const int x0 = a.x > b.x ? a.x : b.x, y0 = a.y > b.y ? a.y : b.y;
+    const int x1 = (a.x + a.w) < (b.x + b.w) ? (a.x + a.w) : (b.x + b.w), y1 = (a.y + a.h) < (b.y + b.h) ? (a.y + a.h) : (b.y + b.h);
+    return SDL_Rect{ x0, y0, x1 > x0 ? x1 - x0 : 0, y1 > y0 ? y1 - y0 : 0 };
+}
+void kx_layer_mode(const V2PresentLayer& L, const Uint32* lut, int k, const SDL_Rect& frame, const SDL_Rect& win) {
+    if (L.clip == 1) { const SDL_Rect r = kx_rect_and(frame, win); kx_layer_rects(L, lut, k, &r, 1); return; }
+    if (L.clip == 2) {
+        const SDL_Rect w = kx_rect_and(frame, win);   // the window within the frame; its complement in the frame:
+        SDL_Rect r[4];
+        r[0] = SDL_Rect{ frame.x, frame.y, w.x - frame.x, frame.h };                                           // left of the window
+        r[1] = SDL_Rect{ w.x + w.w, frame.y, (frame.x + frame.w) - (w.x + w.w), frame.h };                     // right of it
+        r[2] = SDL_Rect{ w.x, frame.y, w.w, w.y - frame.y };                                                   // above it
+        r[3] = SDL_Rect{ w.x, w.y + w.h, w.w, (frame.y + frame.h) - (w.y + w.h) };                             // below it
+        if (w.w <= 0 || w.h <= 0) { kx_layer_rects(L, lut, k, &frame, 1); return; }                            // no window in the frame: everything is outside
+        kx_layer_rects(L, lut, k, r, 4);
+        return;
+    }
+    kx_layer(L, lut, k, &frame);
+}
 SDL_Texture* kx_texture(int access, int w, int h, SDL_ScaleMode mode, bool blend) {
     SDL_Texture* t = SDL_CreateTexture(myRenderer_v2, SDL_PIXELFORMAT_RGBA8888, access, w, h);
     if (t) { SDL_SetTextureScaleMode(t, mode); if (blend) SDL_SetTextureBlendMode(t, SDL_BLENDMODE_BLEND); }
@@ -689,10 +731,10 @@ static void v2_present_layers(const V2PresentLayers& L) {
     const SDL_Rect map_clip = { 0, 0, TW, L.map_h * k }, spr_clip = { 0, 0, TW, L.clip_h * k };
     if (L.par0.px) kx_layer(L.par0, lut, k, &map_clip);   // a parallax level: the layer under the tiles (the presentation camera)
     kx_layer(L.bg, lut, k, &map_clip);
-    for (int i = 0; i < L.prio_after; i++) kx_layer(L.cmd[i], lut, k, &spr_clip);
+    for (int i = 0; i < L.prio_after; i++) kx_layer_mode(L.cmd[i], lut, k, spr_clip, L.win);   // the records inside the engine's window, the strip sprites outside (render_v2.h V2StripList)
     if (L.par1.px) kx_layer(L.par1, lut, k, &spr_clip);   // ... its priority-1 cells over the sprites
     if (L.prio.px) kx_layer(L.prio, lut, k, &spr_clip);   // ... the map's flagged tiles over the sprites
-    for (int i = L.prio_after; i < L.n_cmd; i++) kx_layer(L.cmd[i], lut, k, &spr_clip);
+    for (int i = L.prio_after; i < L.n_cmd; i++) kx_layer_mode(L.cmd[i], lut, k, spr_clip, L.win);
     kx_layer(L.ui, lut, k, &spr_clip);
     if (!L.rows) {   // the HUD band: the 320-px art centred, the wall on the wings, the badges (v2_layout_hud_band)
         v2_layout_hud_band(g_kx_hud, V2_FB_MAX_W, W, L.hud, L.badges);

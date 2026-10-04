@@ -44,7 +44,6 @@ thread_local int             v2_tls_kx_margin = 0;              // render_v2.h: 
 thread_local int             v2_tls_kx_lead = 0;                // render_v2.h: presentation camera — pixels of margin left of / above the frame (a multiple of 8): the buffer's (0, 0) is the frame's (-lead, -lead)
 thread_local int             v2_tls_rows_max = 240;             // render_v2.h: the rows of the buffer the world passes may write (the frame's 240; the presenter's layers are taller)
 thread_local bool            v2_tls_par_separate = false;       // render_v2.h: the presenter composes the parallax layers itself — the tile pass leaves index 0 uncovered, the flagged-tile pass skips the priority pass
-thread_local bool            v2_tls_sprites_unclipped = false;  // render_v2.h: the frame's camera is not the flip's — the records without the engine's window clip
 thread_local const int*      v2_tls_par_view = nullptr;         // render_v2.h: the parallax pass's camera {x, y} in place of the DS viewport (the presentation camera)
 const uint16_t*              v2_tile_override = nullptr;        // render_v2.h: the composed page's tile words (game thread)
 static void v2_vga_bg_readout(uint8_t* buf, int fbw, int x0, int y0, int rows, const uint8_t* bg, uint32_t crtc, uint8_t pan, bool par_on);   // below (the background VGA)
@@ -1530,8 +1529,7 @@ void v2_draw_list(const V2DrawList& L, const int16_t* pos_x, const int16_t* pos_
         }
         if (glyph) { v2_raster_glyph(buf, ds_base, c.off, x - viewport_x, y - viewport_y, c.dead, c.x & 7, c.y & 7, rec); continue; }
         v2_raster_sprite(buf, c.type, c.flags, x - viewport_x, y - viewport_y, c.seg, c.off, (int)c.strips, c.slot, 0xFFFF,
-                         c.dead, c.x & 7, c.y & 7, v2_tls_sprites_unclipped ? (uint8_t)0xFF : c.mand,
-                         v2_tls_sprites_unclipped ? 0 : c.clip_top, v2_tls_sprites_unclipped ? 0 : c.clip_bot, rec);   // render_v2.h v2_tls_sprites_unclipped
+                         c.dead, c.x & 7, c.y & 7, c.mand, c.clip_top, c.clip_bot, rec);
     }
 }
 
@@ -1701,13 +1699,13 @@ void v2_cmd_extent_of(const V2DrawCmd& c, int* w, int* h) { v2_cmd_extent(c, *w,
 // clip masks), minus the frame clip: the presenter clips the bitmap at the k x target. The TLS
 // DS is the caller's snapshot (the glyph page, the tile graphics and mask bases). The thread's
 // out buffer, coverage, width and clip are set for the bitmap and restored.
-void v2_raster_cmd_bitmap(const V2DrawList& L, int i, uint8_t* px, uint8_t* cov, int w, int h) {
-    const V2DrawCmd& c = L.cmd[i];
+void v2_raster_cmd_bitmap(const V2DrawList& L, int i, uint8_t* px, uint8_t* cov, int w, int h) { v2_raster_cmd_bitmap(L.cmd[i], L.arena, px, cov, w, h); }
+void v2_raster_cmd_bitmap(const V2DrawCmd& c, const uint8_t* arena, uint8_t* px, uint8_t* cov, int w, int h) {
     uint8_t* ds_base = v2_get_ds_base(0);
     uint8_t* const save_out = v2_tls_out; uint8_t* const save_cov = v2_tls_cov;
     const int save_w = v2_fbw, save_clip = v2_clip_h;
     v2_tls_out = px; v2_tls_cov = cov; v2_fbw = w; v2_clip_h = h;
-    const uint8_t* rec = c.data_len ? L.arena + c.data_off : nullptr;   // the record's own strip bytes
+    const uint8_t* rec = c.data_len ? arena + c.data_off : nullptr;   // the record's own strip bytes
     if (c.type == V2_CMD_FGTILE) {
         if (!(c.dead[0] & 1u)) {   // its one cell restored since the repaint: nothing (v2_draw_list)
             const uint8_t* tgfx = nullptr; const uint8_t* gs = nullptr;
@@ -1718,8 +1716,7 @@ void v2_raster_cmd_bitmap(const V2DrawList& L, int i, uint8_t* px, uint8_t* cov,
         v2_raster_glyph(px, ds_base, c.off, 0, 0, c.dead, c.x & 7, c.y & 7, rec);
     } else {
         v2_raster_sprite(px, c.type, c.flags, 0, 0, c.seg, c.off, (int)c.strips, c.slot, 0xFFFF,
-                         c.dead, c.x & 7, c.y & 7, v2_tls_sprites_unclipped ? (uint8_t)0xFF : c.mand,
-                         v2_tls_sprites_unclipped ? 0 : c.clip_top, v2_tls_sprites_unclipped ? 0 : c.clip_bot, rec);   // render_v2.h v2_tls_sprites_unclipped
+                         c.dead, c.x & 7, c.y & 7, c.mand, c.clip_top, c.clip_bot, rec);
     }
     v2_tls_out = save_out; v2_tls_cov = save_cov; v2_fbw = save_w; v2_clip_h = save_clip;
 }
@@ -2207,8 +2204,57 @@ void v2_compose_page(uint16_t ds_val, uint16_t page) {
     v2_draw_ui(ds_val);                       // the CJK overlay only (v2_tls_ui_cells_from_page)
 #endif
     v2_drawlist_copy(v2_frame_draws, L);      // the flip's list for the presenter (records + arena)
+    v2_strip_record(v2_get_ds_base(ds_val));  // ... and the strip sprites past the engine's window (render_v2.h V2StripList)
     v2_tls_ui_cells_from_page = false;
     v2_compose_at_flip = false;
+}
+
+// The strip sprites (render_v2.h V2StripList): at the flip, every active sprite within 64 px of
+// the engine's window — the early pass's enumeration (v2_draw_sprites_impl: bit 15 set, bits
+// 13-14 clear, a type with a renderer, a bank; type 2 with strips), in its order (0xFE down to
+// 0) — recorded whole: no clip, every cell kept, a copy of its strip bytes (the banks may be
+// refilled under a page still shown — the records' rule). Pure reads: none of the handlers'
+// DS effects (the dirty modes of the edge gates, sub_1CD7D's cell marks). The late flag is the
+// sub-frame's late set when the sub_1dd9c mirror reported one (the layer order over the
+// priority tiles), else early.
+V2StripList v2_frame_strip;
+extern int v2_view_h_cur;   // v2_vm.cpp: the engine's window height the handlers' bottom edge uses (0xB0, 224 on an LVX_TALL224 level)
+void v2_strip_record(const uint8_t* ds) {
+    v2_frame_strip.n = 0; v2_frame_strip.used = 0;
+    if (!ds) return;
+    V2StateViewC st(ds);
+    const int vx = (int)(int16_t)st.viewport_x(), vy = (int)(int16_t)st.viewport_y();
+    const int W = v2_view_w, H = v2_view_h_cur, R = 64;
+    for (int obj = 0xFE; obj >= 0; obj -= 2) {
+        const uint16_t flags = *(const uint16_t*)(ds + obj + OBJ_SPRITE_FLAGS);
+        if (!(flags & 0x8000) || (flags & 0x6000)) continue;
+        const int type = flags & 7;
+        if (type != 1 && type != 2 && type != 4) continue;
+        const uint16_t seg = *(const uint16_t*)(ds + obj + OBJ_SPRITE_SEG);
+        if (!seg) continue;
+        const uint16_t strips = *(const uint16_t*)(ds + obj + OBJ_STRIP_COUNT);
+        if (type == 2 && (int)strips <= 0) continue;
+        V2DrawCmd c;
+        memset(&c, 0, sizeof c);
+        c.slot = (uint16_t)obj; c.flags = flags;
+        c.x = *(const int16_t*)(ds + obj + OBJ_SPRITE_X); c.y = *(const int16_t*)(ds + obj + OBJ_SPRITE_Y);
+        c.seg = seg; c.off = *(const uint16_t*)(ds + obj + OBJ_SPRITE_OFF); c.strips = strips; c.type = (uint8_t)type;
+        c.mand = 0xFF; c.clip_top = 0; c.clip_bot = 0; c.epoch = 0;
+        memset(c.keep, 0xFF, sizeof c.keep);
+        int ew = 0, eh = 0; v2_cmd_extent(c, ew, eh);
+        if (c.x + ew <= vx - R || c.x >= vx + W + R || c.y + eh <= vy - R || c.y >= vy + H + R) continue;   // nowhere near the window
+        c.late = 0;
+        if (g_late_valid) for (int i = 0; i < g_late_n; i++) if (g_late_slots[i] == (uint16_t)obj) { c.late = 1; break; }
+        if (v2_frame_strip.n >= V2_STRIP_MAX) { static bool said = false; if (!said) { said = true; fprintf(stderr, "V2-STRIP: more than %d sprites near the window — the rest are not recorded\n", V2_STRIP_MAX); } break; }
+        const uint16_t len = v2_cmd_data_len(c);
+        const uint8_t* src = len ? v2_cmd_live_data(c) : nullptr;
+        if (src && v2_frame_strip.used + len <= V2_STRIP_ARENA) {
+            c.data_off = v2_frame_strip.used; c.data_len = len;
+            memcpy(v2_frame_strip.arena + v2_frame_strip.used, src, len);
+            v2_frame_strip.used += len;
+        } else { c.data_off = 0; c.data_len = 0; }   // the live bank (no room / no bank)
+        v2_frame_strip.cmd[v2_frame_strip.n++] = c;
+    }
 }
 
 // late_gate=1: repaint only what orig sub_1dd9c draws in this sub-frame —

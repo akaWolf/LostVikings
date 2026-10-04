@@ -132,16 +132,6 @@ extern thread_local int             v2_clip_h;
 extern thread_local int             v2_tls_kx_lead;
 extern thread_local int             v2_tls_rows_max;
 extern thread_local bool            v2_tls_par_separate;
-// The presenter composes a frame whose camera is not the flip's (an interpolated camera under
-// SMOOTH, the presentation camera under CAMERA SMOOTH): the records are drawn WITHOUT the
-// engine's window clip (V2DrawCmd mand / clip_top / clip_bot — the handler's cut at the edges
-// of the engine's own 320 x 176 window), from their full strip data, clipped by the frame
-// alone; the engine's clip is a property of its window, not of the sprite, and a frame that
-// shows the world past that window must show the sprite there whole (2026-10-08: a hint sign
-// at the right edge under CAMERA SMOOTH — the camera 16 px ahead of the engine's — came out as
-// its clipped record, columns missing). With the flip's own camera the clip stays: the frame
-// is the engine's page, the test build's oracle.
-extern thread_local bool            v2_tls_sprites_unclipped;
 extern thread_local const int*      v2_tls_par_view;
 extern void v2_draw_parallax_layer(uint16_t ds_val, int prio);   // prio 0 = under the tiles, 1 = the priority-1 cells over the sprites
 extern "C" int v2_view_rows(void);           // v2_vm.cpp: 176 / 200 (LVX scene) / 224 (LVX_TALL224 level)
@@ -535,6 +525,7 @@ struct V2PresentLayer {
     const uint8_t* cov;   // coverage per pixel (nullptr: opaque)
     int w, h, stride;
     int dx, dy;           // the layer's top-left in device pixels of the k x target
+    int clip = 0;         // 0: the frame's clip; 1: inside the engine's window (V2PresentLayers::win) only; 2: outside it only
 };
 struct V2PresentLayers {
     int k;                // the integer scale (0: not composed — a chunk screen, the flat path)
@@ -546,9 +537,10 @@ struct V2PresentLayers {
     V2PresentLayer bg;    // the tile layer around the logical camera (opaque; coverage over par0 on a parallax level), placed by the presentation camera
     V2PresentLayer par1;  // a parallax level: its priority-1 cells over the sprites, coverage (px nullptr otherwise)
     V2PresentLayer prio;  // the map's flagged tiles over the sprites (a parallax level; px nullptr otherwise), placed as bg
-    int n_cmd;            // the display list's commands as bitmaps, in draw order
+    int n_cmd;            // the display list's commands as bitmaps, in draw order (the page's records, and the strip sprites among them — V2StripList)
     const V2PresentLayer* cmd;
     int prio_after;       // the commands [0, prio_after) go under the priority layer, the rest over it (= n_cmd without one)
+    SDL_Rect win;         // the engine's window (the flip's camera, W x clip_h) in device pixels of the target — the clip of the records (clip 1) and of the strip sprites (clip 2)
     V2PresentLayer ui;    // the text plane's cells (when they are not page commands) and the CJK overlay, at (0, 0)
     const uint8_t* hud;   // 320 x 64 HUD art (HUD layout only)
     const V2DisplayBadge* badges;
@@ -560,7 +552,26 @@ extern int v2_present_scale_k(int cw);
 // v2_render_funcs.cpp: command i of a list rasterised alone at (0, 0) of a w x h bitmap (its
 // extent, v2_cmd_extent_of) with a coverage plane — v2_draw_list's raster minus the frame clip
 extern void v2_raster_cmd_bitmap(const V2DrawList& L, int i, uint8_t* px, uint8_t* cov, int w, int h);
+extern void v2_raster_cmd_bitmap(const V2DrawCmd& c, const uint8_t* arena, uint8_t* px, uint8_t* cov, int w, int h);
 extern void v2_cmd_extent_of(const V2DrawCmd& c, int* w, int* h);
+// The STRIP sprites (2026-10-08). The presentation camera (CAMERA SMOOTH) shows up to CAM_LEASH px
+// past the engine's own window on either side; the page holds nothing the original would show
+// there — the engine draws no sprite outside its window (the handlers' edge gates) and cuts the
+// ones crossing its edge (the record's mand / clip_top / clip_bot), and what its pages keep past
+// the window is residue the original never shows. So the frame is composed as: inside the
+// engine's window the page's records (clip 1 — the engine's page, exact), outside it the sprites
+// the engine WOULD draw with its camera there (clip 2): at every flip the game thread records
+// every active sprite near the window — the early pass's enumeration (bit 15 set, bits 13-14
+// clear, types 1 / 2 / 4, a bank), its position and a copy of its strip bytes, no clip — into
+// v2_frame_strip (pure reads of the DS; none of the handlers' DS effects), the snapshot carries
+// it, and the presenter rasterises those commands whole and draws them where the window is not.
+// A sprite partly inside the window is thus the record inside and the same bytes outside — one
+// picture. The flat path (SUBPIXEL off; the camera is the engine's there) ignores the strip.
+#define V2_STRIP_MAX 64
+#define V2_STRIP_ARENA (64 * 1152)   // 64 records x a type-2 sprite of 32 strips (36 bytes each)
+struct V2StripList { int n; uint32_t used; V2DrawCmd cmd[V2_STRIP_MAX]; uint8_t arena[V2_STRIP_ARENA]; };
+extern V2StripList v2_frame_strip;                   // the game thread's, filled at the flip (v2_compose_page)
+extern void v2_strip_record(const uint8_t* ds);      // fill it from the DS: the active sprites within 64 px of the window
 // v2_render_funcs.cpp: the shake fold of the DS's camera — x_eff - viewport per axis, the whole
 // pixels the sprite raster subtracts beyond the viewport (v2_draw_list: world - x_eff)
 extern void v2_camera_shake(const uint8_t* ds, int* dx, int* dy);
