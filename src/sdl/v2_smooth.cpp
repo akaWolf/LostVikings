@@ -117,8 +117,9 @@ struct Snap {
     uint8_t hud[320 * 64];      // the HUD art as the HUD mirrors left it at this flip
     int rows;                   // v2_view_rows at the flip: 176 (HUD band below), 200 (LVX scene), 224 (LVX_TALL224)
     uint32_t par_acc_x, par_acc_y;
-    int subframe;               // the flip's sub-frame: 1..3 in render1..3, 0 elsewhere (render_v2.h MOTION EXACT)
+    int subframe;               // the flip's sub-frame: 1..3 from render1..3 to the frame's end, 0 from FRAME_BEGIN to render1 (render_v2.h MOTION EXACT; v2_flip_subframe)
     int frame;                  // the game frame (v2_dbg_pre_vm_iter) at capture — the presentation camera's history
+    uint32_t gen;               // the world generation at capture (render_v2.h v2_world_gen): the history holds within one
     uint16_t coop_active[V2_COOP_MAX];   // each player's active viking (0xFFFF none) — the presentation camera's target in co-op
     uint64_t t;                 // SDL_GetPerformanceCounter at capture
     uint32_t seq;               // the fill's ordinal (the presenter's composition cache)
@@ -188,6 +189,7 @@ static void fill(Snap& S, const uint8_t* s) {
     S.par_acc_y = v2_parallax.acc_y;
     S.subframe = v2_flip_subframe();
     S.frame = v2_dbg_pre_vm_iter;
+    S.gen = v2_world_gen;
     for (int k = 0; k < V2_COOP_MAX; k++) S.coop_active[k] = g_coop.p[k].active;
     S.t = SDL_GetPerformanceCounter();
     S.fullscreen = v2_scene_fullscreen() != 0;
@@ -598,11 +600,16 @@ constexpr double CAM_TAU = 0.10;                      // s: the exponential appr
 // engine's own pans, where P then follows L exactly.
 constexpr int CAM_LEASH_X = 32, CAM_LEASH_Y = 8;
 constexpr int CAM_SNAP = 64;                          // px: a jump of the logical camera beyond this resets the presentation camera
-struct CamFrame { int frame; int end[2]; };
-thread_local CamFrame g_cam_ring[4] = { { -1, { 0, 0 } }, { -1, { 0, 0 } }, { -1, { 0, 0 } }, { -1, { 0, 0 } } };   // the ends of the frames seen
+struct CamFrame { int frame; uint32_t gen; int end[2]; };
+thread_local CamFrame g_cam_ring[4] = { { -1, 0, { 0, 0 } }, { -1, 0, { 0, 0 } }, { -1, 0, { 0, 0 } }, { -1, 0, { 0, 0 } } };   // the ends of the frames seen
 thread_local bool g_cam_valid = false;
 thread_local double g_cam_p[2] = { 0.0, 0.0 };
 thread_local uint64_t g_cam_last = 0;
+// the world generation the presenter's history belongs to (render_v2.h v2_world_gen): a snapshot
+// of another one starts the presentation camera and the object motion history over — the
+// camera and the objects of a new world did not travel from where the old world left them
+thread_local uint32_t g_hist_gen = 0;
+thread_local bool g_hist_gen_valid = false;
 // the frame's pending scroll per axis from a snapshot's DS: the amount the follow set this frame
 // (left/up wins over right/down, as sub_10704 reads them) and its sign; 0 when none or locked
 int cam_pending_amt(const uint8_t* ds, int axis, int* sign) {
@@ -643,14 +650,32 @@ int cam_frame_total(const uint8_t* ds, int axis, bool own) {
 }
 // the exact logical camera of a snapshot (render_v2.h): the line from the previous frame's end to
 // this frame's end, sampled at the flip's sub-frame; the ring keeps the ends of the frames seen
-// (the newest reconstruction of a frame wins)
+// (the newest reconstruction of a frame wins). The previous frame is one of the SAME WORLD
+// (render_v2.h v2_world_gen): the level load runs inside PRE_VM of a frame N and the loop returns
+// to the VM of that frame, so the new level's first render1..3 flips carry N while the ring's
+// N-1 is the previous screen's last frame — its camera end is where the old world's camera
+// stood, not where this one's came from (2026-10-07: the new level's first sub-frames were
+// shown on the line from the old camera to the new one — a jump at every level start). A
+// frame without a seen predecessor takes its own movement backwards, as before — which is not
+// where the camera came from when a mover was clamped (the follow asks for 16 px at a map edge
+// every frame, the mover moves 0: the new level's first frame, with no predecessor, read a
+// start 16 px inside the map), so a flip BEFORE render1 of its frame (sub-frame 0: the frame's
+// PRE_VM / VM / POST_VM — the level load's flips, a blocking loop's) is taken for what it is: the
+// camera where the frame's render sequence starts = the PREVIOUS frame's end. It is recorded as
+// that frame's end (its newest, exact reconstruction) and shown as it stands; the new world's
+// first frame then finds its predecessor in the fade-in's flips.
 void cam_exact(const Snap& S, bool own, int local, double out[2]) {
     const int V[2] = { own ? (int)(int16_t)S.cam_x[local] : (int)rd16(S.ds, DS_VIEWPORT_X), own ? (int)(int16_t)S.cam_y[local] : (int)rd16(S.ds, DS_VIEWPORT_Y) };
+    if (S.subframe <= 0) {
+        CamFrame& q = g_cam_ring[(S.frame - 1) & 3]; q.frame = S.frame - 1; q.gen = S.gen; q.end[0] = V[0]; q.end[1] = V[1];
+        out[0] = V[0]; out[1] = V[1];
+        return;
+    }
     int end[2], prev[2];
     for (int a = 0; a < 2; a++) end[a] = cam_frame_end(S.ds, a, S.subframe, V[a], own);
-    CamFrame& e = g_cam_ring[S.frame & 3]; e.frame = S.frame; e.end[0] = end[0]; e.end[1] = end[1];
+    CamFrame& e = g_cam_ring[S.frame & 3]; e.frame = S.frame; e.gen = S.gen; e.end[0] = end[0]; e.end[1] = end[1];
     const CamFrame& p = g_cam_ring[(S.frame - 1) & 3];
-    if (p.frame == S.frame - 1) { prev[0] = p.end[0]; prev[1] = p.end[1]; }
+    if (p.frame == S.frame - 1 && p.gen == S.gen) { prev[0] = p.end[0]; prev[1] = p.end[1]; }
     else for (int a = 0; a < 2; a++) prev[a] = cam_clamp(S.ds, a, end[a] - cam_frame_total(S.ds, a, own));   // not seen: the frame's own movement backwards
     const int r = (S.subframe <= 0 || S.subframe > 3) ? 3 : S.subframe;
     for (int a = 0; a < 2; a++) out[a] = (double)prev[a] + (double)r * (double)(end[a] - prev[a]) / 3.0;
@@ -717,6 +742,13 @@ static bool compose_snapshot(const Snap& C, const Snap* P, double t, bool interp
     static thread_local double xfa[V2_DRAWLIST_MAX], yfa[V2_DRAWLIST_MAX];   // each command's exact world position for the layers
     // MOTION EXACT / CAMERA SMOOTH (render_v2.h): this composition's stamp for the object history, the trace
     if (exact || cam_smooth) g_mhist_comp++;
+    // a snapshot of another world generation (render_v2.h v2_world_gen): the object histories and
+    // the presentation camera start over — nothing of this world came from where the old one stood
+    if (!g_hist_gen_valid || g_hist_gen != C.gen) {
+        for (MotionHist& h : g_mhist) h.valid = false;
+        g_cam_valid = false;
+        g_hist_gen = C.gen; g_hist_gen_valid = true;
+    }
     static int mtrace = -1; if (mtrace < 0) mtrace = getenv("V2_MOTION_TRACE") ? 1 : 0;   // debug: the active viking's first sub-sprite per composition
     const uint16_t trace_slot = mtrace ? (uint16_t)rd16(C.ds, (uint16_t)(rd16(C.ds, DS_ACTIVE_VIKING) + OBJ_SUB_SLOT)) : 0xFFFF;
     for (int i = 0; i < C.draws.n; i++) {
@@ -883,7 +915,7 @@ static bool compose_snapshot(const Snap& C, const Snap* P, double t, bool interp
             // debug: V2_CAMERA_TRACE=1 — one line per composition: the flip's viewport, the exact
             // logical camera, the target, the presentation camera, the leash, the step's dt
             static int ctrace = -1; if (ctrace < 0) ctrace = getenv("V2_CAMERA_TRACE") ? 1 : 0;
-            if (ctrace) fprintf(stderr, "V2-CAMERA f%d r%d t=%.2f V=%d,%d L=%.3f,%.3f T=%.3f,%.3f P=%.3f,%.3f leash=%d dt=%.1fms\n", C.frame, C.subframe, interp ? t : 1.0,
+            if (ctrace) fprintf(stderr, "V2-CAMERA f%d r%d g%u t=%.2f V=%d,%d L=%.3f,%.3f T=%.3f,%.3f P=%.3f,%.3f leash=%d dt=%.1fms\n", C.frame, C.subframe, C.gen, interp ? t : 1.0,
                                 Vr[0], Vr[1], Lt[0], Lt[1], T[0], T[1], pcam[0], pcam[1], leash, dt * 1000.0);
         }
         // the device positions: the distance to the presentation camera rounded once at k x (a
@@ -932,11 +964,12 @@ bool v2_present_compose(V2PresentFrame* out) {
     double t = 1.0;
     bool interp = false;
     if (smooth_on && pi != ci) {
-        // a sub-frame pair: the same level and width, both tile frames, 6..40 ms apart
-        // (the DOS game flips once per game frame on some screens: 50 ms, not a sub-frame)
+        // a sub-frame pair: the same world (render_v2.h v2_world_gen), level and width, both tile
+        // frames, 6..40 ms apart (the DOS game flips once per game frame on some screens: 50 ms,
+        // not a sub-frame)
         const double freq = (double)SDL_GetPerformanceFrequency();
         const double period = (double)(C.t - P.t) / freq;               // s between the two newest flips
-        const bool pair = C.tile_frame && P.tile_frame && C.fullscreen == P.fullscreen && C.w == P.w &&
+        const bool pair = C.tile_frame && P.tile_frame && C.fullscreen == P.fullscreen && C.w == P.w && C.gen == P.gen &&
                           rd16(C.ds, DS_LEVEL) == rd16(P.ds, DS_LEVEL) && period >= 0.006 && period <= 0.040;
         if (pair) {
             t = (double)(SDL_GetPerformanceCounter() - C.t) / freq / period;

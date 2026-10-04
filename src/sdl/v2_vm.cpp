@@ -60,6 +60,7 @@ extern "C" int  v2_gs_roundtrip_check(const uint8_t*, const char*);   // v2_game
 extern "C" void v2_gs_dump_text(const uint8_t*, const char*);         // named-field state snapshot
 #include "v2_hash_hot.h"   // (IV) -O2 island for the replay-verify hash kernels
 extern int v2_dbg_pre_vm_iter;   // game-frame counter (v2_vm.cpp), C++ linkage — declared once at file scope (clang rejects block externs inside extern "C" functions)
+extern uint32_t v2_world_gen;    // the world generation (render_v2.h; defined beside the frame counter below)
 extern "C" void headless_golden_dump(void);   // direction V: end-state snapshot at clean exits (all builds; v2_gamestate.cpp)
 // UX plan stage 0: LVX trailer flags (LVX_FULLSCREEN .. LVX_TALL224) — v2_lvx.h,
 // shared with the presenter (the LVX loader is below; the scroll-limit mirror
@@ -8634,6 +8635,14 @@ static void v2_load_level_11080(uint8_t* s) {
 
     // sub_10fa0: palette fade to black
     v2_pal_fade_seq_10fa0(s);
+    // The old world's last flip was the fade-out's; every flip from here on (sub_115d2's five,
+    // the fade-in's 71, the frame's own render1..3 — all under THIS frame's counter, since the
+    // load runs inside PRE_VM and the loop returns to the VM of the same frame) shows the new
+    // one: the presenter's cross-flip history starts over (render_v2.h v2_world_gen; no page
+    // flip lies between this point and sub_115d2's PF1). Without it the exact logical camera of
+    // the new level's first sub-frames was the line from the previous screen's camera (the ring
+    // entry of frame N-1) to the new one — the picture jumped and slid back at every level start.
+    v2_world_gen++;
     // sub_17912: stop active sounds + clear DS slots.
     // 100% mirror of orig (vikings.exe_seg000.cpp:16304-16350) — per-slot SDL
     // stop_xmidi_external(handle) + DS FFFF clear. Both orig and v2 now execute
@@ -9271,6 +9280,7 @@ static int v2_state_deserialize(const uint8_t* img, size_t size, bool restore_fr
     v2_input_snapshot = 0;
     { extern uint16_t g_last_sub12352_new_keydowns; g_last_sub12352_new_keydowns = 0; }
     v2_nopl_regs_replay();                 // the audible chip takes the image's register file
+    v2_world_gen++;                        // a whole new world for the presenter (render_v2.h v2_world_gen)
     fprintf(stderr, "V2-STATE: %s: %u blocks%s (level=%u, frame %d)\n", what, nn, coop_seen ? " incl. COOP" : "",
             (unsigned)v2_current_level, v2_dbg_pre_vm_iter);
     return 0;
@@ -9364,6 +9374,7 @@ static bool v2_rw_restore(uint8_t* s) {
     v2_current_level = v2gs(s).level();
     { extern uint16_t v2_input_snapshot; v2_input_snapshot = 0; }
     { extern uint16_t g_last_sub12352_new_keydowns; g_last_sub12352_new_keydowns = 0; }
+    v2_world_gen++;                               // the presenter's history does not run backwards (render_v2.h v2_world_gen)
     return true;
 }
 static void v2_ui_fill_levels(uint8_t* s) {
@@ -10765,6 +10776,14 @@ static bool v2_ds_hash_skip(uint32_t i); // forward
 // Counters incremented at v2 phase entries to disambiguate iter timing.
 int v2_dbg_pre_vm_iter = 0;
 int v2_dbg_post_vm_iter = 0;
+// The world generation (render_v2.h): bumped on the game thread wherever the world is rebuilt
+// wholesale — a level load (sub_11080 mirror, after the fade-out of the old world; a transition,
+// a death restart of the same level number, the password / debug / START_LEVEL jumps all pass
+// there), a state image (debug LOAD, the lockstep's images), a rewind step. The presenter's
+// history across flips (the camera's frame ring, the presentation camera, the object motion
+// history, the sub-frame pairing) holds within one generation only: the camera and the
+// objects of a new world did not travel from where the old world left them.
+uint32_t v2_world_gen = 0;
 // Set true ONLY while inside v2_phase_post_vm (NOT when game_loop_post_vm is called
 // from sub_11080 transition path or v2_run_animation_vm init). Used to gate
 // check_hash so it doesn't compare against stale snapshot during level init.
@@ -23921,11 +23940,19 @@ static std::thread v2_game_thread;
 
 // Hang detector: tracks current phase + last progress timestamp
 static std::atomic<int> v2_current_phase{-1};       // phase v2 thread is processing right now
-static std::atomic<int> v2_last_render_sub{0};      // the last render phase entered: 1..3 (render_v2.h MOTION EXACT)
-// render_v2.h (the presenter's MOTION EXACT): the sub-frame of the flip being captured — the last
-// render phase entered (1..3): a flip in render1..3 carries its own, a flip after it (post_flip1..3
-// flips again for the HUD, a blocking loop) the sub-frame whose catch-up step the sub-sprites stand
-// at; 0 before the first render (the frame's end, as far as the presenter is concerned)
+static std::atomic<int> v2_last_render_sub{0};      // the last render phase entered: 1..3, 0 from FRAME_BEGIN to render1 (render_v2.h MOTION EXACT)
+// render_v2.h (the presenter's MOTION EXACT / CAMERA SMOOTH): the sub-frame of the flip being
+// captured — the last render phase entered (1..3): a flip in render1..3 carries its own, a flip
+// after it (post_flip1..3 flips again for the HUD) the sub-frame whose catch-up step the
+// sub-sprites stand at; 0 from FRAME_BEGIN until render1 — a flip of the frame's PRE_VM / VM /
+// POST_VM (a blocking loop's, the level load's: the fade-out of the old world, sub_115d2's five,
+// the fade-in's 71) shows the objects at the previous frame's end (the integrator has not run)
+// and the camera where the frame's render sequence will START (the movers have not run; sub_115d2
+// moves it before the fade-in, each of its flips reports the camera as it then stands). Until
+// 2026-10-07 the marker kept the previous frame's 3 through those flips; for the sprites 0 and 3
+// are the same point (the frame's end), the camera ring needs the difference (v2_smooth.cpp
+// cam_exact: a sub-frame-0 flip records the PREVIOUS frame's end, the new world's first frame
+// found no predecessor otherwise and took its own clamped movement backwards).
 int v2_flip_subframe(void) {
     return v2_last_render_sub.load(std::memory_order_relaxed);
 }
@@ -23960,6 +23987,7 @@ static void v2_run_phase(int phase, uint16_t ds) {
         if (phase == V2_PHASE_RENDER1) v2_last_render_sub.store(1, std::memory_order_relaxed);   // the sub-frame the flips report (v2_flip_subframe)
         else if (phase == V2_PHASE_RENDER2) v2_last_render_sub.store(2, std::memory_order_relaxed);
         else if (phase == V2_PHASE_RENDER3) v2_last_render_sub.store(3, std::memory_order_relaxed);
+        else if (phase == V2_PHASE_FRAME_BEGIN) v2_last_render_sub.store(0, std::memory_order_relaxed);   // a flip before render1 is the frame's start (see v2_flip_subframe)
         v2_last_progress_ms.store(SDL_GetTicks(), std::memory_order_relaxed);
         switch (phase) {
             case V2_PHASE_FRAME_BEGIN:  v2_phase_frame_begin(ds); break;

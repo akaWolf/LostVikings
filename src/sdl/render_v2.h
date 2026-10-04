@@ -123,6 +123,18 @@ extern thread_local const int*      v2_tls_par_view;
 extern void v2_draw_parallax_layer(uint16_t ds_val, int prio);   // prio 0 = under the tiles, 1 = the priority-1 cells over the sprites
 extern "C" int v2_view_rows(void);           // v2_vm.cpp: 176 / 200 (LVX scene) / 224 (LVX_TALL224 level)
 void v2_smooth_capture(void);                 // game thread, at the page flip
+// The world generation (v2_vm.cpp): bumped on the game thread wherever the world is rebuilt
+// wholesale — the level load (the sub_11080 mirror, right after the fade-out of the old world:
+// a transition, a death restart of the same level number, the password / debug / START_LEVEL
+// jumps), a state image (debug LOAD, the lockstep's images), a rewind step — and carried by
+// every snapshot. The presenter's history across flips holds within one generation only: two
+// flips of different generations are no sub-frame pair, a frame's camera end is no predecessor
+// of a frame of another generation, the presentation camera and the object motion history
+// start over. (2026-10-07: the level load runs inside PRE_VM and the loop returns to the VM of
+// the same frame, so the new level's first sub-frames carried the frame counter of the old
+// screen's last frame + 1 — the exact logical camera was the line from the old camera to the
+// new one, and the picture jumped and slid back at every level start.)
+extern uint32_t v2_world_gen;
 // (the presenter's frame comes from v2_present_compose below since 2026-09-15; v2_smooth_render is gone)olated frame
 bool v2_smooth_effective(void);               // the presenter is interpolating between the sub-frames right now (menu)
 uint32_t v2_smooth_subframe_seq(void);        // distinct sub-frames flipped so far (STATS)
