@@ -372,7 +372,14 @@ is the roundtrip self-test).
 | `--seed=<N>`            | PRNG seed (default 0) |
 
 Replay files are frame-based and SDL-independent (record actions by
-name) so they reproduce identically across machines and runs.
+name) so they reproduce identically across machines and runs. A game
+controller's buttons are recorded as the bits they set (`B0100` is the
+RIGHT bit; `B0100@2` the same bit of player 2) and replayed as bits, not
+as keyboard keys. A recording starts with an `# options` line holding
+the settings that shape the game (SNES BALANCE, SCENES, FINALE, WIDE,
+LANGUAGE, KEYS 123); a replay applies them over the local
+`v2_options.cfg`, and the F1 menu keeps those settings fixed while a
+recording or a replay runs.
 
 Headless also honors env vars: `V2_GOLDEN_DUMP=<file>` writes the
 named-field text dump of the final shadow DS at every clean exit path

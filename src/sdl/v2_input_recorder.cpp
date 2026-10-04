@@ -14,6 +14,7 @@
 #include "v2_net.h"           // UX stage 8 step 3: the lockstep batches
 #include "v2_ui.h"            // 2026-10-06: the KEYS 1/2/3 option (v2_viking_keys_on)
 #include <string>
+#include <cctype>
 #include <cstdio>
 #include <cstdint>
 #include <cstdlib>
@@ -58,6 +59,7 @@ struct ReplayEvent {
     SDL_Keycode keycode;
     long     seq;    // sub_12352 call number that first saw it (-1 = legacy)
     uint8_t  player; // co-op: 0 = player 1 (the keyboard's action), 1 / 2 = `ACTION@2` / `ACTION@3` (that player's bits)
+    uint16_t bits;   // 2026-10-06: a bits event (`B<4 hex>` — a game controller's bit of the input word); keycode SDLK_UNKNOWN then
 };
 // `ACTION@k` (k = 2 or 3, the player number as written): strips the suffix,
 // returns the 0-based player; 0 without a suffix; -1 on a bad number
@@ -68,6 +70,20 @@ static int split_player(char* action) {
     *at = 0;
     return (k >= 2 && k <= 3) ? k - 1 : -1;
 }
+// `B<4 hex>` (2026-10-06): a bits event — a game controller's bit(s) of the input word,
+// applied the way the live pad path applies them (the tap accumulator + the held word
+// for player 1, the player's accumulators for players 2..3), never through a keyboard
+// key: no INT9 letter, no spec byte. Before, a pad's bit was recorded under the name
+// of a keyboard key carrying it, so a replay typed that key's letter into the password
+// screen, and a bit whose only keys carry a spec offset (X = 0x80, S's bit) had no
+// name at all and was lost from recordings and from the lockstep batches.
+static bool parse_bits_token(const char* a, uint16_t* bits) {
+    if (!a || a[0] != 'B' || strlen(a) != 5) return false;
+    for (int i = 1; i < 5; i++) if (!isxdigit((unsigned char)a[i])) return false;
+    *bits = (uint16_t)strtoul(a + 1, nullptr, 16);
+    return true;
+}
+static std::string bits_token(uint16_t bits) { char b[8]; snprintf(b, sizeof b, "B%04X", bits); return b; }
 std::vector<ReplayEvent> g_replay_queue;
 size_t g_replay_pos = 0;
 bool g_replay_exhausted_logged = false;
@@ -122,9 +138,12 @@ void parse_replay_file(const char* path) {
             // `# coop N`: the recording is a 2- or 3-player game (v2_coop.h)
             int np = 0;
             if (sscanf(line, "# coop %d", &np) == 1) v2_coop_set_players(np);
-            // `# viking_keys 1`: recorded with the KEYS 1/2/3 option on (v2_viking_keys_on)
+            // `# viking_keys 1` (the first form) / `# options k=v ...`: the simulation options the
+            // recording was made with (v2_options_sim_string) — applied over the replayer's cfg so the
+            // replay plays the world it was recorded in; KEYS 123 follows the header, never the cfg
             int vk = 0;
             if (sscanf(line, "# viking_keys %d", &vk) == 1) g_replay_viking_keys = vk != 0;
+            if (!strncmp(line, "# options ", 10)) { v2_options_sim_apply(line + 10); g_replay_viking_keys = v2_options.viking_keys.load() ? 1 : 0; }
             continue;
         }
         if (line[0] == '\n' || line[0] == '\0') continue;
@@ -138,8 +157,10 @@ void parse_replay_file(const char* path) {
             fprintf(stderr, "v2_input_recorder: bad player in '%s' at f=%d — skipped\n", action, frame);
             skipped++; continue;
         }
-        SDL_Keycode kc = action_to_sdl_key(action);
-        if (kc == SDLK_UNKNOWN) {
+        uint16_t bits = 0;
+        const bool is_bits = parse_bits_token(action, &bits);   // `B0100`: a controller's bit, no key behind it
+        SDL_Keycode kc = is_bits ? SDLK_UNKNOWN : action_to_sdl_key(action);
+        if (!is_bits && kc == SDLK_UNKNOWN) {
             fprintf(stderr, "v2_input_recorder: unknown action '%s' at f=%d — skipped\n", action, frame);
             skipped++; continue;
         }
@@ -157,6 +178,7 @@ void parse_replay_file(const char* path) {
         e.keycode = kc;
         e.seq = (n == 4) ? seq : -1;
         e.player = (uint8_t)player;
+        e.bits = is_bits ? bits : 0;
         g_replay_queue.push_back(e);
         parsed++;
     }
@@ -258,16 +280,21 @@ void net_capture_impl(const SDL_Event* e, bool from_replay, int player) {
     }
     net_push(kind, action);
 }
-// A game controller's bits (this client's pad) into the batch, one action per bit
+// A game controller's bits (this client's pad) into the batch, one `B<hex>` token per bit
+// (the TAB bit goes as player 1's: the shared pause / inventory screen, as for the keyboard)
 void net_capture_bits(uint16_t bits, bool down) {
     if (!g_net_synced) return;
     for (int b = 0; b < 16; b++) {
         const uint16_t bit = (uint16_t)(1u << b);
         if (!(bits & bit)) continue;
-        const char* action = v2_keymap_action_of_bit(bit);
-        if (!action) continue;
-        net_push(down ? 0 : 1, with_player(action, (bit & 0x2000) ? 0 : g_net_local));
+        net_push(down ? 0 : 1, with_player(bits_token(bit).c_str(), (bit & 0x2000) ? 0 : g_net_local));
     }
+}
+// a replay's bits event in a lockstep game: kept when its player is this one (the loopback
+// bench reads one 3-player file everywhere), all of them in the solo pipeline — net_capture_impl's rule
+void net_capture_bits_replay(uint16_t bits, uint8_t kind, int player) {
+    if (v2_net_peer_count() > 0 && player != g_net_local) return;
+    net_push(kind, with_player(bits_token(bits).c_str(), player));
 }
 
 // Replay clock: equals the frame counter on the normal path, but keeps
@@ -278,7 +305,7 @@ void net_capture_bits(uint16_t bits, bool down) {
 // drain advances it by one virtual frame.
 long g_replay_clock = 0;
 
-bool dequeue_due_replay(SDL_Event* out, int* player) {
+bool dequeue_due_replay(SDL_Event* out, int* player, uint16_t* bits) {
     if (g_replay_pos >= g_replay_queue.size()) {
         if (!g_replay_exhausted_logged && !g_replay_queue.empty()) {
             g_replay_exhausted_logged = true;
@@ -298,8 +325,30 @@ bool dequeue_due_replay(SDL_Event* out, int* player) {
     out->key.state = (e.kind == 1) ? SDL_RELEASED : SDL_PRESSED;
     out->key.timestamp = SDL_GetTicks();
     if (player) *player = e.player;
+    if (bits) *bits = e.bits;
     g_replay_pos++;
     return true;
+}
+
+// A bits event (`B<hex>`, a controller's bit): applied as the live pad path applies it — the
+// tap accumulator and the held word for player 1 (render_v2.cpp's controller case), the
+// player's accumulators for players 2..3 — through the KEYS 123 mask, with no INT9 letter and
+// no spec byte. KR (typematic) does not exist for bits.
+void apply_bits_event(uint16_t bits, bool down, int player, const char* via) {
+    bits = v2_input_bits_mask(bits);
+    if (!bits) return;
+    if (getenv("V2_DRAIN_LOG"))
+        fprintf(stderr, "DRAIN-%s[f%d]: %s bits=%04X player=%d\n", via, v2_dbg_pre_vm_iter, down ? "KD" : "KU", bits, player + 1);
+    if (player > 0) {
+        if (g_v2_coop_players > 1) v2_coop_key(player, bits, down, false);
+        return;
+    }
+    if (down) {
+        sdl_input_press_edges.fetch_or(bits, std::memory_order_relaxed);
+        input_keys |= bits; input_keys_v2 |= bits;
+    } else {
+        input_keys &= (uint16_t)~bits; input_keys_v2 &= (uint16_t)~bits;
+    }
 }
 
 // (#59) Deterministic replay injection. The render-thread poll loop applied
@@ -377,11 +426,15 @@ int v2_replay_drain_impl(void) {
     else
         g_replay_clock++;
     int applied = 0;
-    SDL_Event e; int player = 0;
+    SDL_Event e; int player = 0; uint16_t bits = 0;
     // "loop": delivered by a blocking loop's tick (v2_blocking_loop_tick sets the flag) rather
     // than by the frame-begin drain — the V2_DRAIN_LOG reader needs the distinction (below).
-    while (dequeue_due_replay(&e, &player)) {
-        if (g_net.load()) net_capture_impl(&e, true, player);   // lockstep: captured, applied at read + delay
+    while (dequeue_due_replay(&e, &player, &bits)) {
+        if (bits) {                                            // a controller's bit (`B<hex>`)
+            if (g_net.load()) net_capture_bits_replay(bits, e.type == SDL_KEYDOWN ? 0 : 1, player);
+            else apply_bits_event(bits, e.type == SDL_KEYDOWN, player, v2_replay_drain_in_loop ? "loop" : "clk");
+        }
+        else if (g_net.load()) net_capture_impl(&e, true, player);   // lockstep: captured, applied at read + delay
         else apply_replay_event(e, v2_replay_drain_in_loop ? "loop" : "clk", player);
         applied++;
     }
@@ -424,6 +477,12 @@ extern "C" void v2_input_tick_12352(void) {
         while (g_replay_pos < g_replay_queue.size() &&
                g_replay_queue[g_replay_pos].seq <= g_sub12352_seq) {
             const ReplayEvent& re = g_replay_queue[g_replay_pos];
+            if (re.bits) {                                     // a controller's bit (`B<hex>`)
+                if (g_net.load()) net_capture_bits_replay(re.bits, re.kind, re.player);
+                else apply_bits_event(re.bits, re.kind == 0, re.player, "seq");
+                g_replay_pos++;
+                continue;
+            }
             SDL_Event e; SDL_zerop(&e);
             e.type = (re.kind == 0) ? SDL_KEYDOWN : SDL_KEYUP;
             e.key.keysym.sym = re.keycode;
@@ -501,6 +560,12 @@ extern "C" void v2_input_tick_12352(void) {
             char base[48];
             snprintf(base, sizeof base, "%s", ne.action.c_str());
             int player = split_player(base);
+            uint16_t nb = 0;
+            if (player >= 0 && parse_bits_token(base, &nb)) {   // a controller's bit (`B<hex>`), any player
+                if (ne.kind != 2) apply_bits_event(nb, ne.kind == 0, player, "net");
+                g_net_applied++;
+                continue;
+            }
             SDL_Keycode kc = (player < 0) ? SDLK_UNKNOWN : action_to_sdl_key(base);
             if (kc == SDLK_UNKNOWN) {
                 static int warned = 0;
@@ -550,19 +615,19 @@ extern "C" void v2_input_net_capture_bits(uint16_t bits, int down) {
     if (!g_net.load()) return;
     net_capture_bits(bits, down != 0);
 }
-// RECORD mode: a game controller's bits as actions (`ACTION@k` for the pad of
-// player k > 1) — replays reproduce pad play like keyboard play
+// RECORD mode: a game controller's bits as `B<hex>` tokens, one per bit (`B0100@2` for
+// the pad of player 2) — a replay applies them as bits, exactly as the pad did
 extern "C" void v2_input_record_bits(int player, uint16_t bits, int down) {
     if (g_mode != MODE_RECORD || !g_record_file) return;
     for (int b = 0; b < 16; b++) {
         const uint16_t bit = (uint16_t)(1u << b);
         if (!(bits & bit)) continue;
-        const char* action = v2_keymap_action_of_bit(bit);
-        if (!action) continue;
         std::lock_guard<std::mutex> lk(g_pending_mutex);
-        g_pending_record.push_back({with_player(action, player), (uint8_t)(down ? 0 : 1)});
+        g_pending_record.push_back({with_player(bits_token(bit).c_str(), player), (uint8_t)(down ? 0 : 1)});
     }
 }
+// the menu: the simulation options are locked while a recording or a replay runs
+extern "C" int v2_input_recorder_mode(void) { return g_mode == MODE_RECORD ? 1 : g_mode == MODE_REPLAY ? 2 : 0; }
 
 extern "C" void v2_input_recorder_init(const char* record_file, const char* replay_file, int strict_replay) {
     g_strict_replay = (strict_replay != 0);
@@ -584,7 +649,8 @@ extern "C" void v2_input_recorder_init(const char* record_file, const char* repl
                                "# before the same-numbered input read — intra-frame exact delivery.\n"
                                "# KR = typematic repeat (#86): feeds only the INT9 [28C] channel.\n"
                                "# 3-column files from older builds replay via the legacy frame clock.)\n");
-        if (v2_viking_keys_on()) fprintf(g_record_file, "# viking_keys 1\n");   // the KEYS 1/2/3 option shapes this world: the replay carries it
+        { char ob[192]; v2_options_sim_string(ob, sizeof ob);   // the options that shape this world: the replay plays with them, whatever the replayer's cfg
+          fprintf(g_record_file, "# options %s\n", ob); }
         fflush(g_record_file);
         g_mode = MODE_RECORD;
         fprintf(stderr, "v2_input_recorder: RECORD mode → '%s'\n", record_file);

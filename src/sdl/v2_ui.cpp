@@ -209,22 +209,55 @@ static bool net_locked() {
     v2_ui_toast("NOT IN A NETWORK GAME");
     return true;
 }
+// 2026-10-06: the same options are fixed while a recording or a replay runs — a recording
+// carries them in its header once, at its start, and a replay plays the recorded world
+extern "C" int v2_input_recorder_mode(void);   // v2_input_recorder.cpp (file scope: the block-scope extern trap)
+static bool sim_locked() {
+    if (net_locked()) return true;
+    const int m = v2_input_recorder_mode();
+    if (m) { v2_ui_toast(m == 1 ? "NOT WHILE RECORDING" : "NOT WHILE REPLAYING"); return true; }
+    return false;
+}
+
+// the simulation-shaping options as one line, and back (v2_ui.h)
+void v2_options_sim_string(char* buf, size_t n) {
+    v2_options_ensure_loaded();
+    snprintf(buf, n, "snes_balance=%d scenes=%d console_finale=%d wide=%d language=%s viking_keys=%d",
+             (int)v2_options.snes_balance.load(), (int)v2_options.scenes.load(),
+             (int)v2_options.console_finale.load(), v2_options.wide.load(), v2_options_lang_code,
+             (int)v2_options.viking_keys.load());
+}
+void v2_options_sim_apply(const char* opts) {
+    v2_options_ensure_loaded();      // the cfg first, the given values over it
+    int v; char lang[16];
+    const char* c = opts;
+    while (*c) {
+        while (*c == ' ') c++;
+        if (sscanf(c, "snes_balance=%d", &v) == 1) v2_options.snes_balance = v != 0;
+        else if (sscanf(c, "scenes=%d", &v) == 1) v2_options.scenes = v != 0;
+        else if (sscanf(c, "console_finale=%d", &v) == 1) v2_options.console_finale = v != 0;
+        else if (sscanf(c, "wide=%d", &v) == 1) v2_options.wide = (v >= 0 && v <= 2) ? v : 0;
+        else if (sscanf(c, "viking_keys=%d", &v) == 1) v2_options.viking_keys = v != 0;
+        else if (sscanf(c, "language=%15[A-Za-z-]", lang) == 1) { strncpy(v2_options_lang_code, lang, 7); v2_options_lang_code[7] = 0; }
+        while (*c && *c != ' ') c++;
+    }
+}
 static void activate() {
     switch (cursor) {
     case IT_PARALLAX: v2_options.parallax = !v2_options.parallax.load(); v2_options_save(); break;
-    case IT_SCENES:   if (net_locked()) break; v2_options.scenes = !v2_options.scenes.load(); v2_options_save(); break;
-    case IT_BALANCE:  if (net_locked()) break; v2_options.snes_balance = !v2_options.snes_balance.load(); v2_options_save(); v2_ui_toast("SNES BALANCE: NEXT LEVEL"); break;
-    case IT_VIKKEYS:  if (net_locked()) break; v2_options.viking_keys = !v2_options.viking_keys.load(); v2_options_save(); break;
-    case IT_LANG:     { if (net_locked()) break; int n = v2_locale_count(); if (n > 1) { v2_options.language = (v2_options.language.load() + 1) % n; v2_options_save(); } break; }
+    case IT_SCENES:   if (sim_locked()) break; v2_options.scenes = !v2_options.scenes.load(); v2_options_save(); break;
+    case IT_BALANCE:  if (sim_locked()) break; v2_options.snes_balance = !v2_options.snes_balance.load(); v2_options_save(); v2_ui_toast("SNES BALANCE: NEXT LEVEL"); break;
+    case IT_VIKKEYS:  if (sim_locked()) break; v2_options.viking_keys = !v2_options.viking_keys.load(); v2_options_save(); break;
+    case IT_LANG:     { if (sim_locked()) break; int n = v2_locale_count(); if (n > 1) { v2_options.language = (v2_options.language.load() + 1) % n; v2_options_save(); } break; }
     case IT_SMOOTH:   v2_options.smooth = (v2_options.smooth.load() + 1) % 3; v2_options_save(); break;
-    case IT_FINALE:   if (net_locked()) break; v2_options.console_finale = !v2_options.console_finale.load(); v2_options_save(); v2_ui_toast("FINALE: NEXT LOAD"); break;
+    case IT_FINALE:   if (sim_locked()) break; v2_options.console_finale = !v2_options.console_finale.load(); v2_options_save(); v2_ui_toast("FINALE: NEXT LOAD"); break;
     case IT_FILTER:   v2_options.filter = filter_step(v2_options.filter.load(), 1); v2_options_save(); break;
     case IT_SUBPIXEL: v2_options.subpixel = !v2_options.subpixel.load(); v2_options_save(); break;
     case IT_MOTION:   v2_options.motion = v2_options.motion.load() ? 0 : 1; v2_options_save(); break;
     case IT_CAMERA:   v2_options.camera = v2_options.camera.load() ? 0 : 1; v2_options_save(); break;
     case IT_INTEGER:  v2_options.integer_scale = !v2_options.integer_scale.load(); v2_options_save(); break;
     case IT_BORDER:   v2_options.border = (v2_options.border.load() + 1) % 2; v2_options_save(); break;
-    case IT_WIDE:     if (net_locked()) break; v2_options.wide = (v2_options.wide.load() + 1) % 3; v2_options_save(); v2_ui_toast("WIDE: NEXT LEVEL"); break;
+    case IT_WIDE:     if (sim_locked()) break; v2_options.wide = (v2_options.wide.load() + 1) % 3; v2_options_save(); v2_ui_toast("WIDE: NEXT LEVEL"); break;
     case IT_SOUND:    v2_options.sound_mode = (v2_options.sound_mode.load() + 1) % 4; v2_options_save(); { const int m = v2_options.sound_mode.load(); v2_ui_toast(m == 1 ? "SOUND: SNES (NEXT LEVEL)" : m == 2 ? "SOUND: SC-55" : m == 3 ? "SOUND: MT-32" : "SOUND: PC"); } break;
     case IT_MUSICVOL: v2_options.music_volume = (v2_options.music_volume.load() + 10) % 110; v2_options_save(); break;
     case IT_SFXVOL:   v2_options.sfx_volume = (v2_options.sfx_volume.load() + 10) % 110; v2_options_save(); break;
@@ -250,8 +283,8 @@ static void adjust(int d) {
     case IT_SOUND:    v2_options.sound_mode = (v2_options.sound_mode.load() + d + 4) % 4; v2_options_save(); break;
     case IT_FILTER:   v2_options.filter = filter_step(v2_options.filter.load(), d); v2_options_save(); break;
     case IT_BORDER:   v2_options.border = (v2_options.border.load() + d + 2) % 2; v2_options_save(); break;
-    case IT_WIDE:     if (net_locked()) break; v2_options.wide = (v2_options.wide.load() + d + 3) % 3; v2_options_save(); v2_ui_toast("WIDE: NEXT LEVEL"); break;
-    case IT_LANG: { if (net_locked()) break; int n = v2_locale_count(); if (n > 1) { v2_options.language = (v2_options.language.load() + d + n) % n; v2_options_save(); } break; }
+    case IT_WIDE:     if (sim_locked()) break; v2_options.wide = (v2_options.wide.load() + d + 3) % 3; v2_options_save(); v2_ui_toast("WIDE: NEXT LEVEL"); break;
+    case IT_LANG: { if (sim_locked()) break; int n = v2_locale_count(); if (n > 1) { v2_options.language = (v2_options.language.load() + d + n) % n; v2_options_save(); } break; }
     case IT_MUSICVOL: { int v = v2_options.music_volume.load() + 10 * d; v2_options.music_volume = v < 0 ? 0 : v > 100 ? 100 : v; v2_options_save(); break; }
     case IT_SFXVOL:   { int v = v2_options.sfx_volume.load() + 10 * d; v2_options.sfx_volume = v < 0 ? 0 : v > 100 ? 100 : v; v2_options_save(); break; }
     case IT_AUDIOBUF: { const int b = v2_options.audio_buffer.load(); v2_options.audio_buffer = d > 0 ? ((b == 256) ? 512 : (b == 512) ? 1024 : 256) : ((b == 1024) ? 512 : (b == 512) ? 256 : 1024); v2_options_save(); v2_ui_toast("AUDIO BUF: NEXT START"); break; }

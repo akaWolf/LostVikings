@@ -34,6 +34,11 @@ struct V2Options {
 extern V2Options v2_options;
 void v2_options_ensure_loaded();        // cwd/v2_options.cfg, once
 void v2_options_save();
+// The options that shape the simulation (a different world at the next level or read): one
+// "k=v k=v ..." line — the host's go to the clients in HELLO (v2_net.cpp), a recording's go
+// into its '# options' header (v2_input_recorder.cpp) and are applied over the replayer's cfg.
+void v2_options_sim_string(char* buf, size_t n);
+void v2_options_sim_apply(const char* s);
 extern char v2_options_lang_code[8];   // the cfg's language code until the banks are scanned
 extern char v2_options_sc55_roms[256]; // the cfg's sc55_roms=<dir> (empty = roms/sc55)
 extern char v2_options_mt32_roms[256]; // the cfg's mt32_roms=<dir> (empty = roms/mt32)

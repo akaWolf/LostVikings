@@ -51,6 +51,9 @@ void v2_input_record_bits(int player, uint16_t bits, int down);
 // dropped, so the words hold exactly what the DOS keyboard table could put there.
 int v2_viking_keys_on(void);
 uint16_t v2_input_bits_mask(uint16_t bits);
+// 0 = neither, 1 = recording, 2 = replaying (the menu locks the simulation options meanwhile:
+// a recording's '# options' header is written once, at its start)
+int v2_input_recorder_mode(void);
 
 // RECORD mode only: flush pending key edges (captured by the render thread) to
 // the file, tagged with the CURRENT game frame. Call from the game thread at the

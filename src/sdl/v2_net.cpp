@@ -326,29 +326,14 @@ void start_rx(Peer* p) {
 }
 
 // ---------------------------------------------------------------- options
+// the simulation-shaping options: one line, shared with the recorder's '# options' header (v2_ui.h)
 std::string options_string() {
-    v2_options_ensure_loaded();
-    char b[128];
-    snprintf(b, sizeof b, "snes_balance=%d scenes=%d console_finale=%d wide=%d language=%s viking_keys=%d",
-             (int)v2_options.snes_balance.load(), (int)v2_options.scenes.load(),
-             (int)v2_options.console_finale.load(), v2_options.wide.load(), v2_options_lang_code,
-             (int)v2_options.viking_keys.load());   // 2026-10-06: KEYS 1/2/3 shapes the simulation — the host's for everybody
+    char b[192];
+    v2_options_sim_string(b, sizeof b);
     return b;
 }
 void apply_options(const char* opts) {
-    v2_options_ensure_loaded();      // the cfg first, the host's values over it
-    int v; char lang[16];
-    const char* c = opts;
-    while (*c) {
-        while (*c == ' ') c++;
-        if (sscanf(c, "snes_balance=%d", &v) == 1) v2_options.snes_balance = v != 0;
-        else if (sscanf(c, "scenes=%d", &v) == 1) v2_options.scenes = v != 0;
-        else if (sscanf(c, "console_finale=%d", &v) == 1) v2_options.console_finale = v != 0;
-        else if (sscanf(c, "wide=%d", &v) == 1) v2_options.wide = (v >= 0 && v <= 2) ? v : 0;
-        else if (sscanf(c, "viking_keys=%d", &v) == 1) v2_options.viking_keys = v != 0;
-        else if (sscanf(c, "language=%15[A-Za-z-]", lang) == 1) { strncpy(v2_options_lang_code, lang, 7); v2_options_lang_code[7] = 0; }
-        while (*c && *c != ' ') c++;
-    }
+    v2_options_sim_apply(opts);      // the cfg first, the host's values over it
     fprintf(stderr, "V2-NET: the host's world: %s\n", opts);
 }
 
