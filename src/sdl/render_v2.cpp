@@ -559,7 +559,12 @@ void kx_palette_lut(Uint32 lut[256]) {
 // readback, RGB24. The selftest's reference is the flat frame in stableBuffer (rows 0..175 the
 // map, the HUD band laid out below, or a full-screen scene's rows) through the same palette,
 // each game pixel a k x k block; every differing device pixel is counted, the first 20 differing
-// presents are reported one by one, a summary every 100 presents.
+// presents are reported one by one, a summary every 100 presents. 0 differing is the expectation
+// with motion=0, camera=0 and SMOOTH NONE on a level without a parallax layer (or parallax=0): on
+// a parallax level the layers place the parallax at 1/k of its factor (v2_smooth.cpp par_shift —
+// the flat frame has it at the whole (camera x f) >> 8), so the two differ by design wherever the
+// camera's sub-frame thirds leave a fraction (2026-10-08: the intro's village scene, f = 0x40,
+// the pan from f412 of level1.inp — the sky's dither 1 device px apart at r1 / r2 of every frame).
 void kx_debug(const V2PresentLayers& L, int TW, int TH, int k) {
     static int selftest = -1; if (selftest < 0) selftest = getenv("V2_KX_SELFTEST") ? 1 : 0;
     static int dump = -1; static char dir[480]; static int from = 0, to = -1, dn = 0;
@@ -598,6 +603,25 @@ void kx_debug(const V2PresentLayers& L, int TW, int TH, int k) {
             ndiff++; px_diff += diff;
             if (shown < 20) { shown++; fprintf(stderr, "V2-KX-SELFTEST present=%d f%d k=%d W=%d rows=%d smooth=%d diff=%d first=(%d,%d) got=%02X%02X%02X want=%02X%02X%02X\n",
                                               n, v2_dbg_pre_vm_iter, k, L.w, L.rows, v2_smooth_effective() ? 1 : 0, diff, fx0, fy0, g0[0], g0[1], g0[2], w0.r, w0.g, w0.b); }
+            // debug: V2_KX_SELFTEST_DUMP=<dir> — the first 6 differing presents as PPM pairs, the
+            // target (kx_<n>_got.ppm) and the reference scaled by k (kx_<n>_want.ppm)
+            static int sdump = -1; static const char* sdir = nullptr; static int sdn = 0;
+            if (sdump < 0) { sdir = getenv("V2_KX_SELFTEST_DUMP"); sdump = (sdir && *sdir) ? 1 : 0; }
+            if (sdump == 1 && sdn < 6) {
+                char path[560];
+                snprintf(path, sizeof path, "%s/kx_%d_f%d_got.ppm", sdir, n, v2_dbg_pre_vm_iter);
+                if (FILE* f = fopen(path, "wb")) { fprintf(f, "P6\n%d %d\n255\n", TW, TH); fwrite(rb.data(), 1, rb.size(), f); fclose(f); }
+                snprintf(path, sizeof path, "%s/kx_%d_f%d_want.ppm", sdir, n, v2_dbg_pre_vm_iter);
+                if (FILE* f = fopen(path, "wb")) {
+                    fprintf(f, "P6\n%d %d\n255\n", TW, TH);
+                    for (int y = 0; y < TH; y++) {
+                        const uint8_t* rrow = ref + (size_t)(y / k) * RENDER_WIDTH_V2;
+                        for (int x = 0; x < TW; x++) { const SDL_Color& c = myDrawInfo_v2->drawPalette[rrow[x / k]]; fputc(c.r, f); fputc(c.g, f); fputc(c.b, f); }
+                    }
+                    fclose(f);
+                }
+                sdn++;
+            }
         }
         if (n % 100 == 0) fprintf(stderr, "V2-KX-SELFTEST-SUM presents=%d differing=%d px=%lld k=%d\n", n, ndiff, px_diff, k);
     }
