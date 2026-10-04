@@ -118,7 +118,64 @@ static double       g_tick_hz = 0.0;
 // Sample clock: the audio thread advances it at the end of every callback; the
 // game thread's writes are stamped with it, the real-time ticks are scheduled
 // against it inside the callback (tick n at g_base_samples + n * samples per tick).
+// Beside it (2026-10-08) the wall-clock moment the callback ended and the callback's
+// length: a game-thread call is stamped at the position inside the NEXT buffer that
+// corresponds to the moment it was made — played + (now - end) * rate, within the
+// buffer, and no later than the next tick to run (nopl_call_stamp) — so its latency
+// is one buffer, constant, and its place among the ticks of that buffer is the place
+// in time it had, as far as the order of the ticks allows (before: stamped at the
+// buffer's start — a latency of 0..1 buffer by the phase of the call, and always
+// ahead of the buffer's ticks). The three values are read together under a seqlock
+// (g_clock_seq odd while the audio thread writes them).
 static std::atomic<uint64_t> g_samples_played{0};
+static std::atomic<uint64_t> g_cb_end_pc{0};         // SDL_GetPerformanceCounter at the end of the last callback (0: none yet)
+static std::atomic<uint32_t> g_cb_frames{0};         // the frames that callback mixed
+static std::atomic<uint32_t> g_clock_seq{0};
+static void nopl_clock_read(uint64_t* played, uint64_t* end_pc, uint32_t* frames) {
+    for (;;) {
+        const uint32_t s1 = g_clock_seq.load(std::memory_order_acquire);
+        if (s1 & 1u) continue;
+        *played = g_samples_played.load(std::memory_order_relaxed);
+        *end_pc = g_cb_end_pc.load(std::memory_order_relaxed);
+        *frames = g_cb_frames.load(std::memory_order_relaxed);
+        std::atomic_thread_fence(std::memory_order_acquire);
+        if (g_clock_seq.load(std::memory_order_relaxed) == s1) return;
+    }
+}
+static int late_on(void);                                                            // debug V2_NOPL_LATE (below)
+static int nopl_frame_mode(void);                                                    // the tick pacing mode (below)
+static uint64_t nopl_next_tick_due(void);                                            // the sample of the next tick to run (the real-time mode; with the clock's base below)
+static uint64_t g_late_call_phase[8] = {0};                                          // call stamps (distinct) by the eighth of the buffer the call's moment fell in
+static uint64_t g_late_call_clamped = 0;                                             // ... of them held back to the next tick's sample
+// The stamp of a game-thread call made now (the audio thread's own writes carry the
+// tick's position). The real-time mode: the moment's position inside the next buffer,
+// bounded by the sample of the next tick to run — this call runs BEFORE that tick (the
+// tick's fn67 will see the call's effects on the DS, as the INT8 after a PUSHF/CLI call
+// did), so its writes must reach the chip before the tick's: the ring is drained in
+// order, and an entry stamped past a later entry's position holds that entry back
+// (seen: a call stamped at 7/8 of the buffer, the buffer's first tick — pushed later,
+// stamped earlier — applied 332 samples late). Within the bound the moment is the
+// finest placement the DS cannot tell from the truth. The frame mode (the ticks on the
+// game thread, by frames) keeps the buffer's start, as before.
+static uint64_t nopl_call_stamp(uint32_t* phase_bin, int* clamped) {
+    uint64_t played = 0, end_pc = 0; uint32_t frames = 0;
+    nopl_clock_read(&played, &end_pc, &frames);
+    if (phase_bin) *phase_bin = 0;
+    if (clamped) *clamped = 0;
+    if (nopl_frame_mode()) return played;
+    uint64_t off = 0;
+    if (end_pc && frames) {
+        const uint64_t now = SDL_GetPerformanceCounter();
+        const double el = now > end_pc ? (double)(now - end_pc) / (double)SDL_GetPerformanceFrequency() : 0.0;
+        off = (uint64_t)(el * (double)g_rate);
+        if (off >= frames) off = frames - 1;
+    }
+    if (phase_bin) *phase_bin = frames ? (uint32_t)(off * 8 / frames) : 0;
+    uint64_t ts = played + off;
+    const uint64_t due = nopl_next_tick_due();
+    if (ts > due) { ts = due; if (clamped) *clamped = 1; }
+    return ts;
+}
 static uint64_t     g_ticks_done = 0;
 static uint64_t     g_cur_ts    = 0;        // ts stamped on the writes of the tick being run ...
 static bool         g_in_tick   = false;    // ... while this is set (outside a tick a write takes the played position)
@@ -156,11 +213,14 @@ extern "C" void v2_nopl_sbpro_out(uint16_t port, uint8_t val) {
         if (g_trace)
             fprintf(g_trace, "%llu %d %02X %02X\n",
                     (unsigned long long)g_ticks_done, chip, reg, val);
-        // a tick's write carries the tick's position; a game-thread call's write the
-        // played position (the start of the callback running or next to run — at or
-        // before the mixer's cursor, so it is applied in the next chunk drained)
-        uint64_t ts = g_in_tick ? g_cur_ts
-                                : g_samples_played.load(std::memory_order_relaxed);
+        // a tick's write carries the tick's position; a game-thread call's write its
+        // moment's position inside the next buffer (nopl_call_stamp) — the mixer applies
+        // it at that sample, among the buffer's ticks where it belongs; a call that arrives
+        // while that buffer is already being mixed past its position is applied in the
+        // next chunk drained (V2_NOPL_LATE counts those)
+        uint32_t phase = 0; int clamped = 0;
+        uint64_t ts = g_in_tick ? g_cur_ts : nopl_call_stamp(&phase, &clamped);
+        if (!g_in_tick && late_on()) { static uint64_t last_ts = ~0ull; if (ts != last_ts) { last_ts = ts; g_late_call_phase[phase & 7]++; g_late_call_clamped += clamped; } }   // per distinct stamp, not per write
         size_t wr = g_wr.load(std::memory_order_relaxed);
         size_t nx = (wr + 1) & (NOPL_RING - 1);
         if (nx == g_rd.load(std::memory_order_acquire)) {
@@ -312,6 +372,15 @@ extern "C" uint8_t v2_nopl_sbpro_in(uint16_t port) {
 // passed before the first music start and slam through them at once.
 static uint64_t g_base_samples = 0;
 
+// The real-time schedule: tick n at g_base_samples + n * samples per tick — the audio
+// thread runs it there (nopl_ticks_on_clock), a game-thread call's stamp is bounded by
+// tick g_ticks_done's sample (nopl_call_stamp); both under the driver lock.
+static uint64_t nopl_tick_due(uint64_t n) {
+    const double spt = (double)g_rate / g_tick_hz;    // samples per tick
+    return g_base_samples + (uint64_t)((double)n * spt);
+}
+static uint64_t nopl_next_tick_due(void) { return g_tick_hz > 0.0 ? nopl_tick_due(g_ticks_done) : ~0ull; }
+
 extern "C" void v2_nopl_set_tick_hz(double hz) {
     // under the driver lock: the audio thread schedules its ticks from these two
     // (v2_ail_boot calls this between two driver calls, outside their locks)
@@ -371,6 +440,7 @@ static uint64_t g_late_cbs = 0;
 static uint64_t g_late_tick_applied = 0, g_late_tick_late = 0, g_late_tick_max = 0;   // tick writes: applied, applied after their stamp, the worst lateness (samples)
 static uint64_t g_late_call_applied = 0, g_late_call_hist[8] = {0};                  // call writes, late: 0 | ≤4 | ≤8 | ≤12 | ≤16 | ≤24 | ≤32 | >32 ms
 static uint64_t g_late_instants[2] = {0, 0};                                         // mixer instants with tick writes of 1 | ≥2 distinct stamps
+static uint64_t g_late_ring_inv = 0, g_late_ring_prev = 0;                            // ring entries stamped before the entry drained ahead of them (the real-time mode: 0 — the call stamps are bounded by the next tick)
 static int late_on(void) { if (g_late_on < 0) { const char* e = getenv("V2_NOPL_LATE"); g_late_on = (e && e[0] == '1') ? 1 : 0; } return g_late_on; }
 #if defined(V2_ONLY) && !defined(HEADLESS)
 void v2_only_clean_exit(const char* why);      // v2_main.cpp — C++ linkage, declared here at file scope:
@@ -445,21 +515,17 @@ extern "C" void v2_nopl_pump(void) {
 // against the tick, as the PUSHF/CLI of the DOS API was against its INT8; the
 // lock is held by that thread only for the length of one driver call (or a
 // state image's copy), the audio thread's wait stays far below its budget.
-// A tick debt (more than 64 ticks owed — only if the sample clock jumped, it
-// does not advance while no callback runs) slides the base instead of bursting:
-// the clean PAUSE of the old pump.
+// The sample clock is the mixer's own count of the samples it produced: it does not
+// run while no callback runs (an underrun is silence on the device and a pause of
+// this clock — the music resumes where it stopped, as the DOS sequencer resumed
+// after a lost timer interrupt), so no tick is ever owed beyond the ticks of the
+// buffer being mixed (the "tick debt" branch of the game-thread pump, which guarded
+// a clock the game thread could fall behind, is gone — 2026-10-08).
 static uint32_t nopl_ticks_on_clock(uint64_t pos, uint32_t chunk) {
     if (nopl_frame_mode()) return chunk;      // the frame mode ticks on the game thread (v2_nopl_pump)
     v2_ail_interp_lock();
     if (g_tick_hz > 0.0) {
-        const double spt = (double)g_rate / g_tick_hz;
-        uint64_t next = g_base_samples + (uint64_t)((double)g_ticks_done * spt);
-        if (pos > next && (uint64_t)((double)(pos - next) / spt) > 64) {
-            const uint64_t excess = (uint64_t)((double)(pos - next) / spt) - 64;
-            g_base_samples += (uint64_t)((double)excess * spt);
-            next = g_base_samples + (uint64_t)((double)g_ticks_done * spt);
-            fprintf(stderr, "v2_native_opl: tick debt %llu — paused (base slid)\n", (unsigned long long)excess);
-        }
+        uint64_t next = nopl_tick_due(g_ticks_done);
         int guard = 0;
         while (next <= pos && guard++ < 96) {
             g_cur_ts = next;
@@ -467,7 +533,7 @@ static uint32_t nopl_ticks_on_clock(uint64_t pos, uint32_t chunk) {
             v2_ail_tick();
             g_in_tick = false;
             g_ticks_done++;
-            next = g_base_samples + (uint64_t)((double)g_ticks_done * spt);
+            next = nopl_tick_due(g_ticks_done);
         }
         g_cur_ts = 0;
         if (next > pos && next - pos < chunk) chunk = (uint32_t)(next - pos);
@@ -542,6 +608,8 @@ extern "C" void v2_nopl_mix(int16_t* stereo, uint32_t frames) {
             }
             if (late) {
                 const uint64_t l = pos - c.ts;
+                if (c.ts < g_late_ring_prev) g_late_ring_inv++;
+                g_late_ring_prev = c.ts;
                 if (c.tick) {
                     g_late_tick_applied++;
                     if (l) { g_late_tick_late++; if (l > g_late_tick_max) g_late_tick_max = l; }
@@ -574,15 +642,24 @@ extern "C" void v2_nopl_mix(int16_t* stereo, uint32_t frames) {
         donef += chunk;
         pos   += chunk;
     }
-    g_samples_played.store(pos, std::memory_order_release);
+    {   // the clock: the position, the moment and the length of this callback, as one (nopl_clock_read)
+        g_clock_seq.fetch_add(1, std::memory_order_acq_rel);
+        g_samples_played.store(pos, std::memory_order_relaxed);
+        g_cb_end_pc.store(SDL_GetPerformanceCounter(), std::memory_order_relaxed);
+        g_cb_frames.store(frames, std::memory_order_relaxed);
+        g_clock_seq.fetch_add(1, std::memory_order_acq_rel);
+    }
     if (late_on() && (++g_late_cbs % 1000) == 0) {
         fprintf(stderr, "V2-NOPL-LATE cbs=%llu tick_writes=%llu late=%llu max=%.2fms instants[1|2+]=%llu/%llu"
-                        " call_writes=%llu late_ms[0|<=4|<=8|<=12|<=16|<=24|<=32|>32]=%llu/%llu/%llu/%llu/%llu/%llu/%llu/%llu buf=%u\n",
+                        " call_writes=%llu late_ms[0|<=4|<=8|<=12|<=16|<=24|<=32|>32]=%llu/%llu/%llu/%llu/%llu/%llu/%llu/%llu"
+                        " call_stamps_phase[8ths]=%llu/%llu/%llu/%llu/%llu/%llu/%llu/%llu clamped=%llu ring_inv=%llu buf=%u\n",
                 (unsigned long long)g_late_cbs, (unsigned long long)g_late_tick_applied, (unsigned long long)g_late_tick_late,
                 (double)g_late_tick_max * 1000.0 / (double)g_rate, (unsigned long long)g_late_instants[0], (unsigned long long)g_late_instants[1],
                 (unsigned long long)g_late_call_applied,
                 (unsigned long long)g_late_call_hist[0], (unsigned long long)g_late_call_hist[1], (unsigned long long)g_late_call_hist[2], (unsigned long long)g_late_call_hist[3],
                 (unsigned long long)g_late_call_hist[4], (unsigned long long)g_late_call_hist[5], (unsigned long long)g_late_call_hist[6], (unsigned long long)g_late_call_hist[7],
-                frames);
+                (unsigned long long)g_late_call_phase[0], (unsigned long long)g_late_call_phase[1], (unsigned long long)g_late_call_phase[2], (unsigned long long)g_late_call_phase[3],
+                (unsigned long long)g_late_call_phase[4], (unsigned long long)g_late_call_phase[5], (unsigned long long)g_late_call_phase[6], (unsigned long long)g_late_call_phase[7],
+                (unsigned long long)g_late_call_clamped, (unsigned long long)g_late_ring_inv, frames);
     }
 }
