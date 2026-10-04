@@ -385,30 +385,58 @@ default; `V2_FAST_VSYNC=0` restores the slow path).
 
 ## Default key bindings
 
-Only the entries whose meaning is documented in the source or the
-`vikings_keymap.cfg` comments are listed; the full mapping (32 entries)
-is in `vikings_keymap.cfg`.
+The keyboard table of the DOS original, as `vikings_keymap.cfg` lists
+it. The game reads that file from its own directory; when the file is
+present it replaces the built-in defaults entirely, so append to it
+rather than starting a new one.
 
 | Key                      | Function |
 | --- | --- |
-| Arrow keys               | direction input |
-| Space / Enter / F        | primary action button |
+| Arrow keys, keypad 8 / 2 / 4 / 6 | direction input (keypad 5 = down, as under DOS) |
+| Space / Enter / F, keypad + | primary action button |
 | D                        | secondary action button |
-| Tab                      | inventory |
-| Esc                      | menu / cancel |
-| Ctrl (Left/Right)        | game action bit + spec key |
+| Tab, Caps Lock           | inventory |
+| Esc, P                   | pause / menu |
+| Ctrl (Left/Right), keypad 7, Home | previous viking |
+| Keypad 0, keypad 9, Insert, PgUp | next viking |
+| S                        | use / talk (mutes the SFX outside play) |
+| E                        | use the carried item |
 | Alt (Left/Right)         | spec key (used in Alt-combos) |
 | F10                      | pause menu |
-| 1 / 2 / 3                | switch active Viking |
 | Y / N                    | yes / no in dialogs |
-| S                        | mute SFX (also game input bit) |
 | M                        | mute music |
+| F1                       | the options menu (this port) |
 | F4                       | debug INT 3 (needs `--debug`) |
 | F5 / F6                  | prev / next level cheat (needs `--debug`) |
 | Q (with Alt)             | reset |
 
+The DOS game has no direct viking selection: the keys 1 / 2 / 3 only
+type letters on the password screen.
+
 Edit via `vikings_keymap_editor` or hand-edit `vikings_keymap.cfg`. The
 config format is documented inline at the top of that file.
+
+### Game controllers
+
+Any controller SDL2 recognises as a game controller works without
+configuration. The first one acts as player 1 beside the keyboard; the
+second and third become players 2 and 3 in local co-op (docs2/COOP.md).
+
+| Button                   | Function |
+| --- | --- |
+| D-pad, left stick        | direction input |
+| A                        | primary action button |
+| B                        | secondary action button (D) |
+| X                        | use / talk (S) |
+| Y                        | use the carried item (E) |
+| LB / RB                  | previous / next viking |
+| Back                     | inventory (Tab) |
+| Start                    | pause / menu (Esc) |
+
+On a Steam Deck add the game as a non-Steam game and keep a gamepad
+layout in Steam Input (a player reports the default one works out of
+the box); a keyboard-and-mouse layout hides the controller from the
+game.
 
 ---
 

@@ -57,6 +57,29 @@ const KeyMapEntry kBuiltinDefaults[] = {
     {"2",      SDLK_2,      0,      0x916F},
     {"3",      SDLK_3,      0,      0x9170},
     {"F12",    SDLK_F12,    0,      0},
+    // The rest of the DOS original's keyboard table (the start-up routine at
+    // seg000 eip 0x2C2A..0x2C9C fills word [0x91EC + 2*scancode] with the key's
+    // input bit; the INT9 ISR ORs it into word_30BBE). The keypad drives the
+    // game too: 8/2/4/6 move, 5 = down, + = action; 7 (Home) = the previous
+    // viking like Ctrl, 0 (Insert) and 9 (PgUp) = the NEXT viking (0x10 — no
+    // other key carries it); P = the Esc bit, Caps Lock = the Tab bit. An E0
+    // prefix is a no-op in the ISR, so the grey Insert/Home/PgUp act as their
+    // keypad twins. Every physical key keeps its own action name (the replay
+    // event names a physical key: the INT9 letter channel sees its scancode).
+    {"KP8",    SDLK_KP_8,   0x800,  0},
+    {"KP2",    SDLK_KP_2,   0x400,  0},
+    {"KP5",    SDLK_KP_5,   0x400,  0},
+    {"KP4",    SDLK_KP_4,   0x200,  0},
+    {"KP6",    SDLK_KP_6,   0x100,  0},
+    {"KPPLUS", SDLK_KP_PLUS,0x8000, 0},
+    {"KP7",    SDLK_KP_7,   0x20,   0},
+    {"HOME",   SDLK_HOME,   0x20,   0},
+    {"KP0",    SDLK_KP_0,   0x10,   0},
+    {"KP9",    SDLK_KP_9,   0x10,   0},
+    {"INS",    SDLK_INSERT, 0x10,   0},
+    {"PGUP",   SDLK_PAGEUP, 0x10,   0},
+    {"P",      SDLK_p,      0x1000, 0},
+    {"CAPSLOCK", SDLK_CAPSLOCK, 0x2000, 0},
 };
 
 void load_defaults() {
@@ -88,6 +111,7 @@ const NamedKey kNamedKeys[] = {
     {"KP_ENTER", SDLK_KP_ENTER}, {"KP_PLUS", SDLK_KP_PLUS}, {"KP_MINUS", SDLK_KP_MINUS},
     {"KP_MULTIPLY", SDLK_KP_MULTIPLY}, {"KP_DIVIDE", SDLK_KP_DIVIDE}, {"KP_PERIOD", SDLK_KP_PERIOD},
     {"HOME", SDLK_HOME}, {"END", SDLK_END}, {"PGUP", SDLK_PAGEUP}, {"PGDN", SDLK_PAGEDOWN}, {"INSERT", SDLK_INSERT},
+    {"CAPSLOCK", SDLK_CAPSLOCK},
 };
 
 SDL_Keycode parse_sdl_key(const char* tok) {
