@@ -313,12 +313,52 @@ extern int v2_display_fullscreen;   // v2_render_funcs.cpp: 0 = HUD layout, else
 //   FILTER  NEAREST = crisp, LINEAR = bilinear on the source, SHARP = nearest
 //           pre-scale to the next integer multiple, then linear to the window
 //           (crisp pixels, no shimmer at fractional scales);
-//   BORDER  BLACK, or GLOW = the frame decimated to 40x30, drawn linear over
-//           the whole output at 28 % brightness behind the picture.
+//   BORDER  BLACK, or GLOW = the frame averaged down to ~40 px wide, drawn linear
+//           over the whole output at 28 % brightness behind the picture.
 // V2_PRESENT_SHOT=<path.ppm>[:<call>] dumps the composed output once.
 static SDL_Texture* g_sharp_tex = nullptr; static int g_sharp_k = 0, g_sharp_h = 0, g_sharp_w = 0;
-static SDL_Texture* g_glow_tex = nullptr;
 static int g_tex_filter = -1;   // the sampling the source texture was created with (0 nearest, 1 linear)
+static SDL_Texture* v2_make_texture(int access, int w, int h, int linear);
+// GLOW (2026-10-08): the frame is brought down to the glow's size by halving it step by step —
+// each step a bilinear 2 x downscale, i.e. the exact average of a 2 x 2 block — so the glow is the
+// true area average of the picture and a one-pixel shift of the picture changes it smoothly.
+// Before, one copy took the k x target (or the 1x canvas) straight to 40 x 30: a 24 x (8 x)
+// downscale samples two texels per direction of every block — four of 576 — point sampling in
+// effect, and a one-pixel shift re-picked every sample: the side bars flickered with every scroll
+// step (a player's report; measured on level-1 dumps at k = 3: a 1-px shift changed 48 % of the
+// glow's texels by more than 8/255, the chain's 0 %, and the chain's change is linear in the shift).
+// The source is sampled linear for the first step whatever its own mode (FILTER NEAREST keeps the
+// picture crisp; the glow is a blur by design). The chain's targets are kept per source size.
+static SDL_Texture* g_glow_chain[8]; static int g_glow_n = 0, g_glow_src_w = 0, g_glow_src_h = 0;
+static void v2_glow_draw(SDL_Texture* src, const SDL_Rect* src_rect, int sw, int sh) {
+    if (!src || sw <= 0 || sh <= 0) return;
+    if (g_glow_src_w != sw || g_glow_src_h != sh) {
+        for (int i = 0; i < g_glow_n; i++) if (g_glow_chain[i]) SDL_DestroyTexture(g_glow_chain[i]);
+        g_glow_n = 0; g_glow_src_w = sw; g_glow_src_h = sh;
+        int w = sw, h = sh;
+        while (w > 40 && g_glow_n < 8) {
+            w = (w + 1) / 2; h = (h + 1) / 2;
+            if (h < 1) h = 1;
+            g_glow_chain[g_glow_n] = v2_make_texture(SDL_TEXTUREACCESS_TARGET, w, h, 1);
+            if (!g_glow_chain[g_glow_n]) break;
+            g_glow_n++;
+        }
+        if (g_glow_n) SDL_SetTextureColorMod(g_glow_chain[g_glow_n - 1], 72, 72, 72);   // the last one is the glow: 28 % brightness
+    }
+    if (!g_glow_n) return;
+    SDL_ScaleMode prev = SDL_ScaleModeNearest;
+    const bool had_mode = SDL_GetTextureScaleMode(src, &prev) == 0;
+    SDL_SetTextureScaleMode(src, SDL_ScaleModeLinear);
+    SDL_Texture* from = src; const SDL_Rect* from_rect = src_rect;
+    for (int i = 0; i < g_glow_n; i++) {
+        SDL_SetRenderTarget(myRenderer_v2, g_glow_chain[i]);
+        SDL_RenderCopy(myRenderer_v2, from, from_rect, NULL);
+        from = g_glow_chain[i]; from_rect = NULL;
+    }
+    if (had_mode) SDL_SetTextureScaleMode(src, prev);
+    SDL_SetRenderTarget(myRenderer_v2, NULL);
+    SDL_RenderCopy(myRenderer_v2, g_glow_chain[g_glow_n - 1], NULL, NULL);
+}
 static SDL_Texture* v2_make_texture(int access, int w, int h, int linear) {
     SDL_SetHint(SDL_HINT_RENDER_SCALE_QUALITY, linear ? "1" : "0");   // sampled at creation time
     SDL_Texture* tx = SDL_CreateTexture(myRenderer_v2, SDL_PIXELFORMAT_RGBA8888, access, w, h);
@@ -438,18 +478,7 @@ static void v2_present_frame(int H) {
     SDL_Rect src = { 0, 0, PW, H };
     SDL_SetRenderDrawColor(myRenderer_v2, 0, 0, 0, 255);
     SDL_RenderClear(myRenderer_v2);
-    if (border == 1) {
-        if (!g_glow_tex) {
-            g_glow_tex = v2_make_texture(SDL_TEXTUREACCESS_TARGET, 40, 30, 1);
-            if (g_glow_tex) SDL_SetTextureColorMod(g_glow_tex, 72, 72, 72);
-        }
-        if (g_glow_tex) {
-            SDL_SetRenderTarget(myRenderer_v2, g_glow_tex);
-            SDL_RenderCopy(myRenderer_v2, myTexture_v2, &src, NULL);
-            SDL_SetRenderTarget(myRenderer_v2, NULL);
-            SDL_RenderCopy(myRenderer_v2, g_glow_tex, NULL, NULL);
-        }
-    }
+    if (border == 1) v2_glow_draw(myTexture_v2, &src, PW, H);   // GLOW: the canvas averaged down, over the whole output
     bool drawn = false;
     if (filter == 1) {
         int k = (int)s; if (k < s) k++; if (k < 1) k = 1; if (k > 8) k = 8;
@@ -750,18 +779,7 @@ static void v2_present_layers(const V2PresentLayers& L) {
     const SDL_Rect dst = v2_present_dst(W, RENDER_HEIGHT_V2, filter, integer, &Wo, &Ho, &s);
     SDL_SetRenderDrawColor(myRenderer_v2, 0, 0, 0, 255);
     SDL_RenderClear(myRenderer_v2);
-    if (border == 1) {   // GLOW: the picture decimated to 40 x 30, drawn linear over the whole output, dimmed
-        if (!g_glow_tex) {
-            g_glow_tex = v2_make_texture(SDL_TEXTUREACCESS_TARGET, 40, 30, 1);
-            if (g_glow_tex) SDL_SetTextureColorMod(g_glow_tex, 72, 72, 72);
-        }
-        if (g_glow_tex) {
-            SDL_SetRenderTarget(myRenderer_v2, g_glow_tex);
-            SDL_RenderCopy(myRenderer_v2, g_kx_target, NULL, NULL);
-            SDL_SetRenderTarget(myRenderer_v2, NULL);
-            SDL_RenderCopy(myRenderer_v2, g_glow_tex, NULL, NULL);
-        }
-    }
+    if (border == 1) v2_glow_draw(g_kx_target, NULL, TW, TH);   // GLOW: the k x target averaged down, over the whole output
     SDL_RenderCopy(myRenderer_v2, g_kx_target, NULL, &dst);
     // the overlay: the 1x RGBA buffer cleared to transparent, the menu / STATS / toast drawn into
     // it (the boxes darken by alpha), stretched over the picture as the flat frame carries it —
