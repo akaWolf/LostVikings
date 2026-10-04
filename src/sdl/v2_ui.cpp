@@ -277,13 +277,128 @@ static bool edit_addr_key(SDL_Keycode k) {
     return true;
 }
 
+// the F1 / R3 toggle: the menu opens with its cursor on a valid item
+static void menu_toggle() { v2_ui_menu_open = !v2_ui_menu_open.load(); if (cursor >= n_items()) cursor = 0; }
+
+// Game controllers (2026-10-06, a player's request): a controller drives the
+// menu too. R3 (the right stick's click — the game itself has no use for it,
+// v2_coop.cpp button_bits) opens and closes it; while it is open the d-pad or
+// the left stick moves the cursor and changes values, A toggles / confirms,
+// B closes (cancels the JOIN address edit first). The raw SDL event is read
+// here so the menu does not depend on the pads' game-bit state machine
+// (v2_coop_pad_events keeps running beside it: the pads' held state stays
+// coherent for the moment the menu closes). A held direction repeats after
+// 400 ms every 100 ms (v2_ui_pad_tick from the presenter loop).
+namespace {
+enum PadNav { NAV_NONE = 0, NAV_UP, NAV_DOWN, NAV_LEFT, NAV_RIGHT };
+int      g_nav_held = NAV_NONE;        // the direction currently held (d-pad or stick), for the repeat
+uint32_t g_nav_next_ms = 0;            // when the held direction fires again
+int16_t  g_nav_ax = 0, g_nav_ay = 0;   // the left stick, for its own edge detection
+const int NAV_DEADZONE = 16000;        // the pads' dead zone (v2_coop.cpp dir_bits)
+const uint32_t NAV_REPEAT_DELAY_MS = 400, NAV_REPEAT_MS = 100;
+
+// V2_UI_TRACE=1: one line per menu action taken from a controller (the stands)
+void ui_trace(const char* what) {
+    static int on = -1; if (on < 0) on = getenv("V2_UI_TRACE") ? 1 : 0;
+    if (on) fprintf(stderr, "V2-UI-PAD: %s -> menu=%d cursor=%d parallax=%d scenes=%d snes_balance=%d\n", what,
+                    v2_ui_menu_open.load() ? 1 : 0, cursor, (int)v2_options.parallax.load(), (int)v2_options.scenes.load(), (int)v2_options.snes_balance.load());
+}
+void nav_fire(int nav) {
+    if (editing_addr) { if (nav == NAV_LEFT || nav == NAV_RIGHT) return; }   // the address line takes letters only
+    switch (nav) {
+    case NAV_UP:    cursor = (cursor - 1 + n_items()) % n_items(); break;
+    case NAV_DOWN:  cursor = (cursor + 1) % n_items(); break;
+    case NAV_LEFT:  adjust(-1); break;
+    case NAV_RIGHT: adjust(+1); break;
+    default: break;
+    }
+    ui_trace(nav == NAV_UP ? "up" : nav == NAV_DOWN ? "down" : nav == NAV_LEFT ? "left" : "right");
+}
+void nav_press(int nav) {
+    nav_fire(nav);
+    g_nav_held = nav; g_nav_next_ms = SDL_GetTicks() + NAV_REPEAT_DELAY_MS;
+}
+void nav_release(int nav) { if (g_nav_held == nav) g_nav_held = NAV_NONE; }
+int nav_of_button(Uint8 b) {
+    switch (b) {
+    case SDL_CONTROLLER_BUTTON_DPAD_UP:    return NAV_UP;
+    case SDL_CONTROLLER_BUTTON_DPAD_DOWN:  return NAV_DOWN;
+    case SDL_CONTROLLER_BUTTON_DPAD_LEFT:  return NAV_LEFT;
+    case SDL_CONTROLLER_BUTTON_DPAD_RIGHT: return NAV_RIGHT;
+    default: return NAV_NONE;
+    }
+}
+// the stick as a d-pad: one direction at a time, the larger axis wins, edges on crossing the dead zone
+int nav_of_stick() {
+    const int ax = g_nav_ax, ay = g_nav_ay;
+    if (ax > -NAV_DEADZONE && ax < NAV_DEADZONE && ay > -NAV_DEADZONE && ay < NAV_DEADZONE) return NAV_NONE;
+    if ((ax < 0 ? -ax : ax) >= (ay < 0 ? -ay : ay)) return ax < 0 ? NAV_LEFT : NAV_RIGHT;
+    return ay < 0 ? NAV_UP : NAV_DOWN;
+}
+int g_stick_nav = NAV_NONE;            // the stick's current direction (edge detection)
+} // namespace
+
+bool v2_ui_handle_pad(const SDL_Event* e) {
+    v2_options_ensure_loaded();
+    if (e->type == SDL_CONTROLLERBUTTONDOWN && e->cbutton.button == SDL_CONTROLLER_BUTTON_RIGHTSTICK) {
+        menu_toggle();
+        if (!v2_ui_menu_open.load()) { g_nav_held = NAV_NONE; g_stick_nav = NAV_NONE; }
+        ui_trace("R3");
+        return true;
+    }
+    if (!v2_ui_menu_open.load()) {
+        // the menu is closed: only track the stick so its first move inside the menu is an edge
+        if (e->type == SDL_CONTROLLERAXISMOTION) {
+            if (e->caxis.axis == SDL_CONTROLLER_AXIS_LEFTX) g_nav_ax = e->caxis.value;
+            else if (e->caxis.axis == SDL_CONTROLLER_AXIS_LEFTY) g_nav_ay = e->caxis.value;
+            g_stick_nav = nav_of_stick();
+        }
+        return false;
+    }
+    if (e->type == SDL_CONTROLLERBUTTONDOWN || e->type == SDL_CONTROLLERBUTTONUP) {
+        const bool down = e->type == SDL_CONTROLLERBUTTONDOWN;
+        const Uint8 b = e->cbutton.button;
+        const int nav = nav_of_button(b);
+        if (nav != NAV_NONE) { if (down) nav_press(nav); else nav_release(nav); return true; }
+        if (!down) return true;                  // the menu swallows every release while open
+        if (b == SDL_CONTROLLER_BUTTON_A) { if (editing_addr) edit_addr_key(SDLK_RETURN); else activate(); ui_trace("A"); return true; }
+        if (b == SDL_CONTROLLER_BUTTON_B) { if (editing_addr) editing_addr = false; else v2_ui_menu_open = false; g_nav_held = NAV_NONE; ui_trace("B"); return true; }
+        return true;                             // the other buttons do nothing in the menu, and never reach the game
+    }
+    if (e->type == SDL_CONTROLLERAXISMOTION) {
+        if (e->caxis.axis == SDL_CONTROLLER_AXIS_LEFTX) g_nav_ax = e->caxis.value;
+        else if (e->caxis.axis == SDL_CONTROLLER_AXIS_LEFTY) g_nav_ay = e->caxis.value;
+        else return true;
+        const int nav = nav_of_stick();
+        if (nav != g_stick_nav) {
+            if (g_stick_nav != NAV_NONE) nav_release(g_stick_nav);
+            if (nav != NAV_NONE) nav_press(nav);
+            g_stick_nav = nav;
+        }
+        return true;
+    }
+    return true;                                 // any other controller event while the menu is open
+}
+
+void v2_ui_pad_tick() {
+    if (!v2_ui_menu_open.load() || g_nav_held == NAV_NONE) return;
+    const uint32_t now = SDL_GetTicks();
+    if ((int32_t)(now - g_nav_next_ms) < 0) return;
+    nav_fire(g_nav_held);
+    g_nav_next_ms = now + NAV_REPEAT_MS;
+}
+
+// Keyboard only: the controller events go through the event loop's controller case, which
+// calls v2_ui_handle_pad AND the pads' state machine for every event (an early dispatch here
+// starved the state machine of the events taken by the menu — a d-pad direction released
+// inside the menu stayed "held" and its next press after the menu produced no edge).
 bool v2_ui_handle_event(const SDL_Event* e) {
     if (e->type != SDL_KEYDOWN && e->type != SDL_KEYUP) return false;
     v2_options_ensure_loaded();
     const SDL_Keycode k = e->key.keysym.sym;
     const bool down = e->type == SDL_KEYDOWN, rep = e->key.repeat != 0;
     if (k == SDLK_F1) {                          // every mode: the options menu
-        if (down && !rep) { v2_ui_menu_open = !v2_ui_menu_open.load(); if (cursor >= n_items()) cursor = 0; }
+        if (down && !rep) menu_toggle();
         return true;
     }
     if (g_debug_mode) {                          // debug tools outside the menu

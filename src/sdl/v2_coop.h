@@ -63,6 +63,9 @@ int  v2_coop_players();
 int  v2_coop_owner(uint16_t obj);
 // a key/button of player `player` (0-based; player 0 is fed through the DOS globals by the caller)
 void v2_coop_key(int player, uint16_t bits, bool down, bool repeat);
+// the held bits of players 2..3 dropped (the options menu opened over them: nothing stays
+// pressed under it, as the caller does with player 1's input_keys)
+void v2_coop_clear_held();
 
 // Game controllers (SDL_GameController): controller i -> player i (0-based, so
 // the first pad doubles player 1's keyboard). Buttons: A action (0x8000), B

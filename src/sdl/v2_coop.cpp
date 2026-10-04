@@ -30,6 +30,10 @@ int v2_coop_owner(uint16_t obj) {
     return -1;
 }
 
+void v2_coop_clear_held() {
+    for (int k = 1; k < V2_COOP_MAX; k++) v2_coop_held[k] = 0;
+}
+
 void v2_coop_key(int player, uint16_t bits, bool down, bool repeat) {
     if (player <= 0 || player >= V2_COOP_MAX || !bits) return;
     if (down) {

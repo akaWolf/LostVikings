@@ -922,6 +922,69 @@ void v2_presenter_init(void* _state)
   }
 }
 
+// debug (2026-10-06): V2_UI_PAD_SCRIPT=<file> — a scripted game controller for the
+// stands (there is no pad on the test boxes). A virtual SDL joystick is attached as
+// a game controller (its mapping: button i = SDL_GameControllerButton i, axes 0..5 =
+// SDL_GameControllerAxis 0..5), so it takes the real path: SDL_CONTROLLERDEVICEADDED
+// → v2_coop_pad_added (player 1) → the events the real pad would produce. Script
+// lines, applied when the game frame reaches F: `F btn B 1|0` (button B down/up),
+// `F axis A V` (axis A to V, -32768..32767); '#' comments. V2_UI_TRACE=1 in v2_ui.cpp
+// prints what the menu did with them.
+#ifdef V2_ONLY
+namespace {
+struct PadScriptLine { int frame; int kind; int id; int value; };   // kind 0 = button, 1 = axis
+std::vector<PadScriptLine> g_pad_script;
+size_t g_pad_script_pos = 0;
+SDL_Joystick* g_pad_virtual = nullptr;
+int g_pad_script_state = -1;   // -1 unread, 0 none, 1 running
+}
+static void v2_pad_script_tick() {
+    if (g_pad_script_state < 0) {
+        g_pad_script_state = 0;
+        const char* path = getenv("V2_UI_PAD_SCRIPT");
+        if (!path || !*path) return;
+        FILE* f = fopen(path, "r");
+        if (!f) { fprintf(stderr, "V2-PAD-SCRIPT: cannot open %s\n", path); return; }
+        char line[256];
+        while (fgets(line, sizeof line, f)) {
+            int fr, id, val; char kind[8];
+            if (line[0] == '#' || sscanf(line, "%d %7s %d %d", &fr, kind, &id, &val) != 4) continue;
+            g_pad_script.push_back({fr, strcmp(kind, "axis") == 0 ? 1 : 0, id, val});
+        }
+        fclose(f);
+        const int idx = SDL_JoystickAttachVirtual(SDL_JOYSTICK_TYPE_GAMECONTROLLER, SDL_CONTROLLER_AXIS_MAX, SDL_CONTROLLER_BUTTON_MAX, 0);
+        if (idx < 0) { fprintf(stderr, "V2-PAD-SCRIPT: no virtual joystick (%s)\n", SDL_GetError()); return; }
+        char guid[64]; SDL_JoystickGetGUIDString(SDL_JoystickGetDeviceGUID(idx), guid, sizeof guid);
+        if (!SDL_IsGameController(idx)) {
+            char map[512];
+            snprintf(map, sizeof map, "%s,Virtual Pad,a:b0,b:b1,x:b2,y:b3,back:b4,guide:b5,start:b6,leftstick:b7,rightstick:b8,"
+                     "leftshoulder:b9,rightshoulder:b10,dpup:b11,dpdown:b12,dpleft:b13,dpright:b14,"
+                     "leftx:a0,lefty:a1,rightx:a2,righty:a3,lefttrigger:a4,righttrigger:a5,", guid);
+            if (SDL_GameControllerAddMapping(map) < 0) fprintf(stderr, "V2-PAD-SCRIPT: mapping rejected (%s)\n", SDL_GetError());
+        }
+        g_pad_virtual = SDL_JoystickOpen(idx);
+        if (!g_pad_virtual) { fprintf(stderr, "V2-PAD-SCRIPT: cannot open the virtual joystick (%s)\n", SDL_GetError()); return; }
+        g_pad_script_state = 1;
+        fprintf(stderr, "V2-PAD-SCRIPT: %zu lines, virtual pad %s (game controller: %s)\n", g_pad_script.size(), guid, SDL_IsGameController(idx) ? "yes" : "NO");
+    }
+    if (g_pad_script_state != 1) return;
+    // the script's clock: the game frame, kept advancing at the frame's pace (three presenter
+    // iterations) while the game stands — an open menu pauses the game thread, and the script
+    // must still reach the lines that close it
+    static int last_frame = -1, stalled = 0;
+    if (v2_dbg_pre_vm_iter != last_frame) { last_frame = v2_dbg_pre_vm_iter; stalled = 0; } else stalled++;
+    const int clock = v2_dbg_pre_vm_iter + stalled / 3;
+    while (g_pad_script_pos < g_pad_script.size() && g_pad_script[g_pad_script_pos].frame <= clock) {
+        const PadScriptLine& l = g_pad_script[g_pad_script_pos++];
+        if (l.kind == 0) SDL_JoystickSetVirtualButton(g_pad_virtual, l.id, l.value ? SDL_PRESSED : SDL_RELEASED);
+        else SDL_JoystickSetVirtualAxis(g_pad_virtual, l.id, (Sint16)l.value);
+        fprintf(stderr, "V2-PAD-SCRIPT: f%d (clock %d) %s %d = %d\n", v2_dbg_pre_vm_iter, clock, l.kind ? "axis" : "btn", l.id, l.value);
+    }
+}
+#else
+static void v2_pad_script_tick() {}
+#endif
+
 // one presenter iteration: the events, the pacing wait, the frame, the present
 void v2_presenter_iteration(void)
 {
@@ -941,13 +1004,15 @@ void v2_presenter_iteration(void)
       // V2_ONLY: orig window hidden, no event handler there → handle events here.
       // v2_input_poll_event = drop-in SDL_PollEvent wrapper for record/replay.
       extern uint16_t input_keys, input_keys_v2;
+      v2_pad_script_tick();        // debug: V2_UI_PAD_SCRIPT (a scripted virtual game controller)
       SDL_Event event;
       while (v2_input_poll_event(&event) > 0) {
           // UX stage 3: F1 options menu (every mode) + --debug tools; a
           // consumed key never reaches the game input, and an open menu
-          // drops the held game keys so nothing sticks under it.
+          // drops the held game keys so nothing sticks under it (the pads'
+          // held bits of every player too — 2026-10-06).
           if (v2_ui_handle_event(&event)) {
-              if (v2_ui_menu_open.load()) { input_keys = 0; input_keys_v2 = 0; }
+              if (v2_ui_menu_open.load()) { input_keys = 0; input_keys_v2 = 0; v2_coop_clear_held(); }
               continue;
           }
           switch (event.type) {
@@ -1022,7 +1087,22 @@ void v2_presenter_iteration(void)
           case SDL_CONTROLLERBUTTONDOWN:
           case SDL_CONTROLLERBUTTONUP:
           case SDL_CONTROLLERAXISMOTION: {
+              // 2026-10-06: the options menu on a controller (v2_ui_handle_pad: R3 toggles it;
+              // open: d-pad / stick, A, B). The pads' state machine runs regardless, so the
+              // held state is coherent when the menu closes; while it is open nothing of the
+              // pads reaches the game, and the held game bits of every player are dropped
+              // the way the keyboard's are (an opened menu must leave nothing stuck under it).
+              const bool menu_took = v2_ui_handle_pad(&event);
               V2CoopPadEv ev[4]; int n = v2_coop_pad_events(&event, ev, 4);
+              { static int tr = -1; if (tr < 0) tr = getenv("V2_UI_TRACE") ? 1 : 0;   // debug: every controller event and what became of it
+                if (tr) fprintf(stderr, "V2-PAD-EV f%d t=%u %s %d=%d -> menu_took=%d open=%d bits=%d\n", v2_dbg_pre_vm_iter, SDL_GetTicks(),
+                                event.type == SDL_CONTROLLERAXISMOTION ? "axis" : event.type == SDL_CONTROLLERBUTTONDOWN ? "down" : "up",
+                                event.type == SDL_CONTROLLERAXISMOTION ? event.caxis.axis : event.cbutton.button,
+                                event.type == SDL_CONTROLLERAXISMOTION ? event.caxis.value : 1, menu_took ? 1 : 0, v2_ui_menu_open.load() ? 1 : 0, n); }
+              if (menu_took || v2_ui_menu_open.load()) {
+                  if (v2_ui_menu_open.load()) { input_keys = 0; input_keys_v2 = 0; v2_coop_clear_held(); }
+                  break;
+              }
               for (int i = 0; i < n; i++) {
                   v2_input_record_bits(ev[i].player, ev[i].bits, ev[i].down ? 1 : 0);
                   if (v2_net_active()) {
@@ -1045,6 +1125,9 @@ void v2_presenter_iteration(void)
 #endif
       // НЕ вызываем SDL_PollEvent (test mode) - события обрабатываются только в первом окне
       // Это избегает конфликтов с обработкой событий
+#ifdef V2_ONLY
+      v2_ui_pad_tick();            // the menu: a controller direction held repeats
+#endif
 
       if ((loop_counter & 127) == 0) v2_vsync_query_display(myWindow_v2);   // the window may have moved to another display
       v2_pacing_apply(myRenderer_v2);   // PACING < VSYNC | VRR >

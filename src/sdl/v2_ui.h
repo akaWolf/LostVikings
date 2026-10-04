@@ -40,7 +40,13 @@ int v2_locale_count();                 // v2_vm.cpp: 1 + the banks found
 const char* v2_locale_code_at(int i);
 
 // render thread
-bool v2_ui_handle_event(const SDL_Event* e);            // true = consumed
+bool v2_ui_handle_event(const SDL_Event* e);            // true = consumed (keys; controller events go to v2_ui_handle_pad)
+// 2026-10-06: a game controller drives the menu — R3 opens / closes it; open: d-pad / left stick,
+// A, B. True = the event belongs to the menu (it toggled it, or the menu is open): nothing of it
+// reaches the game. The caller still feeds the pads' state machine (v2_coop_pad_events) and drops
+// its output while the menu is open.
+bool v2_ui_handle_pad(const SDL_Event* e);
+void v2_ui_pad_tick();                                  // once per presenter iteration: the held direction's repeat
 // transparent: the buffer is a transparent overlay (the sub-pixel presentation draws it over the
 // picture on the GPU) — the boxes darken by alpha instead of reading the pixels beneath.
 // Returns true when anything was drawn (the STATS box, the menu, a toast).

@@ -432,6 +432,7 @@ second and third become players 2 and 3 in local co-op (docs2/COOP.md).
 | LB / RB                  | previous / next viking |
 | Back                     | inventory (Tab) |
 | Start                    | pause / menu (Esc) |
+| R3 (right stick click)   | the F1 options menu: d-pad or left stick moves and changes, A toggles, B closes |
 
 On a Steam Deck add the game as a non-Steam game and keep a gamepad
 layout in Steam Input (a player reports the default one works out of
