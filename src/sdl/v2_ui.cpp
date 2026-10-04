@@ -175,7 +175,7 @@ static void darken_box(uint32_t* rgba, int w, int h, SDL_PixelFormat* fmt, int x
 
 // ------------------------------------------------------------------- menu --
 enum Item { IT_PARALLAX, IT_SCENES, IT_BALANCE,
-            IT_VIKKEYS,                                                    // 2026-10-06: KEYS 1/2/3 [ON/OFF] — direct viking selection (not in the DOS game; the host's in a network game)
+            IT_VIKKEYS,                                                    // 2026-10-06: KEYS 123 [ON/OFF] — direct viking selection by 1 / 2 / 3 (not in the DOS game; the host's in a network game)
             IT_LANG, IT_SMOOTH, IT_FINALE, IT_FILTER,
             IT_SUBPIXEL,                                                   // 2026-09-15: SUBPIXEL [ON/OFF] — the layers on the GPU at 1/k (render_v2.h V2PresentLayers)
             IT_MOTION,                                                     // 2026-09-15: MOTION < ORIGINAL | EXACT > — the sprites on their objects' exact trajectories
@@ -470,7 +470,7 @@ bool v2_ui_draw(uint32_t* rgba, int w, int h, SDL_PixelFormat* fmt, bool transpa
         snprintf(lines[n++], 40, "PARALLAX  [%s]", v2_options.parallax.load() ? "ON " : "OFF");
         snprintf(lines[n++], 40, "SCENES    [%s]", v2_options.scenes.load() ? "ON " : "OFF");
         snprintf(lines[n++], 40, "SNES BAL. [%s]", v2_options.snes_balance.load() ? "ON " : "OFF");
-        snprintf(lines[n++], 40, "KEYS 1/2/3 [%s]", v2_options.viking_keys.load() ? "ON " : "OFF");
+        snprintf(lines[n++], 40, "KEYS 123  [%s]", v2_options.viking_keys.load() ? "ON " : "OFF");   // the labels are 10 columns wide
         { char lc[8]; snprintf(lc, sizeof lc, "%s", v2_locale_code_at(v2_options.language.load()));
           for (char* c = lc; *c; c++) if (*c >= 'a' && *c <= 'z') *c -= 32;
           snprintf(lines[n++], 40, "LANGUAGE  < %s >", lc); }
