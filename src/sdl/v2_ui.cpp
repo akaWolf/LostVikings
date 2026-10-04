@@ -49,6 +49,7 @@ void v2_options_ensure_loaded() {
             else if (!strcmp(key, "motion")) v2_options.motion = (val >= 0 && val <= 1) ? val : 1;   // 2026-09-15: MOTION < ORIGINAL | EXACT >
             else if (!strcmp(key, "camera")) v2_options.camera = (val >= 0 && val <= 1) ? val : 1;   // 2026-09-15: CAMERA < ORIGINAL | SMOOTH >
             else if (!strcmp(key, "frame_delay")) v2_options.frame_delay = val != 0;   // 2026-09-15: FRAME DLY (v2_timing.h)
+            else if (!strcmp(key, "viking_keys")) v2_options.viking_keys = val != 0;   // 2026-10-06: KEYS 1/2/3 (direct viking selection)
             else if (!strcmp(key, "integer_scale")) v2_options.integer_scale = val != 0;
             // (square_pixels — the step-3 ASPECT toggle — is gone, 2026-09-06: the
             // canvas is always the 320x240 raster; an old cfg's key is ignored here)
@@ -83,6 +84,7 @@ void v2_options_save() {
     fprintf(f, "audio_buffer=%d\npacing=%d\nstats=%d\n", v2_options.audio_buffer.load(), v2_options.pacing.load(), (int)v2_options.stats.load());
     fprintf(f, "music_volume=%d\nsfx_volume=%d\n", v2_options.music_volume.load(), v2_options.sfx_volume.load());
     fprintf(f, "subpixel=%d\nmotion=%d\ncamera=%d\nframe_delay=%d\n", (int)v2_options.subpixel.load(), v2_options.motion.load(), v2_options.camera.load(), (int)v2_options.frame_delay.load());
+    fprintf(f, "viking_keys=%d\n", (int)v2_options.viking_keys.load());
     if (v2_options_sc55_roms[0]) fprintf(f, "sc55_roms=%s\n", v2_options_sc55_roms);
     if (v2_options_mt32_roms[0]) fprintf(f, "mt32_roms=%s\n", v2_options_mt32_roms);
     fclose(f);
@@ -172,7 +174,9 @@ static void darken_box(uint32_t* rgba, int w, int h, SDL_PixelFormat* fmt, int x
 }
 
 // ------------------------------------------------------------------- menu --
-enum Item { IT_PARALLAX, IT_SCENES, IT_BALANCE, IT_LANG, IT_SMOOTH, IT_FINALE, IT_FILTER,
+enum Item { IT_PARALLAX, IT_SCENES, IT_BALANCE,
+            IT_VIKKEYS,                                                    // 2026-10-06: KEYS 1/2/3 [ON/OFF] — direct viking selection (not in the DOS game; the host's in a network game)
+            IT_LANG, IT_SMOOTH, IT_FINALE, IT_FILTER,
             IT_SUBPIXEL,                                                   // 2026-09-15: SUBPIXEL [ON/OFF] — the layers on the GPU at 1/k (render_v2.h V2PresentLayers)
             IT_MOTION,                                                     // 2026-09-15: MOTION < ORIGINAL | EXACT > — the sprites on their objects' exact trajectories
             IT_CAMERA,                                                     // 2026-09-15: CAMERA < ORIGINAL | SMOOTH > — the presenter's own camera (needs SUBPIXEL)
@@ -210,6 +214,7 @@ static void activate() {
     case IT_PARALLAX: v2_options.parallax = !v2_options.parallax.load(); v2_options_save(); break;
     case IT_SCENES:   if (net_locked()) break; v2_options.scenes = !v2_options.scenes.load(); v2_options_save(); break;
     case IT_BALANCE:  if (net_locked()) break; v2_options.snes_balance = !v2_options.snes_balance.load(); v2_options_save(); v2_ui_toast("SNES BALANCE: NEXT LEVEL"); break;
+    case IT_VIKKEYS:  if (net_locked()) break; v2_options.viking_keys = !v2_options.viking_keys.load(); v2_options_save(); break;
     case IT_LANG:     { if (net_locked()) break; int n = v2_locale_count(); if (n > 1) { v2_options.language = (v2_options.language.load() + 1) % n; v2_options_save(); } break; }
     case IT_SMOOTH:   v2_options.smooth = (v2_options.smooth.load() + 1) % 3; v2_options_save(); break;
     case IT_FINALE:   if (net_locked()) break; v2_options.console_finale = !v2_options.console_finale.load(); v2_options_save(); v2_ui_toast("FINALE: NEXT LOAD"); break;
@@ -240,7 +245,7 @@ static void activate() {
 }
 static void adjust(int d) {
     switch (cursor) {
-    case IT_PARALLAX: case IT_SCENES: case IT_BALANCE: case IT_FINALE: case IT_SUBPIXEL: case IT_MOTION: case IT_CAMERA: case IT_INTEGER: activate(); break;
+    case IT_PARALLAX: case IT_SCENES: case IT_BALANCE: case IT_VIKKEYS: case IT_FINALE: case IT_SUBPIXEL: case IT_MOTION: case IT_CAMERA: case IT_INTEGER: activate(); break;
     case IT_SMOOTH:   v2_options.smooth = (v2_options.smooth.load() + d + 3) % 3; v2_options_save(); break;
     case IT_SOUND:    v2_options.sound_mode = (v2_options.sound_mode.load() + d + 4) % 4; v2_options_save(); break;
     case IT_FILTER:   v2_options.filter = filter_step(v2_options.filter.load(), d); v2_options_save(); break;
@@ -465,6 +470,7 @@ bool v2_ui_draw(uint32_t* rgba, int w, int h, SDL_PixelFormat* fmt, bool transpa
         snprintf(lines[n++], 40, "PARALLAX  [%s]", v2_options.parallax.load() ? "ON " : "OFF");
         snprintf(lines[n++], 40, "SCENES    [%s]", v2_options.scenes.load() ? "ON " : "OFF");
         snprintf(lines[n++], 40, "SNES BAL. [%s]", v2_options.snes_balance.load() ? "ON " : "OFF");
+        snprintf(lines[n++], 40, "KEYS 1/2/3 [%s]", v2_options.viking_keys.load() ? "ON " : "OFF");
         { char lc[8]; snprintf(lc, sizeof lc, "%s", v2_locale_code_at(v2_options.language.load()));
           for (char* c = lc; *c; c++) if (*c >= 'a' && *c <= 'z') *c -= 32;
           snprintf(lines[n++], 40, "LANGUAGE  < %s >", lc); }

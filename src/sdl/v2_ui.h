@@ -29,6 +29,7 @@ struct V2Options {
     std::atomic<int>  motion{1};             // 2026-09-15: MOTION — 0 ORIGINAL (the engine's whole-pixel sub-frame steps), 1 EXACT (the sprites on the exact 16.8 trajectories of their objects; render_v2.h)
     std::atomic<int>  camera{1};             // 2026-09-15: CAMERA — 0 ORIGINAL (the engine's stepped viewport), 1 SMOOTH (the presenter's own camera on a leash around the exact logical one; needs SUBPIXEL; render_v2.h)
     std::atomic<bool> frame_delay{false};    // 2026-09-15: FRAME DLY — the frame's input read and VM moved close to render1's vsync (v2_timing.h); off by default until proven on the user's display
+    std::atomic<bool> viking_keys{false};    // 2026-10-06: KEYS 1/2/3 — the digits select Erik / Baleog / Olaf directly (not in the DOS game: off by default; the bits 0x1/0x2/0x4 of the input word, masked off while the option is off — v2_input_bits_mask; a replay takes it from its '# viking_keys' header, a network game from the host)
 };
 extern V2Options v2_options;
 void v2_options_ensure_loaded();        // cwd/v2_options.cfg, once

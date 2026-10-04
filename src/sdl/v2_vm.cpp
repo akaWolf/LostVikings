@@ -3904,6 +3904,46 @@ void v2_coop_cycle(uint8_t* s) {
         }
     }
 }
+// KEYS 1/2/3 (2026-10-06, v2_ui.h viking_keys — not in the DOS game, off by default):
+// the digits select a viking directly. The bits 0x1 / 0x2 / 0x4 of a player's input
+// word (free in the original: its keyboard table and joystick reader set none of
+// them, no script tests them — v2_input_bits_mask keeps them out while the option
+// is off) are read as edges right after the cycle (sub_12e84 / v2_coop_cycle),
+// with the cycle's own rules and effects: sub_12e79's gate byte_2AA9A, a viking
+// without a portrait word is not there to take, in co-op a viking another player
+// holds is not free, a spectator (player 1 whose viking another player holds)
+// takes nothing; player 1 gets the DOS side effects of a switch (the new viking's
+// sprite flag 0x2000 cleared, its redraw mode 2, the scroll deltas 5 — sub_12e84
+// 37564..), players 2..3 move their ownership. The lowest bit wins when two digits
+// land in one read.
+#ifdef V2_ONLY
+extern "C" int v2_viking_keys_on(void);   // v2_input_recorder.cpp (file scope: a block-scope extern inside a function mangles / links wrong)
+static void v2_viking_select(uint8_t* s) {
+    if (v2gs(s).active_vk_sel_b() == 0) return;     // sub_12e79's gate
+    for (int k = 0; k < g_v2_coop_players; k++) {
+        const uint16_t edges = (k == 0) ? coop_ds_u16(s, DS_INPUT_EDGES) : g_coop.p[k].edges;
+        const uint16_t sel = (uint16_t)(edges & 0x7);
+        if (!sel) continue;
+        const uint16_t target = (sel & 1) ? 0 : (sel & 2) ? 2 : 4;
+        const uint16_t cur = (k == 0) ? coop_ds_u16(s, DS_ACTIVE_VIKING) : g_coop.p[k].active;
+        if (target == cur) continue;
+        if (k == 0 && g_v2_coop_players > 1 && !v2_coop_free(cur, 0)) continue;   // a spectator
+        if (*(const uint16_t*)(s + target + VIK_PORTRAIT) == 0) continue;          // not in this level / dead
+        if (!v2_coop_free(target, k)) continue;                                     // held by another player
+        if (k == 0) {
+            const uint16_t di_v = ObjMem{s, target}.sub_slot();
+            ObjMem{s, di_v}.w16(OBJ_SPRITE_FLAGS, (uint16_t)(ObjMem{s, di_v}.u16(OBJ_SPRITE_FLAGS) & 0xDFFF));
+            v2_objmem_w8(s, (uint16_t)(di_v + OBJ_DIRTY_MODE), (uint8_t)2);
+            v2gs(s).active_viking(target);
+            v2gs(s).scroll_delta_x(5);
+            v2gs(s).scroll_delta_y(5);
+            if (g_v2_coop_players > 1) g_coop.p[0].active = target;
+        } else {
+            g_coop.p[k].active = target;
+        }
+    }
+}
+#endif
 // After sub_12e16 (player 1's death scan wrote ds:3C2, or the game-over flag
 // when nobody is alive): players 2..3 whose viking died take the next alive
 // free one (v2_coop_sync); when the DOS scan handed player 1 a viking another
@@ -9939,6 +9979,9 @@ static void v2_game_loop_pre_vm(uint8_t* shadow, uint16_t ds_val) {
     // sub_12e79 → sub_12e84: viking cycling (extracted, wave B3c-II).
     if (g_v2_coop_players > 1) v2_coop_cycle(shadow);      // UX stage 8: cycling per player, held vikings skipped
     else v2_viking_cycle_12e79(shadow);
+#ifdef V2_ONLY
+    if (v2_viking_keys_on()) v2_viking_select(shadow);     // 2026-10-06: KEYS 1/2/3 — direct selection (an option, off by default)
+#endif
 
     // sub_10813 -> loc_107A2: viking blink (extracted: v2_viking_blink_10813, K4).
     v2_viking_blink_10813(shadow);

@@ -43,6 +43,15 @@ void v2_input_net_capture_bits(uint16_t bits, int down);   // this client's game
 // RECORD mode: a game controller's bits (player 0 = the first pad; `ACTION@k` for the pads of players 2..3)
 void v2_input_record_bits(int player, uint16_t bits, int down);
 
+// 2026-10-06: the KEYS 1/2/3 option (v2_ui.h viking_keys — the digits select a viking by the
+// bits 0x1 / 0x2 / 0x4 of the input word). Whether it is on for THIS world: the game build
+// takes the option, a replay its '# viking_keys N' header instead (the option can never change
+// what a recording does; the canon has no header → off), the test build never. Every key bit
+// entering the input words passes v2_input_bits_mask: with the option off the three bits are
+// dropped, so the words hold exactly what the DOS keyboard table could put there.
+int v2_viking_keys_on(void);
+uint16_t v2_input_bits_mask(uint16_t bits);
+
 // RECORD mode only: flush pending key edges (captured by the render thread) to
 // the file, tagged with the CURRENT game frame. Call from the game thread at the
 // point input is read (sub_12352) so the recorded frame == the frame the game

@@ -411,7 +411,13 @@ rather than starting a new one.
 | Q (with Alt)             | reset |
 
 The DOS game has no direct viking selection: the keys 1 / 2 / 3 only
-type letters on the password screen.
+type letters on the password screen. The F1 option KEYS 1/2/3 (off by
+default; `viking_keys=1` in `v2_options.cfg`) makes them select Erik,
+Baleog and Olaf, with the same rules as the cycle keys (a viking who is
+dead or, in co-op, held by another player is not taken). With the
+option off nothing of those keys reaches the game; a recording carries
+the setting it was made with, and in a network game the host's setting
+holds for everybody.
 
 Edit via `vikings_keymap_editor` or hand-edit `vikings_keymap.cfg`. The
 config format is documented inline at the top of that file.

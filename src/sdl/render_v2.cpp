@@ -1041,6 +1041,7 @@ void v2_presenter_iteration(void)
               uint16_t key_val = 0;
               uint16_t spec_off = 0;
               v2_keymap_lookup_sdl(event.key.keysym.sym, &key_val, &spec_off);
+              key_val = v2_input_bits_mask(key_val);   // KEYS 1/2/3: the digits' bits only with the option on
               if (event.type == SDL_KEYDOWN) {
                   // #62: the INT9 letter channel ([28C] = LUT[scancode]) was
                   // fed ONLY by the default-window handler — in V2_ONLY the

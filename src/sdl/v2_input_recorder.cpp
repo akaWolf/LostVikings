@@ -12,6 +12,7 @@
 #include "v2_keymap.h"
 #include "v2_coop.h"          // UX stage 8: `# coop N` headers, the `ACTION@k` events of players 2..3
 #include "v2_net.h"           // UX stage 8 step 3: the lockstep batches
+#include "v2_ui.h"            // 2026-10-06: the KEYS 1/2/3 option (v2_viking_keys_on)
 #include <string>
 #include <cstdio>
 #include <cstdint>
@@ -43,6 +44,7 @@ enum Mode { MODE_DISABLED, MODE_RECORD, MODE_REPLAY };
 Mode g_mode = MODE_DISABLED;
 FILE* g_record_file = nullptr;
 bool g_strict_replay = false;  // true = ignore real keyboard even after queue exhausted
+int g_replay_viking_keys = -1; // the replay's '# viking_keys N' header (0 once a file is parsed without one; -1 = no replay)
 
 // Action ↔ SDL_Keycode mapping is sourced from v2_keymap (runtime cfg).
 // Recorder writes the action NAME — replay can resurrect the same logical
@@ -107,6 +109,7 @@ long g_net_batches = 0, g_net_applied = 0;
 
 
 void parse_replay_file(const char* path) {
+    g_replay_viking_keys = 0;      // a replay without the header plays with the digits inert (the canon)
     FILE* f = fopen(path, "r");
     if (!f) {
         fprintf(stderr, "v2_input_recorder: replay file '%s' open FAILED — disabled\n", path);
@@ -119,6 +122,9 @@ void parse_replay_file(const char* path) {
             // `# coop N`: the recording is a 2- or 3-player game (v2_coop.h)
             int np = 0;
             if (sscanf(line, "# coop %d", &np) == 1) v2_coop_set_players(np);
+            // `# viking_keys 1`: recorded with the KEYS 1/2/3 option on (v2_viking_keys_on)
+            int vk = 0;
+            if (sscanf(line, "# viking_keys %d", &vk) == 1) g_replay_viking_keys = vk != 0;
             continue;
         }
         if (line[0] == '\n' || line[0] == '\0') continue;
@@ -238,9 +244,15 @@ void net_capture_impl(const SDL_Event* e, bool from_replay, int player) {
     }
     if (!g_net_synced) return;                  // nothing before the join: the image replaces this world
     if (g_net_local > 0) {
+        // a client's keyboard: its game actions (the keys with an input bit) go to the stream;
+        // the letters and the spec-only keys stay home (the host runs the menus and passwords).
+        // 2026-10-06: a key with BOTH a bit and a spec offset — S (use / talk + the SFX mute),
+        // Ctrl (previous viking + the modifier), the digits of KEYS 1/2/3 — sends its bit too:
+        // the spec part is local by construction (the apply path of players 2..3 takes bits
+        // only), and dropping the whole key left a client without use / talk and the cycle key.
         uint16_t kv = 0, so = 0;
         v2_keymap_lookup_sdl(e->key.keysym.sym, &kv, &so);
-        if (kv == 0 || so != 0) return;
+        if (kv == 0) return;
         net_push(kind, with_player(action, (kv & 0x2000) ? 0 : g_net_local));
         return;
     }
@@ -300,6 +312,7 @@ bool dequeue_due_replay(SDL_Event* out, int* player) {
 void apply_replay_event(const SDL_Event& e, const char* via, int player) {
     uint16_t key_val = 0, spec_off = 0;
     v2_keymap_lookup_sdl(e.key.keysym.sym, &key_val, &spec_off);
+    key_val = v2_input_bits_mask(key_val);   // KEYS 1/2/3: the digits' bits only when the option is on for this world
     if (player > 0) {
         // `ACTION@k`: another player's action — its bits go to that player's
         // accumulators only. No keyboard stands behind it: no DOS words, no
@@ -507,6 +520,20 @@ extern "C" void v2_input_tick_12352(void) {
     }
 }
 
+// KEYS 1/2/3 (v2_input_recorder.h): on for this world?
+extern "C" int v2_viking_keys_on(void) {
+    if (g_mode == MODE_REPLAY) return g_replay_viking_keys > 0;   // the recording's header, never the option
+#ifdef V2_ONLY
+    v2_options_ensure_loaded();
+    return v2_options.viking_keys.load() ? 1 : 0;
+#else
+    return 0;   // the test build: the orig half has no such selection, the mirror must not either
+#endif
+}
+extern "C" uint16_t v2_input_bits_mask(uint16_t bits) {
+    return v2_viking_keys_on() ? bits : (uint16_t)(bits & ~0x7u);
+}
+
 extern "C" void v2_input_recorder_net(int local_player, int synced) {
     g_net_local = local_player;
     g_net_synced = synced != 0;
@@ -557,6 +584,7 @@ extern "C" void v2_input_recorder_init(const char* record_file, const char* repl
                                "# before the same-numbered input read — intra-frame exact delivery.\n"
                                "# KR = typematic repeat (#86): feeds only the INT9 [28C] channel.\n"
                                "# 3-column files from older builds replay via the legacy frame clock.)\n");
+        if (v2_viking_keys_on()) fprintf(g_record_file, "# viking_keys 1\n");   // the KEYS 1/2/3 option shapes this world: the replay carries it
         fflush(g_record_file);
         g_mode = MODE_RECORD;
         fprintf(stderr, "v2_input_recorder: RECORD mode → '%s'\n", record_file);

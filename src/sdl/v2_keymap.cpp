@@ -53,9 +53,14 @@ const KeyMapEntry kBuiltinDefaults[] = {
     {"F4",     SDLK_F4,     0,      0x91AA},
     {"F5",     SDLK_F5,     0,      0x91AB},
     {"F6",     SDLK_F6,     0,      0x91AC},
-    {"1",      SDLK_1,      0,      0x916E},
-    {"2",      SDLK_2,      0,      0x916F},
-    {"3",      SDLK_3,      0,      0x9170},
+    // 1 / 2 / 3: the DOS game gives them no input bit (they only type password
+    // letters); the port's KEYS 1/2/3 option (v2_ui.h viking_keys) selects
+    // Erik / Baleog / Olaf by the free bits 0x1 / 0x2 / 0x4 of the input word —
+    // masked off while the option is off (v2_input_bits_mask), so the words
+    // stay the original's. The spec offsets are the INT9 state bytes, as before.
+    {"1",      SDLK_1,      0x1,    0x916E},
+    {"2",      SDLK_2,      0x2,    0x916F},
+    {"3",      SDLK_3,      0x4,    0x9170},
     {"F12",    SDLK_F12,    0,      0},
     // The rest of the DOS original's keyboard table (the start-up routine at
     // seg000 eip 0x2C2A..0x2C9C fills word [0x91EC + 2*scancode] with the key's
