@@ -1834,8 +1834,15 @@ static void v2_page_list_bake(uint16_t page, const uint8_t* s) {
     // 16:10, a garbled double viking in 16:9). Outside the window a record's cell stays alive
     // only while the record is its slot's newest — the object as it stands; a static sprite
     // drawn once keeps its cells, a moving one leaves nothing behind.
+    // 2026-10-07: on a wide level the erase passes scan the view's columns (render_v2.h
+    // v2_erase_cols), so the window here is theirs — the wing rule is left for the cells
+    // beyond the view, where an object removed is not seen either way.
     const int win_c0 = (int)(int16_t)v2gs(s).scroll_col(), win_r0 = (int)(int16_t)v2gs(s).scroll_row();
-    const int win_c1 = win_c0 + 0x2B, win_r1 = win_r0 + (v2_view_rows() == 224 ? 0x1E : 0x19);
+    const int win_c1 = win_c0 + v2_erase_cols(), win_r1 = win_r0 + v2_erase_rows();
+    // debug (V2_PL_WINGSTALE below): the view's columns and rows from the scroll cell — the cells a
+    // wide frame shows past the page's 0x2B columns are its visible wing (a record above or below
+    // the view, e.g. an arrow flying over the camera, is the original's own invisible residue)
+    const int view_c1 = win_c0 + ((v2_view_w + 7) >> 3) + 1, view_r1 = win_r0 + ((v2_view_rows() + 7) >> 3) + 1;
     int w = 0;
     for (int i = 0; i < L.n; i++) {
         V2DrawCmd c = L.cmd[i];
@@ -1846,6 +1853,7 @@ static void v2_page_list_bake(uint16_t page, const uint8_t* s) {
         if (nrows > 32) nrows = 32;
         memset(c.dead, 0, sizeof c.dead);
         int alive = 0;
+        int wing_vis = 0;      // debug: live cells in the visible wing (past the page's 0x2B columns, within the view)
         uint32_t killer = 0;   // debug: the newest erase epoch among the dead cells
         int newest = -1;       // is this record its slot's newest one? (decided on the first cell outside the erased window)
         for (int r = 0; r < nrows; r++) {
@@ -1863,7 +1871,7 @@ static void v2_page_list_bake(uint16_t page, const uint8_t* s) {
                 const uint64_t bit = (uint64_t)1 << (((r & 7) << 3) | cc);
                 if (!(c.keep[r >> 3] & bit)) { c.dead[r >> 3] |= bit; continue; }   // outside a span copy's cells
                 if (E[wi] > c.epoch) { c.dead[r >> 3] |= bit; if (E[wi] > killer) killer = E[wi]; }
-                else alive++;
+                else { alive++; if (col >= win_c0 + 0x2B && col < view_c1 && row >= win_r0 && row < view_r1) wing_vis++; }
             }
         }
         if (v2_pl_trace_on(c.slot)) {
@@ -1876,14 +1884,29 @@ static void v2_page_list_bake(uint16_t page, const uint8_t* s) {
                     lv ? lv[0] : 0, lv ? lv[1] : 0, lv ? lv[2] : 0, lv ? lv[3] : 0, lv ? lv[4] : 0, lv ? lv[5] : 0, lv ? lv[6] : 0, lv ? lv[7] : 0, lv ? lv[8] : 0);
         }
         // debug: V2_PL_WINGDUMP=<frame> — every record of the shown page that reaches beyond the
-        // erased window at that frame, with the slot's current position in the DS
+        // erased window at that frame (beyond its 0x2B columns or its 0x19 rows: the page's
+        // own geometry, whatever the view), with the slot's current position in the DS
         { static int wd = -1, wd_f = 0; if (wd < 0) { const char* e = getenv("V2_PL_WINGDUMP"); wd = 0; if (e && *e) { wd = 1; wd_f = atoi(e); } }
-          if (wd == 1 && v2_dbg_pre_vm_iter == wd_f && (cx0 + ncols > win_c1 || cy0 + nrows > win_r1)) {
+          if (wd == 1 && v2_dbg_pre_vm_iter == wd_f && (cx0 + ncols > win_c0 + 0x2B || cy0 + nrows > win_r0 + 0x19)) {
               const int sx = c.slot <= 0xFE ? (int)(int16_t)*(const uint16_t*)(s + (uint16_t)(c.slot + OBJ_SPRITE_X)) : -1;
               const int sy = c.slot <= 0xFE ? (int)(int16_t)*(const uint16_t*)(s + (uint16_t)(c.slot + OBJ_SPRITE_Y)) : -1;
               const int sfl = c.slot <= 0xFE ? (int)*(const uint16_t*)(s + (uint16_t)(c.slot + OBJ_SPRITE_FLAGS)) : -1;
               fprintf(stderr, "V2-PLW f%d page=%02X i=%d slot=%02X type=%d xy=(%d,%d) off=%04X strips=%d epoch=%u newest=%d alive=%d ds_xy=(%d,%d) ds_fl=%04X win=[%d..%d)x[%d..%d)\n",
                       v2_dbg_pre_vm_iter, page, i, c.slot, (int)c.type, c.x, c.y, c.off, (int)c.strips, c.epoch, newest, alive, sx, sy, sfl, win_c0, win_c1, win_r0, win_r1);
+          } }
+        // debug: V2_PL_WINGSTALE=1 — on a wide level, a record with live cells in the VISIBLE wing
+        // (past the page's 0x2B columns, within the view) whose slot's object is gone (sprite flags
+        // bit 15 clear) and whose erase countdown [114E] has run out: the image of an object no
+        // longer there, which the view shows — with the slot's DS fields; at most 200 lines
+        { static int ws = -1, lines = 0; if (ws < 0) { const char* e = getenv("V2_PL_WINGSTALE"); ws = (e && e[0] == '1') ? 1 : 0; }
+          if (ws && v2_view_w > 0x140 && wing_vis && c.slot <= 0xFE && lines < 200) {
+              const int sfl = (int)*(const uint16_t*)(s + (uint16_t)(c.slot + OBJ_SPRITE_FLAGS));
+              if (!(sfl & 0x8000) && s[c.slot + OBJ_DIRTY_CNT] == 0) {
+                  lines++;
+                  fprintf(stderr, "V2-PLWS f%d page=%02X slot=%02X type=%d xy=(%d,%d) off=%04X epoch=%u alive=%d wing_vis=%d cells=%dx%d ds_fl=%04X 114D=%02X newest=%d win=[%d..%d)x[%d..%d) view=[%d..%d)x[%d..%d) view_w=%d\n",
+                          v2_dbg_pre_vm_iter, page, c.slot, (int)c.type, c.x, c.y, c.off, c.epoch, alive, wing_vis, ncols, nrows, sfl,
+                          s[c.slot + OBJ_DIRTY_MODE], newest, win_c0, win_c1, win_r0, win_r1, win_c0, view_c1, win_r0, view_r1, v2_view_w);
+              }
           } }
         if (alive == 0) continue;
         L.cmd[w++] = c;

@@ -82,7 +82,7 @@ int v2_view_h_cur = 0xB0;
 // (SNES $9ED3: #$80; PC 0xA0), the sprite culling W (SNES #$0100; PC 0x140),
 // the scroll limit map - W. Set by sub_113b0 at level init from v2_view_w_opt.
 int v2_view_w = 0x140;
-int v2_view_w_opt = 0x140;   // the WIDE option (v2_ui): 0x140, 400 or 426 (320 / 356 with square pixels)
+int v2_view_w_opt = 0x140;   // the WIDE option (v2_ui): 0x140, 384 (16:10) or 426 (16:9) — 240 rows × the ratio, square pixels
 // UX stage 9: the console-finale variant head is loaded (v2_load_template);
 // op 13/D9 then keeps palette row 192 for the crowd like the SNES does
 bool v2_console_variant = false;
@@ -4384,8 +4384,12 @@ static void v2_tile_row_16dc1(uint8_t* s, uint16_t bx_fs, uint16_t /*unused*/) {
         v2_page_tile_set_all(moff, tw);   // the page lists (render_v2.h): the word every page now shows there
     }
     // The page lists (render_v2.h): the row's 43 cells are tiles again on the draw page
-    // and, through sub_171DC right after, on the other two.
-    v2_page_lists_erase_cells_all(bx_fs, 0x2B, 2, "16DC1");
+    // and, through sub_171DC right after, on the other two. On a wide level the row has
+    // the view's columns (render_v2.h v2_erase_cols): the cells of its wing are fresh tiles
+    // as well — no record of a sprite drawn there on an earlier visit of the camera survives
+    // the row's entry into the view (the page's own word stays unpainted there: the
+    // composition shows the map's tile for a wing cell).
+    v2_page_lists_erase_cells_all(bx_fs, v2_erase_cols(), 2, "16DC1");
 }
 
 // sub_171dc (seg000): VGA page copy for COLUMN tiles. Verified with seg000 lines 14709+.
@@ -4428,8 +4432,9 @@ static void v2_tile_col_16dd9(uint8_t* s, uint16_t bx_fs) {
     uint16_t di_vga = v2gs(s).page_copy_src1();
     uint16_t stride = v2gs(s).fs_page_stride();
     // The page lists (render_v2.h): the column's 25 cells are tiles again on the draw page
-    // and, through sub_1712B right after, on the other two.
-    v2_page_lists_erase_cells_all(bx_fs, 0x19, stride, "16DD9");
+    // and, through sub_1712B right after, on the other two — 30 on an LVX_TALL224 level
+    // (render_v2.h v2_erase_rows; the VGA paint below keeps to the page's 25 rows).
+    v2_page_lists_erase_cells_all(bx_fs, v2_erase_rows(), stride, "16DD9");
     for (int r = 0; r < 0x19; r++) {
         uint16_t tw = (bx_fs < V2_FS_SHADOW_SIZE - 1)
                     ? *(uint16_t*)(v2_vm_shadow_fs + bx_fs) : 0;
@@ -4740,7 +4745,7 @@ static void v2_pal_correct_10e99(uint8_t* s) {
 // FS writes: AND fs:[di], ax (clears dirty flag bit 0).
 static void v2_dirty_tile_scan_1C8F1(uint8_t* s, uint16_t ax_mask) {
     v2_cc_v2_hit(11);   // M1 call-parity CC_1C8F1 (#65)
-    uint16_t cx = 0x2B;                                              // MOV cx, 2Bh (columns)
+    uint16_t cx = (uint16_t)v2_erase_cols();                         // MOV cx, 2Bh (columns; the view's columns on a wide level — render_v2.h v2_erase_cols)
     uint16_t bx = (v2_view_h_cur == 0xB0) ? 0x19 : 0x1E;            // MOV bx, 19h (rows: the 200-line page; 30 for the 240-line page of an LVX_TALL224 level)
     // line 36-40: di = row_offset_table[ds:0x2581] + ds:0x257F, scaled
     uint16_t di_base = v2gs(s).scroll_row();                    // MOV di, ds:2581h
@@ -4748,10 +4753,10 @@ static void v2_dirty_tile_scan_1C8F1(uint8_t* s, uint16_t ax_mask) {
     di_base = *(uint16_t*)(s + (uint16_t)(di_base - LUT_ROW_BASE));       // MOV di, [di-7098h]
     di_base += v2gs(s).scroll_col();                             // ADD di, ds:257Fh
     di_base <<= 1;                                                    // SHL di, 1
-    // line 41-43: bp = ds:0x25DC * 4 - 0x56 (row skip)
+    // line 41-43: bp = ds:0x25DC * 4 - 0x56 (row skip: the map row's words minus the columns scanned)
     uint16_t bp = v2gs(s).map_bp();                         // MOV bp, ds:25DCh
     bp <<= 2;                                                        // SHL bp, 2
-    bp -= 0x56;                                                       // SUB bp, 56h
+    bp -= (uint16_t)(cx * 2);                                         // SUB bp, 56h (2 bytes per column scanned)
 
     uint16_t di = di_base;
     for (uint16_t row = 0; row < bx; row++) {                       // outer loop (rows)
@@ -4767,7 +4772,7 @@ static void v2_dirty_tile_scan_1C8F1(uint8_t* s, uint16_t ax_mask) {
                     // the AND, so the draw leg gets the post-AND value.
                     uint16_t post = (uint16_t)(fs_val & ax_mask);
                     if (post & 8) {
-                        v2_masked_tile_1C939(s, post, row, col);  // VGA flagged tile render
+                        if (col < 0x2B && row < 0x19) v2_masked_tile_1C939(s, post, row, col);  // VGA flagged tile render (a wing cell, a row below 200 px of a TALL224 page has no VGA address)
                         // The page lists (render_v2.h): this repaint is a command of page [92F9]
                         v2_page_list_fgtile(v2gs(s).page_shown(), (int16_t)((v2gs(s).scroll_col() + col) * 8), (int16_t)((v2gs(s).scroll_row() + row) * 8), post);
                     }
@@ -4999,7 +5004,9 @@ static void v2_glyph_flush_1E0C7(uint8_t* s) {
 //   tile-dirty map: each run of consecutive tiles with bit0 set gets bit1
 //   cleared and its pixel span (2 bytes/tile × 8 rows, pitch 0x56) copied
 //   from the BG page to the DRAW page (orig: 8× REP MOVSB at A000; here:
-//   v2_vga_copy_span into shadow VGA at the exact orig addresses).
+//   v2_vga_copy_span into shadow VGA at the exact orig addresses). On a wide
+//   level the window has the view's columns (render_v2.h v2_erase_cols); the
+//   VGA copy keeps to the page's 0x2B, the page-list copy takes the span.
 //
 // Exact replica of the orig DS/fs side effects; VGA OUTs commented in place.
 // debug (render_v2.h V2_PAGELIST_TRACE): the traced slot's DS fields as a pass mirror sees them
@@ -5043,8 +5050,10 @@ static void v2_bg_latch_1DE05(uint8_t* s) {
     // OUT(0x3CE, 0x0008); — VGA graphics: bit mask (orig 38093, commented)
     {
         v2_page_cells_copy_begin(v2gs(s).page_draw(), v2gs(s).page_bg(), "1DE05p2");   // the page lists: this pass's span copies BG → [92F7]
-        uint16_t cols_left = 0x2B;                           // 38096 mov cx, 2Bh
-        uint16_t rows_left = 0x19;                           // 38097 mov bx, 19h
+        const uint16_t cols = (uint16_t)v2_erase_cols();     // 0x2B; the view's columns on a wide level (render_v2.h v2_erase_cols)
+        const uint16_t rows = (uint16_t)v2_erase_rows();     // 0x19; 0x1E on an LVX_TALL224 level (render_v2.h v2_erase_rows)
+        uint16_t cols_left = cols;                           // 38096 mov cx, 2Bh
+        uint16_t rows_left = rows;                           // 38097 mov bx, 19h
         // fs cursor at the window's top-left tile (orig 38098-38102):
         //   di = LUT_ROW[[DS_SCROLL_ROW]] (word idx), +[DS_SCROLL_COL], ×2 bytes
         uint16_t fs_cur = v2gs(s).scroll_row();
@@ -5052,11 +5061,11 @@ static void v2_bg_latch_1DE05(uint8_t* s) {
         fs_cur = *(uint16_t*)(s + (uint16_t)(fs_cur - LUT_ROW_BASE));   // 38100 mov di, [di-7098h]
         fs_cur += v2gs(s).scroll_col();
         fs_cur <<= 1;
-        // Row advance = map_width×4 − 0x56 bytes: from just-past-scanned back
-        // to the start of the next window row (orig 38103-38105).
+        // Row advance = map_width×4 − 0x56 bytes (2 per column scanned): from
+        // just-past-scanned back to the start of the next window row (orig 38103-38105).
         int16_t row_adv = (int16_t)v2gs(s).map_bp();
         row_adv <<= 2;
-        row_adv -= 0x56;
+        row_adv -= (int16_t)(cols * 2);
 
         while (rows_left != 0) {                             // loc_1DE93
             // Scan for the first dirty tile (bit0) in the rest of this row
@@ -5071,7 +5080,7 @@ static void v2_bg_latch_1DE05(uint8_t* s) {
             if (!found) {
                 // Row clean: advance to next row (orig 38113-38116).
                 fs_cur = (uint16_t)((int16_t)fs_cur + row_adv);
-                cols_left = 0x2B;
+                cols_left = cols;
                 rows_left--;
                 continue;
             }
@@ -5083,8 +5092,10 @@ static void v2_bg_latch_1DE05(uint8_t* s) {
             const uint16_t span_fs0 = fs_cur;                // the page lists: the span's first cell (render-map offset)
             fs_cur += 2;
             uint16_t span_bytes = 2;                         // 2 VGA bytes per tile
-            uint16_t tile_row = 0x19 - rows_left + v2gs(s).scroll_row();
-            uint16_t tile_col = 0x2B - cols_left + v2gs(s).scroll_col();
+            const uint16_t win_row = rows - rows_left;       // the span's row within the window
+            uint16_t tile_row = win_row + v2gs(s).scroll_row();
+            const uint16_t win_col = cols - cols_left;       // the span's first column within the window
+            uint16_t tile_col = win_col + v2gs(s).scroll_col();
             cols_left--;
             bool row_done = (cols_left == 0);                // 38131 jcxz loc_1DEDE
 
@@ -5107,7 +5118,7 @@ static void v2_bg_latch_1DE05(uint8_t* s) {
                 // loc_1DEDE (orig 38142-38144): row exhausted while spanning —
                 // advance the cursor to the next row before rendering.
                 fs_cur = (uint16_t)((int16_t)fs_cur + row_adv);
-                cols_left = 0x2B;
+                cols_left = cols;
                 rows_left--;
             }
 
@@ -5130,9 +5141,13 @@ static void v2_bg_latch_1DE05(uint8_t* s) {
                 uint16_t dst_row = *(uint16_t*)(s + (uint16_t)((uint16_t)(tile_row * 2 + v2gs(s).page_draw()) - 0x7608)); // 38155/38157
                 uint16_t byte_col = (uint16_t)((uint16_t)(tile_col * 2 + 8) & 0xFFFE);   // 38158-38160
                 extern void v2_vga_copy_span(uint16_t dst, uint16_t src, uint16_t nbytes);
-                for (int r = 0; r < 8; r++)
+                // the VGA bytes of the span's cells within the page's 0x2B columns and 0x19 rows
+                // (a wing cell of a wide view, a row below 200 px of a TALL224 level has no VGA
+                // address; at 320 x 200 the span is within them)
+                const uint16_t vga_bytes = (win_col < 0x2B && win_row < 0x19) ? (uint16_t)((span_bytes < (0x2B - win_col) * 2) ? span_bytes : (0x2B - win_col) * 2) : 0;
+                for (int r = 0; vga_bytes && r < 8; r++)
                     v2_vga_copy_span((uint16_t)(dst_row + byte_col + r * 0x56),
-                                     (uint16_t)(src_row + byte_col + r * 0x56), span_bytes);
+                                     (uint16_t)(src_row + byte_col + r * 0x56), vga_bytes);
                 // The page lists (render_v2.h): these cells of page [92F7] now show what the
                 // background page [92FB] shows there — its tile words, its (baked) sprites.
                 v2_page_cells_copy_span(span_fs0, (int)(span_bytes >> 1), (int)tile_col, (int)tile_row, v2_vm_shadow_fs);
@@ -5557,17 +5572,21 @@ static void v2_dirty_obj_pos_1DF6A(uint8_t* s) {
     // shadow-VGA: exact replica of seg003 eips 0x17A0..0x1875 (loc_1DFF0..): scan the
     // visible 25x43 window for BIT1 cells, span-copy 8 rows × span bytes from the
     // SHOWN page (92F9) onto the BACKGROUND page (92FB) — fills the freshly
-    // rotated-in BG page. (AND fs:[di],0xFFFF in orig is a value no-op.)
+    // rotated-in BG page. (AND fs:[di],0xFFFF in orig is a value no-op.) On a wide
+    // level the window has the view's columns (render_v2.h v2_erase_cols): the VGA
+    // copy keeps to the page's 0x2B, the page-list copy takes the span.
     {
         extern void v2_vga_copy_span(uint16_t dst, uint16_t src, uint16_t nbytes);
-        uint16_t cx = 0x2B, bx = 0x19;
+        const uint16_t cols = (uint16_t)v2_erase_cols();   // 0x2B; the view's columns on a wide level (render_v2.h v2_erase_cols)
+        const uint16_t rows = (uint16_t)v2_erase_rows();   // 0x19; 0x1E on an LVX_TALL224 level (render_v2.h v2_erase_rows)
+        uint16_t cx = cols, bx = rows;
         uint16_t di_fs = v2gs(s).scroll_row();
         di_fs <<= 1;
         di_fs = *(uint16_t*)(s + (uint16_t)(di_fs - LUT_ROW_BASE));
         di_fs += v2gs(s).scroll_col();
         di_fs <<= 1;
         int16_t bp_fs = (int16_t)v2gs(s).map_bp();
-        bp_fs <<= 2; bp_fs -= 0x56;
+        bp_fs <<= 2; bp_fs -= (int16_t)(cols * 2);          // 0x56: 2 bytes per column scanned
         v2_page_cells_copy_begin(v2gs(s).page_bg(), v2gs(s).page_shown(), "1DF6A");   // the page lists: this rotation's span copies [92F9] → the new background
         while (bx != 0) {
             bool found = false;
@@ -5578,14 +5597,16 @@ static void v2_dirty_obj_pos_1DF6A(uint8_t* s) {
             }
             if (!found) {
                 di_fs = (uint16_t)((int16_t)di_fs + bp_fs);
-                cx = 0x2B; bx--;
+                cx = cols; bx--;
                 continue;
             }
             const uint16_t span_fs0 = di_fs;   // the page lists: the span's first cell (render-map offset)
             di_fs += 2;
             uint16_t dx_tl = 2;
-            uint16_t si_row = 0x19 - bx + v2gs(s).scroll_row();
-            uint16_t ax_col = 0x2B - cx + v2gs(s).scroll_col();
+            const uint16_t win_row = rows - bx;              // the span's row within the window
+            uint16_t si_row = win_row + v2gs(s).scroll_row();
+            const uint16_t win_col = cols - cx;              // the span's first column within the window
+            uint16_t ax_col = win_col + v2gs(s).scroll_col();
             cx--;
             bool row_ended = false;
             if (cx == 0) row_ended = true;
@@ -5602,15 +5623,19 @@ static void v2_dirty_obj_pos_1DF6A(uint8_t* s) {
             }
             if (row_ended) {
                 di_fs = (uint16_t)((int16_t)di_fs + bp_fs);
-                cx = 0x2B; bx--;
+                cx = cols; bx--;
             }
             // loc_1E041: span copy SHOWN → BG
             uint16_t srcrow = *(uint16_t*)(s + (uint16_t)((uint16_t)(si_row * 2 + v2gs(s).page_shown()) - 0x7608));
             uint16_t dstrow = *(uint16_t*)(s + (uint16_t)((uint16_t)(si_row * 2 + v2gs(s).page_bg())    - 0x7608));
             uint16_t offb = (uint16_t)((uint16_t)(ax_col * 2 + 8) & 0xFFFE);
-            for (int r8 = 0; r8 < 8; r8++)
+            // the VGA bytes of the span's cells within the page's 0x2B columns and 0x19 rows (a
+            // wing cell of a wide view, a row below 200 px of a TALL224 level has no VGA address;
+            // at 320 x 200 the span is within them)
+            const uint16_t vga_bytes = (win_col < 0x2B && win_row < 0x19) ? (uint16_t)((dx_tl < (0x2B - win_col) * 2) ? dx_tl : (0x2B - win_col) * 2) : 0;
+            for (int r8 = 0; vga_bytes && r8 < 8; r8++)
                 v2_vga_copy_span((uint16_t)(dstrow + offb + r8 * 0x56),
-                                 (uint16_t)(srcrow + offb + r8 * 0x56), dx_tl);
+                                 (uint16_t)(srcrow + offb + r8 * 0x56), vga_bytes);
             // The page lists (render_v2.h): these cells of the rotated-in background page
             // [92FB] now show what the shown page [92F9] shows there.
             v2_page_cells_copy_span(span_fs0, (int)(dx_tl >> 1), (int)ax_col, (int)si_row, v2_vm_shadow_fs);
@@ -6204,6 +6229,14 @@ static void v2_vga_band_16ded(uint8_t* s) {
         v2gs(s).page_rowcur_3((uint16_t)(v2gs(s).page_rowcur_3() + (2)));                   // 0x6e68
         v2gs(s).page_rowcur_1((uint16_t)(v2gs(s).page_rowcur_1() + (2)));                   // 0x6e6d
     }
+    // The page lists (render_v2.h): on an LVX_TALL224 level the band has the tall page's rows
+    // (render_v2.h v2_erase_rows) — the rows below the 25 painted above are fresh tiles too,
+    // their records die on every page (no VGA address to paint; the composition shows the
+    // map's tile where no page word was painted).
+    for (int r = 0x19; r < v2_erase_rows(); r++) {
+        v2_page_lists_erase_cells_all(bx, v2_erase_cols(), 2, "16DED-tall");
+        bx += v2gs(s).fs_page_stride();
+    }
 }
 
 // sub_16e75 (seg000 eips 0x6e75..0x6f5e): scroll-left band — one fresh tile
@@ -6288,6 +6321,16 @@ static void v2_vga_scroll_col_right_16f5f(uint8_t* s) {
     v2gs(s).page_copy_src1(di_vga3);                   // -> 9315
     v2_tile_col_16dd9(s, bx_r);                                      // CALL sub_16DD9
     v2_page_copy_row_1712b(s);                                       // CALL sub_1712B
+    // The page lists (render_v2.h): on a wide level the column entering the VIEW at its right
+    // edge lies beyond the page's column painted above — [92EF] + 0x29 plus the wing's cells
+    // (render_v2.h v2_erase_cols) — and is fresh tiles too: its records die on every page
+    // (a sprite drawn there on an earlier visit of the camera; the composition shows the
+    // map's tile for a wing cell, there is nothing to paint).
+    if (v2_erase_cols() > 0x2B) {
+        uint16_t bx_w = *(uint16_t*)(s + (uint16_t)(di_r - LUT_ROW_BASE));
+        bx_w = (uint16_t)((uint16_t)(bx_w + (uint16_t)(v2gs(s).scroll_disp_x() + 0x29 + (v2_erase_cols() - 0x2B))) << 1);
+        v2_page_lists_erase_cells_all(bx_w, v2_erase_rows(), v2gs(s).fs_page_stride(), "16F5F-wing");
+    }
 }
 
 // sub_17049 (seg000 eips 0x7049..0x7048+): scroll-top band — one fresh tile
@@ -6341,6 +6384,19 @@ static void v2_vga_scroll_row_bottom_170b9(uint8_t* s) {
     v2gs(s).page_vga_2(*(uint16_t*)(s + (uint16_t)(pg3 - 0x7608)) + dx_col); // 930B
     v2_tile_row_16dc1(s, bx_r, 0);                                   // 0x7124 CALL sub_16DC1
     v2_page_copy_col_171dc(s);                                       // 0x7127 JMP sub_171DC
+    // The page lists (render_v2.h): on an LVX_TALL224 level the row entering the VIEW at its
+    // bottom lies below the page's row painted above — [92F1] + 0x17 plus the tall page's
+    // extra rows (render_v2.h v2_erase_rows) — and is fresh tiles too: its records die on
+    // every page (the composition shows the map's tile where no page word was painted).
+    if (v2_erase_rows() > 0x19) {
+        int32_t sum_t = (int32_t)(int16_t)v2gs(s).scroll_disp_y() + 0x17 + (v2_erase_rows() - 0x19);
+        uint16_t di_t = (uint16_t)((sum_t >= 0 ? (uint16_t)sum_t : 0) << 1);
+        uint16_t bx_t = *(uint16_t*)(s + (uint16_t)(di_t - LUT_ROW_BASE));
+        uint16_t dx_t = v2gs(s).scroll_disp_x();
+        if ((int16_t)dx_t > 0) dx_t--; else dx_t = 0;
+        bx_t = (uint16_t)((uint16_t)(bx_t + dx_t) << 1);
+        v2_page_lists_erase_cells_all(bx_t, v2_erase_cols(), 2, "170B9-tall");
+    }
 }
 
 // sub_1673c (seg000 eips 0x673c..0x6774): tile-scroll spawn tracker.
@@ -9181,6 +9237,12 @@ extern "C" uint8_t* v2_ailnat_data();                 // v2_ail_native.cpp: the 
 extern "C" uint8_t* v2_ail_cache_data(uint32_t* size); // v2_ail.cpp: the timbre cache the driver was handed
 extern "C" uint8_t* v2_nopl_regs_data(uint32_t* size); // v2_native_opl.cpp: the OPL register file the driver wrote
 extern "C" void     v2_nopl_regs_replay(void);         // ... sent to the chip after a restore
+// The sound driver's lock (v2_ail_interp.cpp, recursive): in the game build its
+// timer ticks run on the audio thread (v2_native_opl.cpp, 2026-10-07) and write
+// the DS state blocks, the driver memory, the cache and the register file —
+// an image is copied, in either direction, with the lock held.
+extern "C" void*    v2_ail_interp_lock(void);
+extern "C" void     v2_ail_interp_unlock(void);
 static bool v2_state_blocks(V2StateBlock* b, int* n, uint8_t* ds_img) {
     int k = 0;
     b[k++] = { "DS  ", ds_img,                   0x10000 };
@@ -9218,6 +9280,7 @@ static uint32_t rd32(const uint8_t* p) { return (uint32_t)p[0] | ((uint32_t)p[1]
 void v2_state_serialize(std::vector<uint8_t>& out) {
     static V2GameState st_gs;
     static uint8_t ds_img[0x10000];
+    v2_ail_interp_lock();                  // the driver's blocks (DS, AILN, AILC, OPLR) stand still while they are copied
     v2_gs_deserialize(&st_gs, v2_vm_shadow_ds);
     v2_gs_serialize(&st_gs, ds_img);
     V2StateBlock b[20]; int n = 0;
@@ -9232,6 +9295,7 @@ void v2_state_serialize(std::vector<uint8_t>& out) {
         wr32(out, b[i].len);
         out.insert(out.end(), (const uint8_t*)b[i].ptr, (const uint8_t*)b[i].ptr + b[i].len);
     }
+    v2_ail_interp_unlock();
     out.insert(out.end(), (const uint8_t*)"COOP", (const uint8_t*)"COOP" + 4);
     wr32(out, (uint32_t)coop.size());
     out.insert(out.end(), coop.begin(), coop.end());
@@ -9247,26 +9311,34 @@ static int v2_state_deserialize(const uint8_t* img, size_t size, bool restore_fr
     const uint32_t nn = rd32(img + 4);
     size_t off = 8;
     bool seen[20] = {}; bool coop_seen = false;
-    for (uint32_t i = 0; i < nn; i++) {
-        if (off + 8 > size) { fprintf(stderr, "V2-STATE: %s: truncated at block %u\n", what, i); return 1; }
-        const char* tag = (const char*)img + off;
-        const uint32_t len = rd32(img + off + 4);
-        off += 8;
-        if (off + len > size) { fprintf(stderr, "V2-STATE: %s: block %.4s runs past the end\n", what, tag); return 1; }
-        int j = 0;
-        while (j < n && memcmp(tag, b[j].tag, 4) != 0) j++;
-        if (j < n) {
-            if (len != b[j].len) { fprintf(stderr, "V2-STATE: %s: block %.4s is %u bytes, %u expected\n", what, tag, len, b[j].len); return 1; }
-            memcpy(b[j].ptr, img + off, len);
-            seen[j] = true;
-        } else if (memcmp(tag, "COOP", 4) == 0) {
-            if (!v2_coop_state_read(img + off, len, restore_frame)) { fprintf(stderr, "V2-STATE: %s: bad COOP block\n", what); return 1; }
-            coop_seen = true;
+    // the first pass only checks the image (nothing is written on a bad one), the
+    // second copies the blocks — under the driver lock: its audio-thread ticks do
+    // not run between the halves of a torn driver state
+    for (int pass = 0; pass < 2; pass++) {
+        off = 8;
+        if (pass == 1) v2_ail_interp_lock();
+        for (uint32_t i = 0; i < nn; i++) {
+            if (off + 8 > size) { fprintf(stderr, "V2-STATE: %s: truncated at block %u\n", what, i); if (pass) v2_ail_interp_unlock(); return 1; }
+            const char* tag = (const char*)img + off;
+            const uint32_t len = rd32(img + off + 4);
+            off += 8;
+            if (off + len > size) { fprintf(stderr, "V2-STATE: %s: block %.4s runs past the end\n", what, tag); if (pass) v2_ail_interp_unlock(); return 1; }
+            int j = 0;
+            while (j < n && memcmp(tag, b[j].tag, 4) != 0) j++;
+            if (j < n) {
+                if (len != b[j].len) { fprintf(stderr, "V2-STATE: %s: block %.4s is %u bytes, %u expected\n", what, tag, len, b[j].len); if (pass) v2_ail_interp_unlock(); return 1; }
+                if (pass == 1) memcpy(b[j].ptr, img + off, len);
+                seen[j] = true;
+            } else if (memcmp(tag, "COOP", 4) == 0) {
+                if (pass == 1 && !v2_coop_state_read(img + off, len, restore_frame)) { fprintf(stderr, "V2-STATE: %s: bad COOP block\n", what); v2_ail_interp_unlock(); return 1; }
+                coop_seen = true;
+            }
+            off += len;
         }
-        off += len;
+        if (pass == 0)
+            for (int j = 0; j < n; j++)
+                if (!seen[j] && !b[j].optional) { fprintf(stderr, "V2-STATE: %s: block %.4s missing\n", what, b[j].tag); return 1; }
     }
-    for (int j = 0; j < n; j++)
-        if (!seen[j] && !b[j].optional) { fprintf(stderr, "V2-STATE: %s: block %.4s missing\n", what, b[j].tag); return 1; }
     if (!coop_seen) g_coop_sync_level = 0xFFFF;   // a one-player image: the assignments are re-derived at the next read
     // DS image -> shadow through the typed model (the save direction already
     // proved identity; this direction re-proves DEserialization).
@@ -9280,6 +9352,7 @@ static int v2_state_deserialize(const uint8_t* img, size_t size, bool restore_fr
     v2_input_snapshot = 0;
     { extern uint16_t g_last_sub12352_new_keydowns; g_last_sub12352_new_keydowns = 0; }
     v2_nopl_regs_replay();                 // the audible chip takes the image's register file
+    v2_ail_interp_unlock();
     v2_world_gen++;                        // a whole new world for the presenter (render_v2.h v2_world_gen)
     fprintf(stderr, "V2-STATE: %s: %u blocks%s (level=%u, frame %d)\n", what, nn, coop_seen ? " incl. COOP" : "",
             (unsigned)v2_current_level, v2_dbg_pre_vm_iter);
@@ -9352,10 +9425,12 @@ static void v2_rw_capture() {
     if (!v2_rw_alloc()) return;
     uint8_t* slot = v2_rw_mem + (size_t)v2_rw_head * v2_rw_stride;
     V2StateBlock b[20]; int n = 0; v2_state_blocks(b, &n, slot);   // b[0] = the DS block at the slot start
+    v2_ail_interp_lock();                         // the driver's blocks stand still while they are copied (its ticks run on the audio thread)
     v2_gs_deserialize(&v2_rw_st, v2_vm_shadow_ds);
     v2_gs_serialize(&v2_rw_st, slot);
     uint8_t* dst = slot + b[0].len;
     for (int i = 1; i < n; i++) { memcpy(dst, b[i].ptr, b[i].len); dst += b[i].len; }
+    v2_ail_interp_unlock();
     v2_rw_head = (v2_rw_head + 1) % v2_rw_cap;
     if (v2_rw_count < v2_rw_cap) v2_rw_count++;
 }
@@ -9365,11 +9440,13 @@ static bool v2_rw_restore(uint8_t* s) {
     uint8_t* slot = v2_rw_mem + (size_t)v2_rw_head * v2_rw_stride;
     V2StateBlock b[20]; int n = 0; v2_state_blocks(b, &n, slot);
     const uint8_t* src = slot + b[0].len;
+    v2_ail_interp_lock();                         // no tick between the halves of the restored driver state
     for (int i = 1; i < n; i++) { memcpy(b[i].ptr, src, b[i].len); src += b[i].len; }
     v2_gs_deserialize(&v2_rw_st, slot);
     v2_gs_serialize(&v2_rw_st, v2_vm_shadow_ds);
     v2_gs_evac_refresh(v2_vm_shadow_ds);          // members <- the restored image (stage-4 evac)
     v2_nopl_regs_replay();                        // the chip follows the restored register file too
+    v2_ail_interp_unlock();
     v2_vm_acc_base = v2_vm_shadow_ds; v2_shadow_initialized = true;
     v2_current_level = v2gs(s).level();
     { extern uint16_t v2_input_snapshot; v2_input_snapshot = 0; }
@@ -11376,12 +11453,19 @@ static void v2_vm_frame_update(uint8_t* ds) {
     // members first — a green full corpus in this mode proves the members
     // are the authoritative carrier (no reader depends on an image byte the
     // carrier cannot reproduce).
+    // Under the sound driver's lock (2026-10-07): in the game build the driver's
+    // timer ticks run on the audio thread and store into the ail_seq_states member
+    // — the image byte, then the carrier's (v2_ail_native.cpp fw8) — so the check
+    // must not read between the two (the first run without the lock: FATAL evac
+    // desync at 9980, member 0000 / image 0064, a volume ramp's word mid-store).
+    v2_ail_interp_lock();
     {
         static int _irb = -1;
         if (_irb < 0) _irb = getenv("V2_GS_IMAGE_REBUILD") ? 1 : 0;
         if (_irb) v2_gs_image_render(v2_vm_shadow_ds);
     }
     v2_gs_evac_check(v2_vm_shadow_ds);
+    v2_ail_interp_unlock();
 
 
     // word_3287C (DS:0xA39C): NOT reset here anymore. Render thread (under

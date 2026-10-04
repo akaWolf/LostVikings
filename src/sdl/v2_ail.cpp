@@ -19,9 +19,11 @@
 //   stop  = sub_17912 slot body : fnAB(drv,h) → fn98(drv,h) →
 //           [si-66F4]=FFFF, [si-66EA]=FFFF
 //   fade  = sub_178f1 : fnB1(drv,h,0,0x3E8) (sub_1C7BD volume fade to 0 over 1s)
-//   tick  = fn67(drv) at [desc+0x14]+5 Hz (= 125), pumped from the game
-//           thread by v2_nopl_pump; OPL writes route into the dual-OPL2
-//           nuked pair (v2_native_opl.cpp).
+//   tick  = fn67(drv) at [desc+0x14]+5 Hz (= 125): in the game build on the
+//           audio thread at the ticks' sample positions (v2_nopl_mix), in the
+//           frame mode (test / headless / lockstep) from the game thread by
+//           v2_nopl_pump; OPL writes route into the Nuked OPL3
+//           (v2_native_opl.cpp).
 //
 // DS side effects are written to the SHADOW DS through the same addresses the
 // original wrote — including the driver's own sequence-state block, which
@@ -487,7 +489,11 @@ extern "C" int v2_ail_boot(uint8_t* s, uint8_t* snd, uint32_t snd_size,
     }
     // (orig eip 0x7636: [86B6]==8 GM special case — not our device path; its
     // chunk-0x215 load happens through the normal music-load mirror anyway.)
+    // (under the lock: v2_ail_tick reads the flag on the audio thread, which
+    // ticks the game build's driver from here on — v2_native_opl.cpp)
+    v2_ail_interp_lock();
     g_booted = true;
+    v2_ail_interp_unlock();
     // stage 6.1 w3: native-port self-test (unit sweeps vs the interpreter).
     if (getenv("V2_AILNAT_SELFTEST")) {
         extern int v2_ailnat_selftest(void);
@@ -940,6 +946,10 @@ extern "C" uint16_t v2_ail_pit_cb_value(void) { return v2_ail_pit_callback(); } 
 // live instances back-to-back under one lock: both worlds see the identical
 // tick count between any pair of mirrored chain calls (frame-barrier pacing
 // in test mode), which keeps their driver state byte-equal.
+// Callers: the game thread's v2_nopl_pump in the frame mode; the audio thread
+// (nopl_ticks_on_clock, under the driver lock already) in the game build's
+// real-time mode — the trace statics below belong to whichever of the two
+// ticks, never both at once.
 // ---------------------------------------------------------------------------
 extern "C" void v2_ail_tick() {
     uint16_t a[1] = { 0 };

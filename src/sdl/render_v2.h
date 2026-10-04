@@ -53,6 +53,18 @@ extern uint8_t  v2_display_buf[V2_FB_MAX_W*240];
 extern thread_local int v2_fbw;   // the width (= stride) of the frame this thread is rendering
 extern int v2_display_w;          // width of the published v2_display_buf frame (under v2_display_mutex)
 extern int v2_view_w;             // v2_vm.cpp: the loaded level's view width (0x140, or the WIDE option's, clamped to the map)
+// WIDE (2026-10-07): the columns of the erase passes' window. The original's sub_1DE05 pass 2,
+// sub_1C8F1 and sub_1DF6A part 2 walk the 0x2B columns of the VGA page from the camera's scroll
+// column — the 344 px the page holds (320 shown, a pel pan, two cells of slack). A wide view
+// shows cells beyond them (the wing past 344 px), where nothing was ever restored: the page lists
+// keep a record there until its slot's next one (v2_page_list_bake's wing rule), so the image of
+// an object removed in the wing — an item picked up, an arrow, a dying enemy at the right edge of
+// the view — stayed until the camera moved (level 5 at 426 px: the items at x = 338 / 346 with the
+// camera at 0 kept their records on two pages after the pickup, their slots inactive). The three scans and the
+// bake's window take the view's columns: 0x2B plus the wing's cells (51 at 384, 57 at 426); the
+// VGA byte copies stay within the page's 0x56 bytes per row (a wing cell has no VGA address), the
+// page-list copies take the whole span. At 320 this is 0x2B, every path byte for byte the original.
+static inline int v2_erase_cols(void) { return 0x2B + (v2_view_w > 0x140 ? (v2_view_w - 0x140 + 7) >> 3 : 0); }
 // UX stage 0: published with v2_display_buf under v2_display_mutex — 1 when the
 // running slot is an LVX full-screen scene: the presenter shows display rows
 // 176..199 (map) instead of the HUD band.
@@ -122,6 +134,12 @@ extern thread_local bool            v2_tls_par_separate;
 extern thread_local const int*      v2_tls_par_view;
 extern void v2_draw_parallax_layer(uint16_t ds_val, int prio);   // prio 0 = under the tiles, 1 = the priority-1 cells over the sprites
 extern "C" int v2_view_rows(void);           // v2_vm.cpp: 176 / 200 (LVX scene) / 224 (LVX_TALL224 level)
+// The rows of the erase passes' window (the pair of v2_erase_cols above): the page's 0x19 rows,
+// 0x1E on an LVX_TALL224 level — what sub_1C8F1's mirror, the compositor's page-word window and
+// the bake already took; sub_1DE05 pass 2 and sub_1DF6A part 2 scanned 0x19 there until
+// 2026-10-07, so a sprite in the rows below 200 px of the console finale (the crowd at y = 192)
+// was never erased and left a record per animation frame behind (4 per slot at frame 1400).
+static inline int v2_erase_rows(void) { return v2_view_rows() == 224 ? 0x1E : 0x19; }
 void v2_smooth_capture(void);                 // game thread, at the page flip
 // The world generation (v2_vm.cpp): bumped on the game thread wherever the world is rebuilt
 // wholesale — the level load (the sub_11080 mirror, right after the fade-out of the old world:

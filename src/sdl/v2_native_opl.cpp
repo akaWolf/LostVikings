@@ -21,12 +21,24 @@
 //     reset → 0x00 — an OPL3 returns the same status on both port pairs)
 //     and honest mixer readback — the model the standalone smoke rig
 //     validated against the live detect code;
-//   * the timer tick is pumped ON THE GAME THREAD from frame_begin /
-//     blocking-loop ticks: v2_nopl_pump() computes how many driver ticks
-//     are due and calls fn67 for each, stamping every OPL write with the
-//     tick's sample position — sample-accurate music from a
-//     frame-granular pump (the DOS INT8 interleaving collapses to
-//     batched, correctly-timestamped writes);
+//   * the timer tick (fn67, the DOS INT8) runs ON THE AUDIO THREAD on the
+//     sample clock: v2_nopl_mix cuts its chunks at the ticks' sample
+//     positions and runs each tick right there, under the driver's CLI-model
+//     lock, so the tick's OPL writes are stamped with its position and drain
+//     into the same chunk — the note timing of the DOS machine. The game
+//     thread's driver calls (starts, stops, fades, SFX) stamp their writes
+//     with the played position and land in the next chunk (one buffer of
+//     latency, like the DOS OUT after the device buffer). The game-thread
+//     pump v2_nopl_pump() keeps the FRAME mode only: the deterministic
+//     125/60-per-frame accumulator of the test / headless / lockstep worlds
+//     (and of a game build without an audio device), where the ticks are a
+//     pure function of the frame counter. Until 2026-10-07 the game-thread
+//     pump ticked the real-time mode too, due by the played position: every
+//     stamp was then at or before the mixer's cursor, the stamps were never
+//     honoured, and a pump's 2–3 ticks collapsed onto the next buffer
+//     boundary (measured on intro.inp: 0.7 % of the writes at their stamp,
+//     the rest 4–30 ms late, 28 % of the mixer instants with ≥ 2 ticks merged
+//     — audible as hurried / dragging parts and bunched short notes);
 //   * the audio thread renders ONE Nuked OPL3 chip; C0 pan bits and 4-op
 //     routing behave exactly as on the DOSBox reference.
 //
@@ -55,19 +67,24 @@ extern "C" {
 }
 
 extern "C" void v2_ail_tick(void);          // v2_ail.cpp — one fn67 driver tick
+extern "C" void* v2_ail_interp_lock(void);  // v2_ail_interp.cpp — the driver's CLI-model lock (recursive; every fn entry holds it)
+extern "C" void  v2_ail_interp_unlock(void);
 
 // SDL mixer rate. play.cpp sets the obtained device rate after SDL_OpenAudio;
 // the 44100 default keeps HEADLESS builds (no play.cpp, no audio device)
 // self-contained — there the queue is never drained, only the fn67 ticks
 // matter (they advance the driver's DS state deterministically).
+// g_device: the device is open (set before it starts) — without one there is
+// no sample clock, and the ticks fall back to the frame mode (nopl_frame_mode).
 static uint32_t g_rate = 44100;
-extern "C" void v2_nopl_set_mix_rate(uint32_t rate) { if (rate) g_rate = rate; }
+static std::atomic<int> g_device{0};
+extern "C" void v2_nopl_set_mix_rate(uint32_t rate) { if (rate) g_rate = rate; g_device.store(1, std::memory_order_release); }
 
 // ---------------------------------------------------------------------------
 // state
 // ---------------------------------------------------------------------------
 static opl3_chip    g_chip;                 // single OPL3 (bank 1 via 0x222/3)
-static bool         g_inited  = false;
+static std::atomic<bool> g_inited{false};   // set by the first port write (the fn65 probe, game thread, under the driver lock); the mixer reads it
 static FILE*        g_trace   = nullptr;
 static int          g_trace_resolved = 0;
 
@@ -88,25 +105,36 @@ alignas(8) static uint8_t g_oplr[2 + 2 * 256 + 1 + 256 + 5 + 8];
 #define g_tick_acc     (*reinterpret_cast<double*>(g_oplr + 776))          // the frame-mode tick accumulator
 extern "C" uint8_t* v2_nopl_regs_data(uint32_t* size) { if (size) *size = (uint32_t)sizeof g_oplr; return g_oplr; }
 static int          g_last_frame = -1;      // the render frame the accumulator was last advanced to (re-based after a restore)
-static int          g_force_frame = 0;      // a lockstep game: the sequencer ticks by frames on every peer (v2_nopl_force_frame_ticks)
+static std::atomic<int> g_force_frame{0};   // a lockstep game: the sequencer ticks by frames on every peer (v2_nopl_force_frame_ticks)
 
+// The tick clock. g_tick_hz and g_base_samples are set once at the driver's boot
+// (v2_nopl_set_tick_hz, game thread) and read by whichever thread ticks — both
+// under the driver lock; g_ticks_done / g_cur_ts / g_in_tick belong to the
+// ticking thread (the audio thread in the real-time mode, the game thread in
+// the frame mode) and are read elsewhere only under the lock (the MIDI lane's
+// clock, the port model's stamps).
 static double       g_tick_hz = 0.0;
 
-// Sample clock: audio thread advances; game thread schedules ticks against it.
+// Sample clock: the audio thread advances it at the end of every callback; the
+// game thread's writes are stamped with it, the real-time ticks are scheduled
+// against it inside the callback (tick n at g_base_samples + n * samples per tick).
 static std::atomic<uint64_t> g_samples_played{0};
 static uint64_t     g_ticks_done = 0;
-static uint64_t     g_cur_ts    = 0;        // ts stamped on writes of the tick being pumped
+static uint64_t     g_cur_ts    = 0;        // ts stamped on the writes of the tick being run ...
+static bool         g_in_tick   = false;    // ... while this is set (outside a tick a write takes the played position)
 
-// Command ring: game thread produces, audio thread consumes.
-struct NoplCmd { uint64_t ts; uint8_t chip; uint8_t reg; uint8_t val; };
+// Command ring: produced under the driver lock (the game thread's calls, the
+// ticking thread's fn67), consumed by the audio thread. `tick` marks a write of
+// a tick (the V2_NOPL_LATE diagnostic tells the two kinds apart).
+struct NoplCmd { uint64_t ts; uint8_t chip; uint8_t reg; uint8_t val; uint8_t tick; };
 static const size_t NOPL_RING = 1 << 14;
 static NoplCmd      g_ring[NOPL_RING];
 static std::atomic<size_t> g_wr{0}, g_rd{0};
 
 static void nopl_lazy_init() {
-    if (g_inited) return;
+    if (g_inited.load(std::memory_order_relaxed)) return;
     OPL3_Reset(&g_chip, g_rate);      // Nuked resamples its 49716 core to g_rate
-    g_inited = true;
+    g_inited.store(true, std::memory_order_release);
     fprintf(stderr, "v2_native_opl: OPL3 ACTIVE (mix rate=%u)\n", g_rate);
 }
 
@@ -128,12 +156,15 @@ extern "C" void v2_nopl_sbpro_out(uint16_t port, uint8_t val) {
         if (g_trace)
             fprintf(g_trace, "%llu %d %02X %02X\n",
                     (unsigned long long)g_ticks_done, chip, reg, val);
-        uint64_t ts = g_cur_ts ? g_cur_ts
-                               : g_samples_played.load(std::memory_order_relaxed);
+        // a tick's write carries the tick's position; a game-thread call's write the
+        // played position (the start of the callback running or next to run — at or
+        // before the mixer's cursor, so it is applied in the next chunk drained)
+        uint64_t ts = g_in_tick ? g_cur_ts
+                                : g_samples_played.load(std::memory_order_relaxed);
         size_t wr = g_wr.load(std::memory_order_relaxed);
         size_t nx = (wr + 1) & (NOPL_RING - 1);
         if (nx == g_rd.load(std::memory_order_acquire)) {
-            // full: drop (never block the game thread) — but LOUDLY: a
+            // full: drop (never block the producer) — but LOUDLY: a
             // dropped register write audibly corrupts patches/notes.
             static uint64_t drops = 0;
             if ((++drops & (drops - 1)) == 0)   // log at 1,2,4,8,...
@@ -141,7 +172,7 @@ extern "C" void v2_nopl_sbpro_out(uint16_t port, uint8_t val) {
                         (unsigned long long)drops);
             return;
         }
-        g_ring[wr] = { ts, (uint8_t)chip, reg, val };
+        g_ring[wr] = { ts, (uint8_t)chip, reg, val, (uint8_t)(g_in_tick ? 1 : 0) };
         g_wr.store(nx, std::memory_order_release);
         return;
     }
@@ -171,6 +202,9 @@ extern "C" void v2_nopl_sbpro_out(uint16_t port, uint8_t val) {
 // registers B0..B8 last (a note starts on a configured operator pair), the
 // index latch restored at the end; the mixer's one live register (0x0A).
 extern "C" void v2_nopl_regs_replay(void) {
+    // under the driver lock: the port writes below enter the command ring,
+    // whose producer side is the lock's (the audio thread's ticks write it too)
+    v2_ail_interp_lock();
     uint8_t saved[sizeof g_oplr];
     memcpy(saved, g_oplr, sizeof g_oplr);
     const uint8_t (*regs)[256] = reinterpret_cast<const uint8_t (*)[256]>(saved + 2);
@@ -189,11 +223,12 @@ extern "C" void v2_nopl_regs_replay(void) {
     // this world's current one (the image was taken at a main read, before
     // the frame's first vsync wait — nothing is pending on either side)
     { extern int v2_render_frame; g_last_frame = v2_render_frame; }
+    v2_ail_interp_unlock();
 }
 
 extern "C" void v2_nopl_force_frame_ticks(void) {
-    if (!g_force_frame) fprintf(stderr, "v2_native_opl: lockstep — frame-accumulator tick mode on every peer\n");
-    g_force_frame = 1;
+    if (!g_force_frame.load(std::memory_order_relaxed)) fprintf(stderr, "v2_native_opl: lockstep — frame-accumulator tick mode on every peer\n");
+    g_force_frame.store(1, std::memory_order_release);
 }
 
 // ---------------------------------------------------------------------------
@@ -278,8 +313,12 @@ extern "C" uint8_t v2_nopl_sbpro_in(uint16_t port) {
 static uint64_t g_base_samples = 0;
 
 extern "C" void v2_nopl_set_tick_hz(double hz) {
-    g_tick_hz = hz;
+    // under the driver lock: the audio thread schedules its ticks from these two
+    // (v2_ail_boot calls this between two driver calls, outside their locks)
+    v2_ail_interp_lock();
     g_base_samples = g_samples_played.load(std::memory_order_relaxed);
+    g_tick_hz = hz;
+    v2_ail_interp_unlock();
     fprintf(stderr, "v2_native_opl: tick rate %.1f Hz (driver descriptor)\n", hz);
 }
 
@@ -303,23 +342,36 @@ extern "C" void v2_nopl_out(uint16_t port, uint8_t val) {
     (void)port; (void)val;
 }
 
-// Tick pump. The DOS INT8 fired at [desc+0x14]+5 Hz by REAL TIME regardless
+// Tick pacing. The DOS INT8 fired at [desc+0x14]+5 Hz by REAL TIME regardless
 // of the frame rate — and the V2_ONLY game loop is NOT 60 Hz (the phase
 // chain blocks on VSYNC waits inside sub_10130; ~19 game frames/s, see
 // v2_main.cpp timing notes). Pacing ticks per frame therefore ran the
 // sequencer ~3x slow (user-audible: background music crawled while short
-// SFX still sounded okay). Default: pace by the AUDIO clock — samples the
-// device has consumed ARE wall time, and every queued write keeps its exact
-// per-tick timestamp, so batching at frame granularity stays inaudible.
+// SFX still sounded okay). Default (the real-time mode): the ticks run on the
+// AUDIO thread, on the sample clock — samples the device has consumed ARE
+// wall time — each at its exact sample inside v2_nopl_mix (nopl_ticks_on_clock
+// below); this game-thread pump then only keeps the quit choke.
 //
-// V2_AIL_FRAME_TICKS=1 keeps the frame-accumulator mode (125/60 per pump):
-// fully deterministic driver DS state for replay/verify experiments, at the
-// cost of tempo tracking the frame rate.
+// The frame mode (V2_AIL_FRAME_TICKS=1, a lockstep game, the test / headless
+// builds and a game build without an audio device) ticks HERE, 125/60 per
+// frame: a fully deterministic driver DS state (the ticks are a pure function
+// of the frame counter), at the cost of tempo tracking the frame rate.
 static const double NOPL_FRAME_HZ = 60.0;
 // (g_tick_acc lives in g_oplr, see the register file above)
 
 static int nopl_frame_mode(void);
 extern "C" void v2_ail_sink_pump(uint64_t);   // (#83) audible sink driver (v2_ail.cpp)
+
+// debug (V2_NOPL_LATE=1): the timing of the queued writes against the mixer — a tick's writes
+// must be applied exactly at the tick's sample (late = 0, one tick per mixer instant); a call's
+// writes land in the next chunk drained (late by up to one device buffer). The audio thread
+// prints a summary line every 1000 callbacks.
+static int      g_late_on = -1;
+static uint64_t g_late_cbs = 0;
+static uint64_t g_late_tick_applied = 0, g_late_tick_late = 0, g_late_tick_max = 0;   // tick writes: applied, applied after their stamp, the worst lateness (samples)
+static uint64_t g_late_call_applied = 0, g_late_call_hist[8] = {0};                  // call writes, late: 0 | ≤4 | ≤8 | ≤12 | ≤16 | ≤24 | ≤32 | >32 ms
+static uint64_t g_late_instants[2] = {0, 0};                                         // mixer instants with tick writes of 1 | ≥2 distinct stamps
+static int late_on(void) { if (g_late_on < 0) { const char* e = getenv("V2_NOPL_LATE"); g_late_on = (e && e[0] == '1') ? 1 : 0; } return g_late_on; }
 #if defined(V2_ONLY) && !defined(HEADLESS)
 void v2_only_clean_exit(const char* why);      // v2_main.cpp — C++ linkage, declared here at file scope:
                                                // a block-scope extern inside the C-linkage pump below would be C
@@ -341,92 +393,111 @@ extern "C" void v2_nopl_pump(void) {
         if (need_quit) v2_only_clean_exit("quit");
     }
 #endif
+    if (!nopl_frame_mode()) return;            // the real-time mode ticks on the audio thread (nopl_ticks_on_clock)
     if (g_tick_hz <= 0.0) return;
     double spt = (double)g_rate / g_tick_hz;   // samples per tick (queue ts)
-    int frame_mode = nopl_frame_mode();
     int guard = 0;
-    if (frame_mode) {
-        // Deterministic invariant: ticks accrue per FRAME COUNTER delta,
-        // not per pump call — wait loops pump once per iteration and the
-        // iteration count depends on pacing/scheduling (a NOVSYNC spin ran
-        // thousands of iterations per frame and multiplied the ticks).
-        // Counter-based accrual keeps the tick schedule a pure function of
-        // the frame number on every pacing mode.
-        // v2_render_frame (#32) is the DETERMINISTIC per-game-frame index;
-        // v2_dbg_pre_vm_iter is documented-inflated by the blocking-loop
-        // wall-clock spins and multiplied the ticks ~600x under NOVSYNC.
-        extern int v2_render_frame;
-        int& last_frame = g_last_frame;
-        int cur = v2_render_frame;
-        {   // V2_TICKDBG=1: pump/counter forensics (one line per 1000 pumps)
-            static int dbg = -1; static long pumps = 0;
-            if (dbg < 0) dbg = getenv("V2_TICKDBG") ? 1 : 0;
-            if (dbg && (++pumps % 1000) == 1) {
-                // v2_dbg_pre_vm_iter: file-scope extern (top of file)
-                fprintf(stderr, "TICKDBG pumps=%ld rframe=%d pvi=%d ticks=%llu acc=%.2f hz=%.1f\n",
-                        pumps, cur, v2_dbg_pre_vm_iter,
-                        (unsigned long long)g_ticks_done, g_tick_acc, g_tick_hz);
-            }
+    // Deterministic invariant: ticks accrue per FRAME COUNTER delta,
+    // not per pump call — wait loops pump once per iteration and the
+    // iteration count depends on pacing/scheduling (a NOVSYNC spin ran
+    // thousands of iterations per frame and multiplied the ticks).
+    // Counter-based accrual keeps the tick schedule a pure function of
+    // the frame number on every pacing mode.
+    // v2_render_frame (#32) is the DETERMINISTIC per-game-frame index;
+    // v2_dbg_pre_vm_iter is documented-inflated by the blocking-loop
+    // wall-clock spins and multiplied the ticks ~600x under NOVSYNC.
+    extern int v2_render_frame;
+    int& last_frame = g_last_frame;
+    int cur = v2_render_frame;
+    {   // V2_TICKDBG=1: pump/counter forensics (one line per 1000 pumps)
+        static int dbg = -1; static long pumps = 0;
+        if (dbg < 0) dbg = getenv("V2_TICKDBG") ? 1 : 0;
+        if (dbg && (++pumps % 1000) == 1) {
+            // v2_dbg_pre_vm_iter: file-scope extern (top of file)
+            fprintf(stderr, "TICKDBG pumps=%ld rframe=%d pvi=%d ticks=%llu acc=%.2f hz=%.1f\n",
+                    pumps, cur, v2_dbg_pre_vm_iter,
+                    (unsigned long long)g_ticks_done, g_tick_acc, g_tick_hz);
         }
-        if (last_frame < 0) last_frame = cur;
-        if (cur != last_frame) {
-            g_tick_acc += (double)(cur - last_frame) * g_tick_hz / NOPL_FRAME_HZ;
-            last_frame = cur;
-        }
-        while (g_tick_acc >= 1.0 && guard++ < 64) {
-            g_tick_acc -= 1.0;
-            g_cur_ts = (uint64_t)((double)g_ticks_done * spt);
-            v2_ail_tick();
-            g_ticks_done++;
-        }
-        g_cur_ts = 0;
-        return;
     }
-    // real-time mode: ticks due by the audio cursor (relative to the boot
-    // base), small lead so freshly queued commands land slightly ahead of
-    // it instead of in its past. Queue timestamps carry the same base so
-    // the mixer's absolute sample position lines up.
-    uint64_t played = g_samples_played.load(std::memory_order_relaxed);
-    uint64_t rel = (played > g_base_samples) ? played - g_base_samples : 0;
-    uint64_t due = (uint64_t)((double)rel / spt) + 1;
-    // Catch-up cap: if the game thread stalled long enough to owe more than
-    // ~0.5 s of ticks (level loads, rare host hiccups), slide the base
-    // forward instead of burst-replaying the backlog. A burst stamps events
-    // spread over hundreds of musical ms into one mixer instant — short
-    // notes vanish (key-on+off in one buffer), held notes overstay. A clean
-    // PAUSE is the right degradation; DOS never lagged its INT8.
-    if (due > g_ticks_done + 64) {
-        uint64_t excess = due - g_ticks_done - 64;
-        g_base_samples += (uint64_t)((double)excess * spt);
-        due -= excess;
-        fprintf(stderr, "v2_native_opl: tick debt %llu — paused (base slid)\n",
-                (unsigned long long)excess);
+    if (last_frame < 0) last_frame = cur;
+    if (cur != last_frame) {
+        g_tick_acc += (double)(cur - last_frame) * g_tick_hz / NOPL_FRAME_HZ;
+        last_frame = cur;
     }
-    while (g_ticks_done < due && guard++ < 96) {
-        g_cur_ts = g_base_samples + (uint64_t)((double)g_ticks_done * spt);
+    while (g_tick_acc >= 1.0 && guard++ < 64) {
+        g_tick_acc -= 1.0;
+        g_cur_ts = (uint64_t)((double)g_ticks_done * spt);
+        g_in_tick = true;
         v2_ail_tick();
+        g_in_tick = false;
         g_ticks_done++;
     }
     g_cur_ts = 0;
+}
+
+// The real-time mode's ticks — audio thread, inside v2_nopl_mix, at the start of
+// a chunk beginning at sample `pos`: every tick due at or before pos runs now
+// (tick n is due at g_base_samples + n * samples per tick; its writes, stamped
+// with that position, are drained into this very chunk, ahead of the chunk's
+// samples), and the chunk is cut at the next tick's position, so that tick runs
+// exactly at its sample on the next round. Returns the chunk length to render.
+// Under the driver lock, like every fn entry: a game-thread call is atomic
+// against the tick, as the PUSHF/CLI of the DOS API was against its INT8; the
+// lock is held by that thread only for the length of one driver call (or a
+// state image's copy), the audio thread's wait stays far below its budget.
+// A tick debt (more than 64 ticks owed — only if the sample clock jumped, it
+// does not advance while no callback runs) slides the base instead of bursting:
+// the clean PAUSE of the old pump.
+static uint32_t nopl_ticks_on_clock(uint64_t pos, uint32_t chunk) {
+    if (nopl_frame_mode()) return chunk;      // the frame mode ticks on the game thread (v2_nopl_pump)
+    v2_ail_interp_lock();
+    if (g_tick_hz > 0.0) {
+        const double spt = (double)g_rate / g_tick_hz;
+        uint64_t next = g_base_samples + (uint64_t)((double)g_ticks_done * spt);
+        if (pos > next && (uint64_t)((double)(pos - next) / spt) > 64) {
+            const uint64_t excess = (uint64_t)((double)(pos - next) / spt) - 64;
+            g_base_samples += (uint64_t)((double)excess * spt);
+            next = g_base_samples + (uint64_t)((double)g_ticks_done * spt);
+            fprintf(stderr, "v2_native_opl: tick debt %llu — paused (base slid)\n", (unsigned long long)excess);
+        }
+        int guard = 0;
+        while (next <= pos && guard++ < 96) {
+            g_cur_ts = next;
+            g_in_tick = true;
+            v2_ail_tick();
+            g_in_tick = false;
+            g_ticks_done++;
+            next = g_base_samples + (uint64_t)((double)g_ticks_done * spt);
+        }
+        g_cur_ts = 0;
+        if (next > pos && next - pos < chunk) chunk = (uint32_t)(next - pos);
+    }
+    v2_ail_interp_unlock();
+    return chunk;
 }
 
 // Tick pacing mode, decided once.
 // (#83) default/verify: ALWAYS frame-paced again — real+shadow are the
 // deterministic verify pair and no longer feed the chip (the audible path
 // is the sink instance, ticked on the sample clock in v2_nopl_mix).
-// V2_ONLY: the single (audible) instance paces by the audio clock;
-// V2_AIL_FRAME_TICKS=1 keeps its deterministic frame mode for replays.
+// V2_ONLY: the single (audible) instance ticks on the audio clock (the audio
+// thread, nopl_ticks_on_clock); V2_AIL_FRAME_TICKS=1 keeps its deterministic
+// frame mode for replays, and a build without an audio device (HEADLESS, or a
+// device that failed to open) has no sample clock and takes the frame mode too.
 static int nopl_frame_mode(void) {
-    if (g_force_frame) return 1;    // UX stage 8 tails: a network game ticks by frames (the audio clock is not shared)
+    if (g_force_frame.load(std::memory_order_relaxed)) return 1;    // UX stage 8 tails: a network game ticks by frames (the audio clock is not shared)
     static int frame_mode = -1;
     if (frame_mode < 0) {
+        const char* why = "";
 #ifdef V2_ONLY
         const char* e = getenv("V2_AIL_FRAME_TICKS");
         frame_mode = (e && e[0] == '1') ? 1 : 0;
+        if (frame_mode) why = " (V2_AIL_FRAME_TICKS)";
+        else if (!g_device.load(std::memory_order_acquire)) { frame_mode = 1; why = " (no audio device)"; }
 #else
         frame_mode = 1;
 #endif
-        if (frame_mode) fprintf(stderr, "v2_native_opl: frame-accumulator tick mode\n");
+        if (frame_mode) fprintf(stderr, "v2_native_opl: frame-accumulator tick mode%s\n", why);
     }
     return frame_mode;
 }
@@ -442,7 +513,9 @@ extern "C" void v2_nopl_mix(int16_t* stereo, uint32_t frames) {
     // down or neither ever starts. No-op until the bridge publishes
     // (and always in V2_ONLY, which has no bridge).
     v2_ail_sink_pump(g_samples_played.load(std::memory_order_relaxed));
-    if (!g_inited) { v2_mt32_pump(g_samples_played.load(std::memory_order_relaxed), 0, g_rate); return; }   // UX stage 11: the MT-32 world runs even before the chip is up
+    // (the chip comes up with the driver's first port write — the fn65 probe of its boot, before
+    // the tick rate exists — so no tick is ever due while it is down)
+    if (!g_inited.load(std::memory_order_acquire)) { v2_mt32_pump(g_samples_played.load(std::memory_order_relaxed), 0, g_rate); return; }   // UX stage 11: the MT-32 world runs even before the chip is up
     uint64_t pos = g_samples_played.load(std::memory_order_relaxed);
     uint32_t donef = 0;
     int16_t buf[256 * 2];
@@ -451,9 +524,15 @@ extern "C" void v2_nopl_mix(int16_t* stereo, uint32_t frames) {
         // right before generating this chunk — DOS INT8 semantics.
         v2_ail_sink_pump(pos);
         v2_mt32_pump(pos, donef, g_rate);   // UX stage 11: the MT-32 world (its driver ticks on the same sample clock)
-        size_t rd = g_rd.load(std::memory_order_relaxed);
         uint32_t chunk = frames - donef;
         if (chunk > 256) chunk = 256;
+        // the audible driver's own ticks at their samples (the real-time mode): the ticks due
+        // at pos run now, their writes are in the ring behind this line, the chunk ends at the
+        // next tick's sample
+        chunk = nopl_ticks_on_clock(pos, chunk);
+        size_t rd = g_rd.load(std::memory_order_relaxed);
+        const int late = late_on();                 // debug (V2_NOPL_LATE)
+        int distinct = 0; uint64_t last_ts = ~0ull;
         while (rd != g_wr.load(std::memory_order_acquire)) {
             const NoplCmd& c = g_ring[rd];
             if (c.ts > pos) {
@@ -461,11 +540,25 @@ extern "C" void v2_nopl_mix(int16_t* stereo, uint32_t frames) {
                 if (gap < chunk) chunk = (uint32_t)gap;
                 break;
             }
+            if (late) {
+                const uint64_t l = pos - c.ts;
+                if (c.tick) {
+                    g_late_tick_applied++;
+                    if (l) { g_late_tick_late++; if (l > g_late_tick_max) g_late_tick_max = l; }
+                    if (c.ts != last_ts) { distinct++; last_ts = c.ts; }
+                } else {
+                    g_late_call_applied++;
+                    if (l == 0) g_late_call_hist[0]++;
+                    else { const double ms = (double)l * 1000.0 / (double)g_rate;
+                           g_late_call_hist[ms <= 4 ? 1 : ms <= 8 ? 2 : ms <= 12 ? 3 : ms <= 16 ? 4 : ms <= 24 ? 5 : ms <= 32 ? 6 : 7]++; }
+                }
+            }
             // bank 1 (ports 0x222/3) = OPL3 register range 0x100+.
             OPL3_WriteRegBuffered(&g_chip, (uint16_t)((c.chip << 8) | c.reg), c.val);
             rd = (rd + 1) & (NOPL_RING - 1);
         }
         g_rd.store(rd, std::memory_order_release);
+        if (late && distinct) g_late_instants[distinct >= 2 ? 1 : 0]++;
         if (chunk == 0) chunk = 1;
         OPL3_GenerateStream(&g_chip, buf, chunk);
         for (uint32_t i = 0; i < chunk; i++) {
@@ -482,4 +575,14 @@ extern "C" void v2_nopl_mix(int16_t* stereo, uint32_t frames) {
         pos   += chunk;
     }
     g_samples_played.store(pos, std::memory_order_release);
+    if (late_on() && (++g_late_cbs % 1000) == 0) {
+        fprintf(stderr, "V2-NOPL-LATE cbs=%llu tick_writes=%llu late=%llu max=%.2fms instants[1|2+]=%llu/%llu"
+                        " call_writes=%llu late_ms[0|<=4|<=8|<=12|<=16|<=24|<=32|>32]=%llu/%llu/%llu/%llu/%llu/%llu/%llu/%llu buf=%u\n",
+                (unsigned long long)g_late_cbs, (unsigned long long)g_late_tick_applied, (unsigned long long)g_late_tick_late,
+                (double)g_late_tick_max * 1000.0 / (double)g_rate, (unsigned long long)g_late_instants[0], (unsigned long long)g_late_instants[1],
+                (unsigned long long)g_late_call_applied,
+                (unsigned long long)g_late_call_hist[0], (unsigned long long)g_late_call_hist[1], (unsigned long long)g_late_call_hist[2], (unsigned long long)g_late_call_hist[3],
+                (unsigned long long)g_late_call_hist[4], (unsigned long long)g_late_call_hist[5], (unsigned long long)g_late_call_hist[6], (unsigned long long)g_late_call_hist[7],
+                frames);
+    }
 }
