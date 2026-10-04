@@ -4,6 +4,7 @@
 #include <cstdint>
 #include <atomic>
 #include <mutex>
+#include <vector>
 #include <SDL2/SDL.h>
 
 // When defined, v2 renderer reads DS data (viewport, objects, flags, scroll)
@@ -435,6 +436,17 @@ extern void v2_page_cells_copy_end(void);
 extern void v2_page_tile_set(uint16_t page, uint16_t fs_off, uint16_t word);
 extern void v2_page_tile_set_all(uint16_t fs_off, uint16_t word);
 extern void v2_page_lists_black(void);
+// the state image (v2_vm.cpp v2_state_blocks, 2026-10-08): the three pages' tile words as one
+// block, and the record drop a restore performs (the pages' sprite images are not in the image)
+extern uint8_t* v2_page_tile_words(uint32_t* size);
+extern uint8_t* v2_page_cell_epochs(uint32_t* size);   // the cells' erase epochs of the three pages ("PGCE")
+extern void v2_page_lists_drop_records(void);
+// ... and the records as a variable-length block ("PGLS": per page n, arena_used, the records,
+// the used arena): the pages' sprites restored exactly; deserialize = false when the block is
+// not of this build's shape (nothing written then)
+extern void v2_page_lists_serialize(std::vector<uint8_t>& out);
+extern bool v2_page_lists_check(const uint8_t* img, uint32_t len);         // the block's shape, nothing written
+extern bool v2_page_lists_deserialize(const uint8_t* img, uint32_t len);
 // The BACKGROUND VGA (2026-09-12): the tile layer of a frame is what the VGA memory holds,
 // read out the way the CRTC does. The pages are not rows of map cells: each page's rows sit
 // at a 42-byte phase inside the 0x56 pitch, a tile row is painted at LUT_PAGE_ROW[row] plus

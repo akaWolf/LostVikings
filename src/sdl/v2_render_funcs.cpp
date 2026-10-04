@@ -993,14 +993,20 @@ void v2_draw_tiles(uint16_t ds_val) {
             // Read tile map entry: word at fs:[(row_base + col_scrolled) * 2]
             uint16_t tile_map_off = (uint16_t)((row_base + col_scrolled) * 2u);
             uint16_t tile_entry = *(uint16_t*)(fs_base + tile_map_off);
-            // debug: V2_MAP_ROWDUMP=<frame>[,<row_vis>] — one screen row's cells at that frame:
-            // the visible column, the render-map cell index, the map word and the page's word
+            // debug: V2_MAP_ROWDUMP=<frame>[,<row_vis>] — one screen row's cells at that frame (every
+            // row with -1): the visible column, the render-map cell index, the map word and the page's word
             {
                 static int rd = -1, rd_f = 0, rd_row = 11;
                 if (rd < 0) { const char* e = getenv("V2_MAP_ROWDUMP"); rd = 0; if (e && *e) { rd = 1; sscanf(e, "%d,%d", &rd_f, &rd_row); } }
-                if (rd == 1 && v2_dbg_pre_vm_iter == rd_f && row_vis == rd_row && !v2_tls_presenter) {
+                // (the game build composes on the presenter thread only: the dump runs there too — every pass
+                // of the frame, tagged with the thread, the lead and the tile pass's ordinal, so the passes
+                // of one frame can be told apart)
+                static std::atomic<int> rd_pass{0};
+                if (rd == 1 && v2_dbg_pre_vm_iter == rd_f && (rd_row < 0 || row_vis == rd_row)) {
+                    if (row_vis == 0 && col_vis == 0) rd_pass++;
                     const uint16_t* ovr = v2_tls_presenter ? v2_tls_tile_ovr : v2_tile_override;
-                    fprintf(stderr, "V2-MAPROW f%d row_vis=%d col_vis=%d cell=%04X map=%04X page=%04X fbw=%d\n", v2_dbg_pre_vm_iter, row_vis, col_vis,
+                    fprintf(stderr, "V2-MAPROW f%d pass=%d thr=%s lead=%d row_vis=%d col_vis=%d cell=%04X map=%04X page=%04X fbw=%d\n", v2_dbg_pre_vm_iter, rd_pass.load(),
+                            v2_tls_presenter ? "pres" : "game", v2_tls_kx_lead, row_vis, col_vis,
                             tile_map_off >> 1, tile_entry, ovr ? ovr[tile_map_off >> 1] : 0xEEEE, v2_fbw);
                 }
             }
@@ -1025,7 +1031,10 @@ void v2_draw_tiles(uint16_t ds_val) {
                 // a pel pan); columns 41 and 42 are slack the scroll painters do not keep in every
                 // path (level 2 in 16:10: cells 41..42 of a row still 0xFFFE from the wipe — a black
                 // 16x8 block at the ladder's foot), so the page's word is trusted for columns 0..40.
-                if (ovr && cv >= 0 && cv < 0x29 && rv >= 0 && rv < (v2_view_rows() == 224 ? 0x1E : 0x19)) {
+                // debug: V2_NO_BG_READOUT=2 — the map's tiles alone: neither the page's words here nor
+                // the background readout below (a reference frame against the page's picture)
+                static int no_page = -1; if (no_page < 0) { const char* e = getenv("V2_NO_BG_READOUT"); no_page = (e && atoi(e) >= 2) ? 1 : 0; }
+                if (ovr && !no_page && cv >= 0 && cv < 0x29 && rv >= 0 && rv < (v2_view_rows() == 224 ? 0x1E : 0x19)) {
                     const uint16_t w = ovr[tile_map_off >> 1];
                     if (w == 0xFFFE) {
                         for (int row = 0; row < 8; row++) {
@@ -1607,6 +1616,75 @@ void v2_page_lists_black(void) {
     v2_page_tile_init();
     for (int p = 0; p < 3; p++) { g_page_list[p].n = 0; for (int i = 0; i < 32768; i++) g_page_tile[p][i] = 0xFFFE; }
     if (v2_ple_trace_on()) fprintf(stderr, "V2-PLE f%d 16880 black (all pages)\n", v2_dbg_pre_vm_iter);
+}
+// The state image (render_v2.h; v2_vm.cpp v2_state_blocks, 2026-10-08): the three pages' tile
+// words travel with the background VGA plane, so a restored world shows the pages as they were;
+// the records (the sprites' images kept on the pages) are not in the image — a restore drops
+// them: the restored pages hold the tiles the words say, and nothing of the old world's sprites
+uint8_t* v2_page_tile_words(uint32_t* size) {
+    v2_page_tile_init();
+    if (size) *size = (uint32_t)sizeof g_page_tile;
+    return (uint8_t*)g_page_tile;
+}
+void v2_page_lists_drop_records(void) {
+    for (int p = 0; p < 3; p++) { g_page_list[p].n = 0; g_page_list[p].arena_used = 0; }
+    if (v2_ple_trace_on()) fprintf(stderr, "V2-PLE f%d restore: the records dropped (all pages)\n", v2_dbg_pre_vm_iter);
+}
+// The records themselves (render_v2.h; the state image's "PGLS" block): u32 the erase-order
+// counter, then per page u32 n, u32 arena_used, n records as they lie in memory, the used
+// arena — what each page holds in sprites (the cells' erase epochs the records are judged
+// against travel as the fixed "PGCE" block, v2_page_cell_epochs),
+// so a restored world shows them (a static sign, a switch, an item is drawn once and then kept
+// by the page; dropped, it is gone until the engine redraws it). Variable-length: the file and
+// the lockstep image carry it as a tagged block, the rewind ring beside its fixed slots.
+static void pl_wr32(std::vector<uint8_t>& o, uint32_t v) { for (int i = 0; i < 4; i++) o.push_back((uint8_t)(v >> (8 * i))); }
+static uint32_t pl_rd32(const uint8_t* p) { return (uint32_t)p[0] | ((uint32_t)p[1] << 8) | ((uint32_t)p[2] << 16) | ((uint32_t)p[3] << 24); }
+uint8_t* v2_page_cell_epochs(uint32_t* size) {
+    if (size) *size = (uint32_t)sizeof g_cell_epoch;
+    return (uint8_t*)g_cell_epoch;
+}
+void v2_page_lists_serialize(std::vector<uint8_t>& out) {
+    pl_wr32(out, g_epoch);   // the erase-order counter the records' and the cells' epochs are drawn from
+    for (int p = 0; p < 3; p++) {
+        const V2DrawList& L = g_page_list[p];
+        const uint32_t n = (uint32_t)(L.n < 0 ? 0 : L.n > V2_DRAWLIST_MAX ? V2_DRAWLIST_MAX : L.n);
+        const uint32_t used = L.arena_used > V2_DRAWLIST_ARENA ? V2_DRAWLIST_ARENA : L.arena_used;
+        pl_wr32(out, n); pl_wr32(out, used);
+        const uint8_t* c = (const uint8_t*)L.cmd; out.insert(out.end(), c, c + (size_t)n * sizeof(V2DrawCmd));
+        out.insert(out.end(), L.arena, L.arena + used);
+    }
+}
+// the walk over a block: checked only (write = false: nothing is written on a block that is
+// not of this build's shape), or copied into the lists (write = true, after a check)
+static bool pl_walk(const uint8_t* img, uint32_t len, bool write) {
+    if (len < 4) return false;
+    uint32_t off = 4;
+    if (write) g_epoch = pl_rd32(img);
+    for (int p = 0; p < 3; p++) {
+        if (off + 8 > len) return false;
+        const uint32_t n = pl_rd32(img + off), used = pl_rd32(img + off + 4); off += 8;
+        if (n > V2_DRAWLIST_MAX || used > V2_DRAWLIST_ARENA) return false;
+        const uint64_t need = (uint64_t)n * sizeof(V2DrawCmd) + used;
+        if ((uint64_t)off + need > len) return false;
+        const V2DrawCmd* cmds = (const V2DrawCmd*)(img + off);
+        for (uint32_t i = 0; i < n; i++)
+            if (cmds[i].data_len && (uint64_t)cmds[i].data_off + cmds[i].data_len > used) return false;   // a record's bytes lie in the used arena
+        if (write) {
+            V2DrawList& L = g_page_list[p];
+            L.n = (int)n; L.arena_used = used;
+            memcpy(L.cmd, cmds, (size_t)n * sizeof(V2DrawCmd));
+            memcpy(L.arena, img + off + (size_t)n * sizeof(V2DrawCmd), used);
+        }
+        off += (uint32_t)need;
+    }
+    return off == len;
+}
+bool v2_page_lists_check(const uint8_t* img, uint32_t len) { return pl_walk(img, len, false); }
+bool v2_page_lists_deserialize(const uint8_t* img, uint32_t len) {
+    if (!pl_walk(img, len, false)) return false;
+    pl_walk(img, len, true);
+    if (v2_ple_trace_on()) fprintf(stderr, "V2-PLE f%d restore: the records restored (%d / %d / %d)\n", v2_dbg_pre_vm_iter, g_page_list[0].n, g_page_list[1].n, g_page_list[2].n);
+    return true;
 }
 // the sprite's pixel extent (the rasteriser's rules: type 1 = 8x8, type 2 = 32 x strips, type 4 = 16x16, a glyph cell 8x8)
 static inline void v2_cmd_extent(const V2DrawCmd& c, int& w, int& h) {

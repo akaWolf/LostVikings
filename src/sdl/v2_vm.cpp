@@ -9260,6 +9260,16 @@ static bool v2_state_blocks(V2StateBlock* b, int* n, uint8_t* ds_img) {
       b[k++] = { "VGA ", v2_vga,     65536u * 4 };
       b[k++] = { "VCOV", v2_vga_cov, 65536u * 4 }; }
     b[k++] = { "DAC ", v2_dac_shadow, 768 };
+    // The page as the presenter composes it (2026-10-08): the background VGA plane — the tile
+    // layer the window is read out of (render_v2.h v2_vga_bg) — the three pages' tile words and
+    // their cells' erase epochs (render_v2.h page lists; the records themselves follow as the
+    // variable-length PGLS block of the image). Without them a restored world showed the pages
+    // of the world before the restore until the camera had repainted them (a debug LOAD, a
+    // rewind step, a joining client's image). Optional: an older image loads as before.
+    { uint32_t tsz = 0, esz = 0; uint8_t* tw = v2_page_tile_words(&tsz); uint8_t* ce = v2_page_cell_epochs(&esz);
+      b[k++] = { "VGAB", v2_vga_bg, 65536u * 4, true };
+      b[k++] = { "PGTW", tw,        tsz,        true };
+      b[k++] = { "PGCE", ce,        esz,        true }; }   // the cells' erase epochs (the records of the PGLS block are judged against them)
     // UX stage 8 tails: the sound driver's world — its resident memory and the
     // timbre cache. A state without them (older files) loads with the sound
     // running on; the lockstep needs them, or the driver's DS words (sequence
@@ -9285,11 +9295,12 @@ void v2_state_serialize(std::vector<uint8_t>& out) {
     v2_gs_serialize(&st_gs, ds_img);
     V2StateBlock b[20]; int n = 0;
     v2_state_blocks(b, &n, ds_img);
-    std::vector<uint8_t> coop;
+    std::vector<uint8_t> coop, pgls;
     v2_coop_state_write(coop);
+    v2_page_lists_serialize(pgls);         // the pages' records (render_v2.h; 2026-10-08): variable-length, beside the fixed blocks
     out.clear();
     out.insert(out.end(), (const uint8_t*)"V2S1", (const uint8_t*)"V2S1" + 4);
-    wr32(out, (uint32_t)n + 1);
+    wr32(out, (uint32_t)n + 2);
     for (int i = 0; i < n; i++) {
         out.insert(out.end(), (const uint8_t*)b[i].tag, (const uint8_t*)b[i].tag + 4);
         wr32(out, b[i].len);
@@ -9299,9 +9310,14 @@ void v2_state_serialize(std::vector<uint8_t>& out) {
     out.insert(out.end(), (const uint8_t*)"COOP", (const uint8_t*)"COOP" + 4);
     wr32(out, (uint32_t)coop.size());
     out.insert(out.end(), coop.begin(), coop.end());
+    out.insert(out.end(), (const uint8_t*)"PGLS", (const uint8_t*)"PGLS" + 4);
+    wr32(out, (uint32_t)pgls.size());
+    out.insert(out.end(), pgls.begin(), pgls.end());
 }
 // Tag-directed: the blocks in any order, a tag this build does not know is
-// skipped, the COOP block is optional (an older file = a one-player world).
+// skipped, the COOP block is optional (an older file = a one-player world), the
+// PGLS block too (an older file: the pages' records are dropped — the restored
+// pages hold their tiles, the sprites return as the engine redraws them).
 static int v2_state_deserialize(const uint8_t* img, size_t size, bool restore_frame, const char* what) {
     static V2GameState st_gs;
     static uint8_t ds_img[0x10000];
@@ -9310,7 +9326,7 @@ static int v2_state_deserialize(const uint8_t* img, size_t size, bool restore_fr
     if (size < 8 || memcmp(img, "V2S1", 4) != 0) { fprintf(stderr, "V2-STATE: %s: bad header\n", what); return 1; }
     const uint32_t nn = rd32(img + 4);
     size_t off = 8;
-    bool seen[20] = {}; bool coop_seen = false;
+    bool seen[20] = {}; bool coop_seen = false, pgls_seen = false;
     // the first pass only checks the image (nothing is written on a bad one), the
     // second copies the blocks — under the driver lock: its audio-thread ticks do
     // not run between the halves of a torn driver state
@@ -9332,6 +9348,11 @@ static int v2_state_deserialize(const uint8_t* img, size_t size, bool restore_fr
             } else if (memcmp(tag, "COOP", 4) == 0) {
                 if (pass == 1 && !v2_coop_state_read(img + off, len, restore_frame)) { fprintf(stderr, "V2-STATE: %s: bad COOP block\n", what); v2_ail_interp_unlock(); return 1; }
                 coop_seen = true;
+            } else if (memcmp(tag, "PGLS", 4) == 0) {
+                // the pages' records (render_v2.h): checked in pass 0 (nothing is written on a bad block), copied in pass 1
+                if (pass == 0 && !v2_page_lists_check(img + off, len)) { fprintf(stderr, "V2-STATE: %s: bad PGLS block\n", what); return 1; }
+                if (pass == 1) v2_page_lists_deserialize(img + off, len);
+                pgls_seen = true;
             }
             off += len;
         }
@@ -9345,6 +9366,7 @@ static int v2_state_deserialize(const uint8_t* img, size_t size, bool restore_fr
     v2_gs_deserialize(&st_gs, ds_img);
     v2_gs_serialize(&st_gs, v2_vm_shadow_ds);
     v2_gs_evac_refresh(v2_vm_shadow_ds);   // UX stage 3: a mid-game load (debug LOAD slot) must re-sync the evacuated members
+    if (!pgls_seen) v2_page_lists_drop_records();   // an older image: the pages' sprite images are the old world's (render_v2.h)
     // Post-load fixups: world bookkeeping that lives outside the DS.
     v2_vm_acc_base = v2_vm_shadow_ds;
     v2_shadow_initialized = true;
@@ -9401,11 +9423,13 @@ int v2_state_apply_image(const uint8_t* img, size_t size) {
     return r;
 }
 
-// rewind ring: raw copies of the state blocks (debug only, lazily allocated)
+// rewind ring: raw copies of the state blocks (debug only, lazily allocated); the pages'
+// records (render_v2.h, variable-length) beside every slot
 static uint8_t* v2_rw_mem = nullptr;
 static uint32_t v2_rw_stride = 0;
 static int v2_rw_cap = 96, v2_rw_head = 0, v2_rw_count = 0;
 static V2GameState v2_rw_st;
+static std::vector<uint8_t>* v2_rw_pgls = nullptr;   // [v2_rw_cap]
 static bool v2_rw_alloc() {
     if (v2_rw_mem) return true;
     V2StateBlock b[20]; int n = 0; v2_state_blocks(b, &n, v2_vm_shadow_ds);
@@ -9413,7 +9437,8 @@ static bool v2_rw_alloc() {
     v2_rw_stride = total;
     v2_rw_mem = (uint8_t*)malloc((size_t)total * v2_rw_cap);
     if (!v2_rw_mem) { fprintf(stderr, "V2-UI: rewind ring: no memory (%u x %d)\n", total, v2_rw_cap); return false; }
-    fprintf(stderr, "V2-UI: rewind ring %d x %u B\n", v2_rw_cap, total);
+    v2_rw_pgls = new std::vector<uint8_t>[v2_rw_cap];
+    fprintf(stderr, "V2-UI: rewind ring %d x %u B (+ the pages' records)\n", v2_rw_cap, total);
     return true;
 }
 // The DS block goes through the typed model exactly like v2_state_save /
@@ -9431,6 +9456,7 @@ static void v2_rw_capture() {
     uint8_t* dst = slot + b[0].len;
     for (int i = 1; i < n; i++) { memcpy(dst, b[i].ptr, b[i].len); dst += b[i].len; }
     v2_ail_interp_unlock();
+    v2_rw_pgls[v2_rw_head].clear(); v2_page_lists_serialize(v2_rw_pgls[v2_rw_head]);
     v2_rw_head = (v2_rw_head + 1) % v2_rw_cap;
     if (v2_rw_count < v2_rw_cap) v2_rw_count++;
 }
@@ -9445,6 +9471,7 @@ static bool v2_rw_restore(uint8_t* s) {
     v2_gs_deserialize(&v2_rw_st, slot);
     v2_gs_serialize(&v2_rw_st, v2_vm_shadow_ds);
     v2_gs_evac_refresh(v2_vm_shadow_ds);          // members <- the restored image (stage-4 evac)
+    if (!v2_page_lists_deserialize(v2_rw_pgls[v2_rw_head].data(), (uint32_t)v2_rw_pgls[v2_rw_head].size())) v2_page_lists_drop_records();   // the pages' records of that frame (render_v2.h)
     v2_nopl_regs_replay();                        // the chip follows the restored register file too
     v2_ail_interp_unlock();
     v2_vm_acc_base = v2_vm_shadow_ds; v2_shadow_initialized = true;
@@ -9611,6 +9638,13 @@ static void v2_ui_service(uint8_t* s) {
     // tick (headless review of the ring: the VIKDBG positions run backwards)
     { static int tr = -2; if (tr == -2) { const char* e = getenv("V2_UI_TESTREWIND"); tr = (e && *e) ? atoi(e) : -1; }
       if (tr > 0) { if (tick == tr) v2_ui_rewind_hold = true; if (tick == tr + 100) v2_ui_rewind_hold = false; } }
+    // debug: V2_UI_TESTLOAD=<tick>:<slot> / V2_UI_TESTSAVE=<tick>:<slot> — the debug LOAD / SAVE of
+    // v2_save_<slot>.state requested at that tick (a stand loads a player's state at a known
+    // frame, or saves one for a round trip; the request is served at the next tick)
+    { static int tl = -2, tls = 1; if (tl == -2) { const char* e = getenv("V2_UI_TESTLOAD"); tl = -1; if (e && *e && sscanf(e, "%d:%d", &tl, &tls) < 1) tl = -1; }
+      if (tl > 0 && tick == tl) v2_ui_req_load = tls; }
+    { static int ts = -2, tss = 1; if (ts == -2) { const char* e = getenv("V2_UI_TESTSAVE"); ts = -1; if (e && *e && sscanf(e, "%d:%d", &ts, &tss) < 1) ts = -1; }
+      if (ts > 0 && tick == ts) v2_ui_req_save = tss; }
     if (v2_ui_rewind_hold.load() && net_game) {
         if ((tick & 31) == 0) v2_ui_toast("NOT IN A NETWORK GAME");
     } else if (v2_ui_rewind_hold.load()) {
