@@ -70,7 +70,17 @@ build you need a legal copy:
 - The Blizzard Arcade Collection ships a different repack and is not a
   drop-in replacement.
 
-Place `DATA.DAT` next to the `vikings` binary and launch.
+Place `DATA.DAT` next to the `vikings` binary and launch (the game looks in
+the directory it was started from first, then next to the binary; the name is
+matched without regard to case, as DOS did, so a `data.dat` works too).
+
+If the archive cannot be opened or is not the right one, the game stops the
+way the original did — its message on the terminal and in a message box:
+`Cannot find 'data.dat' file in the current directory.` (no such file in
+either place) or `Data.dat has been corrupted. Please re-install.` (a different
+archive: the Blizzard Arcade Collection repack, a truncated copy). The archive
+this port is built against is 1 570 444 bytes, md5
+`d0f8a04202070a54d1909758ecd962b5`.
 
 The bundled `ds_static.bin` / `exe_static.bin` snapshots are not a
 DATA.DAT substitute — they hold the static EXE image (initial DS, the

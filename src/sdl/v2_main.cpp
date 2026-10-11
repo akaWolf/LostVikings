@@ -33,6 +33,8 @@ static void sigint_handler(int) {
 }
 extern void render_init_v2(void* state);
 extern void sound_init();
+void v2_fatal_box_at_exit(void);   // v2_vm.cpp: a fatal exit raised by the game thread (sub_10dba) shows its console text in a message box here, on the presenter thread
+extern SDL_threadID v2_main_thread_id;   // v2_vm.cpp: the thread a message box belongs to
 
 // v2 phase dispatcher: V2Phase enum + v2_signal_phase come from render_v2.h.
 extern void v2_set_m2c_base(void* base);
@@ -162,6 +164,7 @@ int main(int argc, char* argv[]) {
     // ("sub_171dc: si=... dx=d4" + a stderr line + the rest), and a debug line falls
     // out of every grep; a line is now written whole at its newline.
     setvbuf(stdout, nullptr, _IOLBF, 1 << 16);
+    v2_main_thread_id = SDL_ThreadID();
     printf("V2_ONLY: starting standalone v2 build (no m2c)\n");
     v2_find_content();   // before any chunk read: the store is settled at its first use
 
@@ -304,6 +307,7 @@ int main(int argc, char* argv[]) {
     // Linux scheduler), one word_3287c DEC per tick → ~17.5 ms per sub_10130 wait, three
     // flips + three waits per game frame ≈ 53 ms ≈ 18.9 FPS.
     v2_presenter_loop();
+    v2_fatal_box_at_exit();     // a fatal exit raised by the game thread: the box, then the process leaves (never returns then)
 
     printf("V2_ONLY: quitting\n");
     v2_game_thread_stop();

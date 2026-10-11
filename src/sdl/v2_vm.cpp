@@ -24,6 +24,10 @@
 #include <chrono>
 #ifndef _WIN32
 #include <unistd.h>
+#include <cerrno>
+#include <dirent.h>    // the archive's case-insensitive lookup (v2_open_data_dat)
+#include <strings.h>   // strcasecmp
+#include <string>
 #include <execinfo.h>  // stage-4 evac trap backtrace   // _exit, close, syscall — some libcs pull these in
                       // transitively, Ubuntu's does not.
 #endif
@@ -672,6 +676,9 @@ extern "C" int v2_vga_fetch_page(uint8_t* out, uint32_t count);
 // the oracle/verify context (never taken standalone) — link-level stubs.
 extern "C" { int v2_fntest_vm_soft = 0; }
 extern "C" uint32_t v2_fntest_game_ds_linear(void) { return 0; }
+#else
+extern "C" int v2_fntest_vm_soft;   // the isolator's soft-exit flag (v2_fn_test.cpp): declared once here with its C linkage, ahead of
+                                    // every use — a block-scope extern inside a C++ function would give the name C++ linkage first
 #endif
 extern "C" void v2_draw_one_sprite_late(uint16_t ds_val, int obj);
 static uint16_t v2_current_ds_val; // DS segment value for rendering calls (defined here, used below)
@@ -2354,6 +2361,42 @@ static bool v2_parallax_read_private(uint16_t cid, uint8_t* dest, uint32_t max_s
     *out_len = v2_lzss_decompress(rec + 2, dest, dsize, nullptr);
     return *out_len == (uint32_t)dsize + 1;
 }
+// The archive's open — sub_12989's INT 21h/3Dh of "DATA.DAT" (the name at DS:86A3), and the lazy
+// opens of the loaders below for the paths that run without the startup (the fn-test's units, the
+// private reads). DOS matched a file name without regard to case, so where the file system is
+// case-sensitive the exact name is tried first and then the directory's entries that equal it
+// case-insensitively (a copy named data.dat is the same file to the original); the current
+// directory first — the original's "current directory", the one its message names — then the
+// directory of the executable (README: next to the vikings binary; the console content pack is
+// looked up the same way). NULL with errno of the exact name's failure in the current directory
+// when no attempt succeeded (the DOS code of the fatal message comes from it).
+static FILE* v2_open_data_dat(void) {
+    FILE* f = nullptr;
+    int err = ENOENT;
+    char* base = SDL_GetBasePath();                     // ends with the path separator, or NULL
+    const char* dirs[2] = { "", base };
+    for (int i = 0; i < 2 && !f; i++) {
+        if (!dirs[i]) continue;
+        char path[4096];
+        snprintf(path, sizeof path, "%sDATA.DAT", dirs[i]);
+        f = fopen(path, "rb");
+        if (f) break;
+        if (i == 0) err = errno;
+        if (errno != ENOENT) continue;                  // it is there and cannot be opened: no other spelling is meant
+        DIR* d = opendir(dirs[i][0] ? dirs[i] : ".");
+        if (!d) continue;
+        for (struct dirent* e; !f && (e = readdir(d)) != nullptr; ) {
+            if (strcasecmp(e->d_name, "DATA.DAT") != 0 || strcmp(e->d_name, "DATA.DAT") == 0) continue;
+            snprintf(path, sizeof path, "%s%s", dirs[i], e->d_name);
+            f = fopen(path, "rb");
+        }
+        closedir(d);
+    }
+    if (base) SDL_free(base);
+    if (!f) errno = err;
+    return f;
+}
+
 // UX stage 11: the MT-32 world (v2_mt32.cpp) reads its chunks — the MT-32 driver, bank, SFX set,
 // the tracks' MT-32 variants — through the same private path: no DS / FS effects on the game.
 extern "C" uint32_t v2_chunk_read_private(uint16_t cid, uint8_t* dest, uint32_t max_size) {
@@ -2362,7 +2405,7 @@ extern "C" uint32_t v2_chunk_read_private(uint16_t cid, uint8_t* dest, uint32_t 
     // the archive, privately: table entry -> [u16 size-1][LZSS stream], decompressed here (no header
     // mirror, no FS ring — the loader's DS effects belong to the game's own chunk loads only)
     static FILE* f = nullptr;
-    if (!f) { f = fopen("DATA.DAT", "rb"); if (!f) return 0; }
+    if (!f) { f = v2_open_data_dat(); if (!f) return 0; }
     uint8_t header[8];
     if (fseek(f, (long)cid * 4, SEEK_SET) || fread(header, 8, 1, f) != 1) return 0;
     const uint32_t off = (uint32_t)(header[0] | (header[1] << 8) | (header[2] << 16) | ((uint32_t)header[3] << 24));
@@ -2575,7 +2618,7 @@ static uint32_t v2_read_chunk_archive(uint16_t chunk_id, uint8_t* dest, uint32_t
                                       uint8_t* ds_ctx) {
     uint8_t* dctx = ds_ctx ? ds_ctx : v2_vm_shadow_ds;
     if (!v2_data_handle) {
-        v2_data_handle = fopen("DATA.DAT", "rb");
+        v2_data_handle = v2_open_data_dat();
         if (!v2_data_handle) return 0;
     }
     if (chunk_id == 0xFFFA) return 0; // special: no-op
@@ -2732,7 +2775,7 @@ static uint16_t v2_read_raw_chunk(uint16_t chunk_id, uint8_t* dest, uint32_t max
 static uint16_t v2_read_raw_chunk_archive(uint16_t chunk_id, uint8_t* dest, uint32_t max_size,
                                           uint8_t* hdr8_out) {
     if (!v2_data_handle) {
-        v2_data_handle = fopen("DATA.DAT", "rb");
+        v2_data_handle = v2_open_data_dat();
         if (!v2_data_handle) return 0;
     }
     if (chunk_id == 0xFFFA) return 0;
@@ -7637,8 +7680,111 @@ static void v2_dos_init_12948(uint8_t* s) {
 }
 
 // sub_12989: open DATA.DAT, read header, validate, read game config.
+// ---------------------------------------------------------------------------------------------
+// sub_10dba (seg000 0x0DBA, 87 bytes): the fatal exit of the original — the error exits of the
+// startup (sub_12989: the archive, the VGA, the 386, the copy protection), of the memory allocator
+// and of the chunk loader (loc_1098e) end here, and it never returns.
+//   0DBA push seg004 / 0DBD pop ds — DS = the game's data segment, where the texts live
+//   0DBE push bx (the DOS error code)   0DBF push ax (the message's offset)
+//   0DC0 sub_16546 — the VGA cleanup (no DS effect in the model, as at the quit paths)
+//   0DC3 sub_1754c — the AIL exit (the driver's own memory)
+//   0DC6 INT 21h/3E bx=[2BB2] — closes the archive
+//   0DCF sub_1686f — the VGA mode restore ([92FF] = 0 unless [9300] == FF; v2_vga_mode_restore_1686f)
+//   0DD2 sub_1292f — the sound state check (read-only; v2_snd_state_check_1292f)
+//   0DD5 INT 21h/09 dx=2BBE — "*** An Error has occured while running PC Vikings ***"
+//   0DDD pop dx; 0DDE INT 21h/09 — the message
+//   0DE3 pop ax; 0DE4 or ax,ax; 0DE6 jz 0E30 — a zero code prints no code line
+//   0DE8..0E24 — the four hex digits of ax through the word table at DS:931F (bx = nibble*2 - 6CE1h
+//        wraps to 931F + 2n; the low byte is the digit): al & F -> [2E59], al >> 4 -> [2E58],
+//        ah & F -> [2E57], ah >> 4 -> [2E56] — the blanks of the template at DS:2E45
+//   0E28 INT 21h/09 dx=2E45 — "Error code is: XXXX"
+//   0E30 INT 21h/4C al=0 — back to DOS, exit code 0
+// The port writes the same bytes to stderr (the DOS console) and, where it has a window, shows them
+// in a message box before the exit (v2_fatal_box_at_exit — a desktop launch has no console to read):
+// the startup runs on the main thread, before the game thread exists (v2_main.cpp: v2_run_animation_vm
+// → v2_startup, then v2_game_thread_start, then the presenter loop), so a fatal there shows the box at once; a fatal
+// raised by the game thread parks that thread and the presenter shows the box after its loop. The
+// dummy video driver (the stands) has no display: the console text is all there is. Until 2026-10-13 the
+// mirror printed a trace line at these exits and went on with an empty world: a black window with
+// the frame counter running, a tester's report. The fn-test isolator: the oracle's INT 21h/4C
+// escapes it (UB-skip), so the mirror returns there like the other DOS exits (v2_fntest_vm_soft).
+static std::string v2_dos_string(const uint8_t* s, uint16_t off) {   // a '$'-terminated string of the data segment (INT 21h/09)
+    std::string t;
+    for (uint32_t i = off; i < 0x10000 && s[i] != '$'; i++) t += (char)s[i];
+    return t;
+}
+static std::string v2_fatal_box_text;                                 // the pending message box of a fatal exit (set by the game thread, shown by the presenter)
+SDL_threadID v2_main_thread_id = 0;                                   // v2_main.cpp sets it at its start: the presenter's thread, the one a message box belongs to
+extern SDL_Window* myWindow_v2;                                       // render_v2.cpp: the game's window (NULL: none)
+void v2_fatal_box_at_exit(void);
+// 0E30: the console text has been printed; a windowed game shows it before the process leaves
+static void v2_dos_exit_fatal(const std::string& text) {
+    fflush(stdout); fflush(stderr);
+#if defined(V2_ONLY) && !defined(HEADLESS)
+    if (myWindow_v2) {
+        v2_fatal_box_text = text;
+        if (v2_main_thread_id == 0 || SDL_ThreadID() == v2_main_thread_id) v2_fatal_box_at_exit();   // the main thread (the startup): the box now, then the exit — never returns
+        extern bool need_quit; need_quit = true;          // the game thread: the presenter leaves its loop and shows the box (v2_fatal_box_at_exit)
+        for (;;) SDL_Delay(1000);                          // this thread is done; the process ends from the main thread
+    }
+#endif
+    headless_golden_dump();                                // the DOS exits are clean exits (all builds), as at the quit sites
+    extern bool need_quit; need_quit = true; SDL_Delay(50);
+    v2_midi_shutdown();
+    _exit(0);                                              // INT 21h/4C00
+}
+void v2_fatal_box_at_exit(void) {                          // v2_main.cpp, after the presenter loop (the main thread)
+    if (v2_fatal_box_text.empty()) return;
+    std::string t;                                         // the console bytes without the DOS line ends, trimmed
+    for (char c : v2_fatal_box_text) if (c != '\r') t += c;
+    while (!t.empty() && t.front() == '\n') t.erase(t.begin());
+    while (!t.empty() && t.back() == '\n') t.pop_back();
+    const char* vd = SDL_GetCurrentVideoDriver();
+    if (!(vd && strcmp(vd, "dummy") == 0))                 // no display behind the dummy driver (the stands)
+        SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR, "PC Vikings", t.c_str(), myWindow_v2);
+    fflush(stdout); fflush(stderr);
+    v2_midi_shutdown();
+    _exit(0);                                              // INT 21h/4C00
+}
+static void v2_fatal_10dba(uint8_t* s, uint16_t msg_off, uint16_t code) {
+    if (v2_fntest_vm_soft) { v2_fntest_vm_soft = 3; return; }
+    // 0DC0 sub_16546, 0DC3 sub_1754c: no DS effect in the model (the quit paths)
+    if (v2_data_handle) { fclose(v2_data_handle); v2_data_handle = nullptr; }   // 0DC6 INT 21h/3E [2BB2]
+    v2_vga_mode_restore_1686f(s);                                              // 0DCF sub_1686f
+    v2_snd_state_check_1292f(s);                                               // 0DD2 sub_1292f
+    std::string text = v2_dos_string(s, 0x2BBE) + v2_dos_string(s, msg_off);  // 0DD5, 0DDE
+    if (code) {                                                                // 0DE4 or ax,ax
+        const uint8_t al = (uint8_t)code, ah = (uint8_t)(code >> 8);
+        const uint8_t* lut = s + 0x931F;                                       // the word table: bx = nibble*2 - 6CE1h
+        s[0x2E59] = lut[(al & 0x0F) * 2];                                      // 0DF3 byte_2B339
+        s[0x2E58] = lut[(al & 0xF0) >> 3];                                     // 0E04 byte_2B338
+        s[0x2E57] = lut[(ah & 0x0F) * 2];                                      // 0E13 byte_2B337
+        s[0x2E56] = lut[(ah & 0xF0) >> 3];                                     // 0E24 byte_2B336
+        v2_gs_evac_mirror_span(s, 0x2E56, 4);                                  // stage-4 bridge
+        text += v2_dos_string(s, 0x2E45);                                      // 0E28
+    }
+    fputs(text.c_str(), stderr);                                               // the DOS console
+    v2_dos_exit_fatal(text);
+}
+// INT 21h's ax for the C library's errno of a failed open (3Dh), read (3Fh) and seek (42h) — DOS's
+// documented codes (2 file not found, 3 path not found, 4 too many open files, 5 access denied,
+// 6 invalid handle, 19h seek error, 1Eh read fault), 1Fh "general failure" for anything else
+static uint16_t v2_dos_err_open(int e) {
+    switch (e) {
+        case ENOENT: return 0x02;
+        case ENOTDIR: return 0x03;
+        case EMFILE: case ENFILE: return 0x04;
+        case EACCES: case EPERM: case EISDIR: return 0x05;
+        default: return 0x1F;
+    }
+}
+static uint16_t v2_dos_err_read(int e) { switch (e) { case EBADF: return 0x06; case EIO: return 0x1E; default: return 0x1F; } }
+static uint16_t v2_dos_err_seek(int e) { switch (e) { case EBADF: return 0x06; case EINVAL: return 0x19; default: return 0x1F; } }
+
 // Original: INT 21h/3Dh (open file), fread header, BIOS checksum, DOS version check,
 //           joystick calibration, copy sound driver flags from header.
+//           Its error exits (open: loc_12A8C, read / seek: loc_12A84, magic: loc_12A9D) go to
+//           sub_10dba and never return — v2_fatal_10dba above.
 static void v2_open_data_dat_12989(uint8_t* s) {
     // INT 21h/3Dh: open "DATA.DAT" for reading
     // Original stores handle in ds:0x2BB2
@@ -7646,10 +7792,14 @@ static void v2_open_data_dat_12989(uint8_t* s) {
     // the whole point is booting with DATA.DAT absent.
     if (!v2_assets_on()) {
         if (!v2_data_handle) {
-            v2_data_handle = fopen("DATA.DAT", "rb");
+            v2_data_handle = v2_open_data_dat();
         }
         if (!v2_data_handle) {
+            // 2991 JC loc_12A8C: bx = ax = the DOS error of the open, the message DS:2C34
+            // "Cannot find 'data.dat' file in the current directory."
+            const int e = errno;
             printf("V2-STARTUP: failed to open DATA.DAT\n");
+            v2_fatal_10dba(s, 0x2C34, v2_dos_err_open(e));
             return;
         }
     }
@@ -7674,21 +7824,37 @@ static void v2_open_data_dat_12989(uint8_t* s) {
         }
     }
     if (!hdr_from_assets) {
+        if (!v2_data_handle) {
+            // the open-asset tree without its record 0: nothing to read the header from — the
+            // port's own case (the archive was never opened), reported as the read fault
+            v2_fatal_10dba(s, 0x2CE7, 0x1E);
+            return;
+        }
+        // 299A INT 21h/3F bx=handle cx=8 dx=2BB4 through sub_128a9 (a PUSHF/POPF wrapper: CF is
+        // DOS's — set by an error, not by a short read: DOS returned the bytes it had, the magic
+        // check below catches a short file); 29A5 JC loc_12A84: bx = ax = the DOS error, the
+        // message DS:2CE7 "Unable to read data file."
         fseek(v2_data_handle, 0, SEEK_SET);
-        fread(s + DS_CHUNK_HDR, 8, 1, v2_data_handle);
+        clearerr(v2_data_handle);
+        size_t got = fread(s + DS_CHUNK_HDR, 1, 8, v2_data_handle);
         v2_gs_evac_mirror_span(s, DS_CHUNK_HDR, 8);  // stage-4 bridge
+        if (got < 8 && ferror(v2_data_handle)) { v2_fatal_10dba(s, 0x2CE7, v2_dos_err_read(errno)); return; }
 
-        // fseek to offset from header, fread 0x20 bytes → ds:0x86B0..0x86CF (game header)
-        // Original: INT 21h/42h (seek), INT 21h/3Fh (read 0x20 bytes)
+        // 29A9 INT 21h/42 al=0 cx:dx = [2BB6]:[2BB4] (the seek, from the start); 29B7 JC loc_12A84
+        // 29BB INT 21h/3F cx=20h dx=86B0 (the game header → ds:0x86B0..0x86CF); 29C6 JC loc_12A84
         uint32_t header_offset = *(uint32_t*)(s + DS_CHUNK_HDR);
-        fseek(v2_data_handle, header_offset, SEEK_SET);
-        fread(s + 0x86B0, 0x20, 1, v2_data_handle);
+        if (fseek(v2_data_handle, (long)header_offset, SEEK_SET)) { v2_fatal_10dba(s, 0x2CE7, v2_dos_err_seek(errno)); return; }
+        got = fread(s + 0x86B0, 1, 0x20, v2_data_handle);
         v2_gs_evac_mirror_span(s, 0x86B0, 0x20);  // stage-4 bridge: mute_src/sound_card/music_card/magic
+        if (got < 0x20 && ferror(v2_data_handle)) { v2_fatal_10dba(s, 0x2CE7, v2_dos_err_read(errno)); return; }
     }
 
-    // Validate magic: ds:0x86C4 == 0x6969
+    // 29CA CMP [86C4], 6969h; 29D0 JNZ loc_12A9D: bx = 0, the message DS:2D57
+    // "Data.dat has been corrupted. Please re-install."
     if (v2gs(s).datadat_magic() != 0x6969) {
         printf("V2-STARTUP: bad DATA.DAT magic %04X\n", v2gs(s).datadat_magic());
+        v2_fatal_10dba(s, 0x2D57, 0);
+        return;
     }
 
     // BIOS ROM checksum at F000:0000 (0x7FF8 words) → ds:0x86D0
