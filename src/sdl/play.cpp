@@ -155,6 +155,22 @@ void sound_init()
         fprintf(stderr, "Couldn't open audio: %s\n", SDL_GetError());
         return;
     }
+    // SDL_OpenAudio with an obtained spec takes any device format (SDL_AUDIO_ALLOW_ANY_CHANGE),
+    // and the native mix writes s16 stereo only: a device that comes back float32 or with
+    // another channel count (a browser's Web Audio is always float32) is reopened without an
+    // obtained spec — SDL then converts behind the callback, which sees the requested format.
+    // The device's own rate is still taken when only the rate differs (no resampling).
+    if (obtained.format != AUDIO_S16SYS || obtained.channels != 2) {
+        fprintf(stderr, "SOUND-INIT: device format 0x%X x%d is not s16 stereo, SDL converts\n",
+                obtained.format, obtained.channels);
+        SDL_CloseAudio();
+        spec.freq = obtained.freq;
+        if (SDL_OpenAudio(&spec, nullptr) < 0) {
+            fprintf(stderr, "Couldn't open audio: %s\n", SDL_GetError());
+            return;
+        }
+        obtained = spec;
+    }
 
     printf("SOUND-INIT: requested freq=%d format=0x%X channels=%d samples=%d\n",
            spec.freq, spec.format, spec.channels, spec.samples);
