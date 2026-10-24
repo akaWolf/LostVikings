@@ -8,8 +8,8 @@
 
 #include "v2_gamestate.h"
 #include "v2_coop.h"        // UX stage 8 step 2: the co-op line of the golden dump
-#ifndef _WIN32
-#include <sys/syscall.h>   // SYS_gettid for the evac diff lines (Linux; mingw has neither)
+#if __has_include(<sys/syscall.h>)
+#include <sys/syscall.h>   // SYS_gettid for the evac diff lines (Linux; mingw has neither, musl and Emscripten no SYS_gettid)
 #endif
 #include <unistd.h>
 #include <cstdio>
@@ -376,8 +376,8 @@ extern "C" int v2_gs_evac_check(const uint8_t* ds) {
     if (!v2_gs_evac_on(ds)) return 0;
     v2_gs_evac_check_calls++;
     int diffs = 0;
-#ifdef _WIN32
-#define V2_GS_TID() 0L                             // the diff line's thread id: Linux-only (no gettid on mingw)
+#ifndef SYS_gettid
+#define V2_GS_TID() 0L                             // the diff line's thread id: Linux-only (no gettid on mingw, Emscripten)
 #else
 #define V2_GS_TID() ((long)syscall(SYS_gettid))
 #endif
@@ -443,9 +443,10 @@ extern "C" int v2_gs_evac_check(const uint8_t* ds) {
 }
 
 // stage-4 diag: first desyncs seen AT READ TIME, with backtrace (glibc; the
-// message alone on mingw, which has no execinfo).
-#ifndef _WIN32
+// message alone where the libc has no execinfo: mingw, musl, Emscripten).
+#if __has_include(<execinfo.h>)   // glibc, macOS — not mingw, musl, Emscripten
 #include <execinfo.h>
+#define V2_GS_HAVE_BACKTRACE 1
 #endif
 extern "C" void v2_gs_evac_read_desync(const char* fld, uint32_t off, uint16_t mem, uint16_t img) {
     static int n = 0;
@@ -453,7 +454,7 @@ extern "C" void v2_gs_evac_read_desync(const char* fld, uint32_t off, uint16_t m
     n++;
     fprintf(stderr, "V2-EVAC-READ-DESYNC[%d]: %s @%04X member=%04X image=%04X\n",
             n, fld, off, mem, img);
-#ifndef _WIN32
+#ifdef V2_GS_HAVE_BACKTRACE
     void* bt[8]; int bn = backtrace(bt, 8);
     backtrace_symbols_fd(bt, bn, 2);
 #endif
