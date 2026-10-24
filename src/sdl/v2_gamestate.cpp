@@ -9,7 +9,7 @@
 #include "v2_gamestate.h"
 #include "v2_coop.h"        // UX stage 8 step 2: the co-op line of the golden dump
 #if __has_include(<sys/syscall.h>)
-#include <sys/syscall.h>   // SYS_gettid for the evac diff lines (Linux; mingw has neither, musl and Emscripten no SYS_gettid)
+#include <sys/syscall.h>   // SYS_gettid for the evac diff lines (glibc and musl have it; mingw has no <sys/syscall.h>; Emscripten has the header without SYS_gettid)
 #endif
 #include <unistd.h>
 #include <cstdio>

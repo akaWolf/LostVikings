@@ -159,12 +159,17 @@ void sound_init()
     // and the native mix writes s16 stereo only: a device that comes back float32 or with
     // another channel count (a browser's Web Audio is always float32) is reopened without an
     // obtained spec — SDL then converts behind the callback, which sees the requested format.
-    // The device's own rate is still taken when only the rate differs (no resampling).
+    // The device's own rate and period are kept (no resampling, one callback per device buffer).
+    // Windows takes this path on every default endpoint: SDL's WASAPI backend returns the
+    // endpoint's mix format (shared mode = 32-bit float), its channel count and its period.
     if (obtained.format != AUDIO_S16SYS || obtained.channels != 2) {
         fprintf(stderr, "SOUND-INIT: device format 0x%X x%d is not s16 stereo, SDL converts\n",
                 obtained.format, obtained.channels);
         SDL_CloseAudio();
         spec.freq = obtained.freq;
+        spec.samples = obtained.samples;   // the device's period (WASAPI: the endpoint's, ~480 frames at 48 kHz);
+                                           // a 512 callback over a 480 device buffer would drain the conversion
+                                           // stream unevenly (14 x 10 ms, then 20 ms)
         if (SDL_OpenAudio(&spec, nullptr) < 0) {
             fprintf(stderr, "Couldn't open audio: %s\n", SDL_GetError());
             return;
