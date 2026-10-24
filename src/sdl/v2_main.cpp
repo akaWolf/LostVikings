@@ -24,6 +24,9 @@
 #include "v2_gamestate.h"   // stage 4 II.c: evac refresh after teleport load
 #include "render_v2.h"   // V2_EXE_STATIC_SIZE
 #include <csignal>
+#ifndef _WIN32
+#include <unistd.h>   // _exit (glibc pulls it in through other headers, other libcs do not)
+#endif
 extern int v2_dbg_pre_vm_iter;   // game-frame counter (v2_vm.cpp), C++ linkage — declared once at file scope (clang rejects block externs inside extern "C" functions)
 
 extern bool need_quit;
