@@ -12,6 +12,8 @@ register stream a real Sound Blaster Pro got in 1992.
 
 [![Build](https://github.com/akaWolf/LostVikings/actions/workflows/build.yml/badge.svg)](https://github.com/akaWolf/LostVikings/actions/workflows/build.yml)
 
+**Discussion:** the Telegram chat [t.me/LostVikingsRE](https://t.me/LostVikingsRE) — questions, bug reports, the reverse engineering itself; GitHub issues work as well.
+
 ![Intro](imgs/intro.png)
 ![Level 1](imgs/level_1.png)
 
