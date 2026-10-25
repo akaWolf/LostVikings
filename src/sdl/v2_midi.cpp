@@ -2,6 +2,7 @@
 #include "v2_midi.h"
 #include "v2_sc55.h"
 #include "v2_mt32.h"
+#include "v2_timing.h"   // the AIL tick: two per refresh (v2_ail_tick_hz)
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
@@ -49,7 +50,7 @@ void v2_midi_shutdown(void) {
     std::lock_guard<std::mutex> lk(g_mtx);
     if (g_dump_state != 1 || !g_dump_path) return;
     g_dump_state = 2;
-    double hz = v2_nopl_get_tick_hz(); if (hz <= 0.0) hz = 125.0;
+    double hz = v2_nopl_get_tick_hz(); if (hz <= 0.0) hz = v2_ail_tick_hz();
     const uint16_t division = (uint16_t)(hz + 0.5);           // one driver tick = one MIDI tick; a quarter = one second
     std::vector<uint8_t> trk;
     put_vlq(trk, 0); trk.insert(trk.end(), {0xFF, 0x51, 0x03, 0x0F, 0x42, 0x40});   // tempo 1 000 000 us per quarter

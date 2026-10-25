@@ -19,7 +19,9 @@
 //   stop  = sub_17912 slot body : fnAB(drv,h) → fn98(drv,h) →
 //           [si-66F4]=FFFF, [si-66EA]=FFFF
 //   fade  = sub_178f1 : fnB1(drv,h,0,0x3E8) (sub_1C7BD volume fade to 0 over 1s)
-//   tick  = fn67(drv) at [desc+0x14]+5 Hz (= 125): in the game build on the
+//   tick  = fn67(drv) twice per refresh (120 Hz, v2_timing.h — the original's
+//           PIT slot at [desc+0x14]+5 = 125 Hz is locked to the VGA retrace every
+//           second tick by its interrupt handler): in the game build on the
 //           audio thread at the ticks' sample positions (v2_nopl_mix), in the
 //           frame mode (test / headless / lockstep) from the game thread by
 //           v2_nopl_pump; OPL writes route into the Nuked OPL3
@@ -50,6 +52,7 @@
 #include "v2_gamestate.h"
 #include "v2_mt32.h"        // UX stage 11: the MT-32 world (a second driver instance fed with the same calls)
 #include "v2_ui.h"          // 2026-09-11: SFX VOL (v2_options.sfx_volume) applied after every effect's start
+#include "v2_timing.h"      // the AIL tick: two per refresh (v2_ail_tick_hz)
 
 // ---------------------------------------------------------------------------
 // v2_ail_interp.cpp C API
@@ -464,11 +467,18 @@ extern "C" int v2_ail_boot(uint8_t* s, uint8_t* snd, uint32_t snd_size,
                           v2_ail_interp_peek((uint16_t)(doff + 0x10)),
                           v2_ail_interp_peek((uint16_t)(doff + 0x12)) };
         sh_call(0x66, a, 5);
-        // Tick rate: fn66 stub reads [desc+0x14] and adds 5 (sub_1c61b eip
-        // 0xB71-0xB7A) before registering the seg002 timer slot. SBPFM: 120+5.
+        // Tick rate. The fn66 stub reads [desc+0x14] and adds 5 (sub_1c61b eip
+        // 0xB71-0xB7A) for the seg002 timer slot (SBPFM: 120+5, PIT count 9546),
+        // but the slot does not run free: the timer interrupt (0D4F:044B) calls
+        // sub_1bedc first, and every second interrupt that one parks the PIT at
+        // 0x7FFF, waits for the VGA vertical retrace (3DA bit 3), restores the
+        // count and runs the frame callback sub_1797b — the tick is two per
+        // refresh (v2_timing.h V2_AIL_TICKS_PER_REFRESH; the DOS game under
+        // DOSBox: 8.373 ms per XMIDI unit, a free 125 Hz would be 8.000).
         uint16_t hz = v2_ail_interp_peek((uint16_t)(doff + 0x14));
         if (hz != 0xFFFF && hz) {
-            g_tick_hz = (double)(hz + 5);
+            g_tick_hz = v2_ail_tick_hz();
+            if (hz != 120) fprintf(stderr, "V2-AIL: descriptor rate %u (+5) — the tick stays two per refresh, %.1f Hz\n", hz, g_tick_hz);
             v2_nopl_set_tick_hz(g_tick_hz);
         }
     }
@@ -769,9 +779,10 @@ static int v2_ail_orig_lazy_init() {
     v2_ail_interp_set_code_para(blob_seg);
     g_orig_inited = true;
     if (g_tick_hz <= 0.0) {
-        // [desc+0x14]+5 exactly like the fn66 stub computes (sub_1c61b).
+        // two ticks per refresh (v2_timing.h), as the game build above; the
+        // descriptor's own rate is [desc+0x14] (120) + the stub's 5.
         uint16_t hz = v2_ail_interp_peek((uint16_t)(0xC7 + 0x14));
-        if (hz && hz != 0xFFFF) { g_tick_hz = (double)(hz + 5); v2_nopl_set_tick_hz(g_tick_hz); }
+        if (hz && hz != 0xFFFF) { g_tick_hz = v2_ail_tick_hz(); v2_nopl_set_tick_hz(g_tick_hz); }
     }
     fprintf(stderr, "V2-AIL-ORIG: bridge instance up (blob seg=%04X ds=%04X)\n",
             blob_seg, ds_val);

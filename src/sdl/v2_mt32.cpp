@@ -2,6 +2,7 @@
 #include "v2_mt32.h"
 #include "v2_ui.h"
 #include "v2_sc55.h"
+#include "v2_timing.h"   // the AIL tick: two per refresh (v2_ail_tick_hz)
 #include <atomic>
 #include <cstdio>
 #include <cstdlib>
@@ -99,7 +100,7 @@ uint8_t  g_cache[0x10000];       // the timbre cache, sized by the MT-32 driver'
 uint16_t g_drv = 0;              // the driver id the game uses in every call (args[0])
 uint16_t g_desc_off = 0;         // the MT-32 driver's descriptor (fn64) inside its blob
 uint16_t g_cache_size = 0;       // its fn99 answer
-double   g_tick_hz = 0.0;        // [desc+0x14] + 5 (the fn66 stub's sum, sub_1c61b)
+double   g_tick_hz = 0.0;        // two ticks per refresh (v2_timing.h v2_ail_tick_hz); the descriptor's [desc+0x14] + 5 is the original's PIT slot, retrace-locked every second tick
 uint64_t g_ticks = 0, g_tick_base = 0;
 bool     g_preloaded = false;
 int16_t  g_slot0 = -1;           // the world's [990C]: the music slot's handle — the preload's after init, the music's after its fn97
@@ -355,7 +356,7 @@ void run_call(const Ent& e) {
         const uint16_t ax = icall(0x64, a, argc); const uint16_t dx = v2_ail_mt32i_last_dx();
         g_desc_off = ax;
         const uint16_t hz = v2_ail_mt32i_peek((uint16_t)(g_desc_off + 0x14));
-        if (hz && hz != 0xFFFF) g_tick_hz = (double)(hz + 5);
+        if (hz && hz != 0xFFFF) g_tick_hz = v2_ail_tick_hz();   // two per refresh, as the FM world (v2_timing.h); the descriptor says 120
         if (trace_on()) fprintf(stderr, "V2-MT32: fn64 -> desc %04X:%04X, tick %.0f Hz\n", dx, ax, g_tick_hz);
         return;
     }
@@ -683,7 +684,7 @@ bool v2_mt32_mix(int16_t* out, uint32_t frames, uint32_t rate) {
 void v2_mt32_shutdown() {
     if (!g_dump.on || !g_dump.path) return;
     g_dump.on = false;
-    double hz = g_tick_hz > 0.0 ? g_tick_hz : 125.0;
+    double hz = g_tick_hz > 0.0 ? g_tick_hz : v2_ail_tick_hz();
     const uint16_t division = (uint16_t)(hz + 0.5);
     std::vector<uint8_t> trk; put_vlq(trk, 0); trk.insert(trk.end(), {0xFF, 0x51, 0x03, 0x0F, 0x42, 0x40});
     trk.insert(trk.end(), g_dump.trk.begin(), g_dump.trk.end());

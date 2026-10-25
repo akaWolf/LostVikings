@@ -30,7 +30,7 @@
 //     with the played position and land in the next chunk (one buffer of
 //     latency, like the DOS OUT after the device buffer). The game-thread
 //     pump v2_nopl_pump() keeps the FRAME mode only: the deterministic
-//     125/60-per-frame accumulator of the test / headless / lockstep worlds
+//     two-per-frame accumulator of the test / headless / lockstep worlds
 //     (and of a game build without an audio device), where the ticks are a
 //     pure function of the frame counter. Until 2026-10-07 the game-thread
 //     pump ticked the real-time mode too, due by the played position: every
@@ -42,8 +42,10 @@
 //   * the audio thread renders ONE Nuked OPL3 chip; C0 pan bits and 4-op
 //     routing behave exactly as on the DOSBox reference.
 //
-// Tick rate comes from the driver descriptor ([desc+0x14]+5 = 125 Hz for
-// SBPFM) via v2_nopl_set_tick_hz — there is no PIT here to intercept.
+// Tick rate: two per refresh (v2_timing.h V2_AIL_TICKS_PER_REFRESH, 120 Hz) via
+// v2_nopl_set_tick_hz — the original's PIT slot ([desc+0x14]+5 = 125 Hz) is
+// locked to the VGA retrace every second tick by its interrupt handler, and
+// there is no PIT here to intercept.
 //
 // Verification channel ("shadow-VGA for sound"): V2_OPL_TRACE=<file> logs
 // every register write as "<tick> <chip> <reg> <val>" — byte-comparable
@@ -94,7 +96,7 @@ static int          g_trace_resolved = 0;
 // a loaded state — a lockstep joiner, the host's LOAD, the debug slots — puts
 // the chip back to the registers the copied world had (v2_nopl_regs_replay).
 // ... plus the frame-mode tick accumulator at +776 (8-aligned): the phase of
-// the sequencer's 125/60-per-frame counting is game state too — a joiner
+// the sequencer's two-per-frame counting is game state too — a joiner
 // with another phase ticks the driver a frame early or late and its DS words
 // drift from the host's.
 alignas(8) static uint8_t g_oplr[2 + 2 * 256 + 1 + 256 + 5 + 8];
@@ -422,9 +424,10 @@ extern "C" void v2_nopl_out(uint16_t port, uint8_t val) {
 // below); this game-thread pump then only keeps the quit choke.
 //
 // The frame mode (V2_AIL_FRAME_TICKS=1, a lockstep game, the test / headless
-// builds and a game build without an audio device) ticks HERE, 125/60 per
-// frame: a fully deterministic driver DS state (the ticks are a pure function
-// of the frame counter), at the cost of tempo tracking the frame rate.
+// builds and a game build without an audio device) ticks HERE, two per
+// frame (g_tick_hz / 60): a fully deterministic driver DS state (the ticks are
+// a pure function of the frame counter), at the cost of tempo tracking the
+// frame rate.
 static const double NOPL_FRAME_HZ = 60.0;
 // (g_tick_acc lives in g_oplr, see the register file above)
 

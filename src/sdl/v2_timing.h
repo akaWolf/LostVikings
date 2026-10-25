@@ -25,6 +25,20 @@
 
 // The VGA refresh of Mode X 320x240: the tick period when no display vsync is available.
 static const double V2_TICK_HZ = 60.0;
+// The AIL sound tick (fn67 of the .ADV driver): TWO per refresh. The original's
+// timer interrupt (seg002 0D4F:044B) calls sub_1bedc first, and every second
+// interrupt that one parks the PIT at 0x7FFF, busy-waits for the VGA vertical
+// retrace (3DA bit 3), restores the slot's count and runs the frame callback
+// sub_1797b (the pixel panning, DEC word_3287C, the palette cycles) — the game's
+// frame is two timer ticks locked to the retrace, and the PIT's own rate (the
+// driver descriptor's 120 + the fn66 stub's 5 = 125 Hz, count 9546, sub_1c61b /
+// sub_1c0e0) only runs free between the syncs. Measured on the DOS game under
+// DOSBox 0.74 (the MT-32 MIDI capture of 2026-10-27): 8.373 ms per XMIDI unit =
+// half of its 59.71 Hz Mode X frame on every channel of every track; a free
+// 125 Hz tick (8.000 ms) plays the music and the effects 4.7 % fast. The port
+// has no PIT: the tick is derived from the refresh.
+static const double V2_AIL_TICKS_PER_REFRESH = 2.0;
+static inline double v2_ail_tick_hz(void) { return V2_TICK_HZ * V2_AIL_TICKS_PER_REFRESH; }
 // Presenter pacing (the compose + blit cadence) without a vsync present.
 static const uint32_t V2_PRESENT_MS = 15;
 // Main-loop frame budget (outer pacing target; the wait loops inside the
