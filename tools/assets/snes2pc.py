@@ -36,13 +36,17 @@ Conversion model (level -> a donor PC slot, same world):
     PC-semantics);
   - palettes: the level's SNES palette list composes a CGRAM image;
     colors 0..127 (BG) convert BGR555 -> VGA6 into one new palette
-    chunk written over an 'unreferenced' archive id; sprite colors
-    128+ come from the donor's own palette entries (PC sprites always
-    draw at 0x80+ — proven by the 34DC codec flags model);
-  - header: donor head (music/scroll fields) + TR33 dims and viking
-    start; TR33 spawns and palette anims; donor banks/anim chunk
-    sections (they cover all classes); SNES-only head refs @+0x39/+0x3D
-    are reset to 0xFFFF like every PC level.
+    chunk written over an 'unreferenced' archive id; the sprite rows
+    128+ are the SNES level's own entries, each as the PC palette chunk
+    carrying its colours (snes_sprite_palettes — PC sprites always draw
+    at 0x80+, proven by the 34DC codec flags model, on the row their
+    spawn record picks, so the rows must be the SNES spawn table's own);
+  - header: the SNES head's bytes but for the converter's own fields
+    (the next slot, the chunk refs, the SNES-only refs @+0x39/+0x3D
+    reset to 0xFFFF like every PC level) over the donor's base; the
+    SNES spawns and palette anims; the donor's banks/anim chunk
+    sections completed with what the level's classes need
+    (complete_lists).
 
 Usage:
   snes2pc.py convert 0x16C --donor 002A --scratch /tmp/lv_edit_scratch
@@ -358,16 +362,31 @@ def convert_level(snes_hdr_id, donor_cid, scratch, pal_chunk=PAL_CHUNK_DEFAULT,
                         1 << (7 - ((ty & 3) * 2 + (tx >> 2)))
         pc_masks += m
 
-    # ---- palettes: BG 0..127 from SNES, sprites 128+ from the donor ----
+    # ---- palettes: BG 0..127 from the SNES CGRAM, the sprite rows 128+ the SNES level's own ----
     cg = compose_cgram(rom, st["pal_list"])
     bg = bytearray()
     for c in range(128):
         r, g, b = bgr555_to_vga6(cg[c])
         bg += bytes((r, g, b))
     new_pal_list = [{"chunk": pal_chunk, "start": 0}]
-    for e in dst["pal_list"]:
-        if e["start"] >= 128:
-            new_pal_list.append(dict(e))
+    # The sprite rows are the SNES level's own palette entries at 128 and above, each as the PC
+    # palette chunk carrying its colours (snes_sprite_palettes). They used to be the donor's: the
+    # row a sprite draws on is chosen by its spawn record — a pool sprite's anim word (SNDS's guard,
+    # class 69 with anim 45, draws on row 224; PC14's with anim 43 on row 208) — i.e. by the SNES
+    # spawn table kept above, so the donor's rows coloured the donor's enemies: SNDS's row 224 held
+    # JMNN's 102 (black, red and six pinks for JMNN's own enemy) where the SNES level loads 107's
+    # blue and gold (issue #6), and PDDY's donor loaded nothing on row 192 where the SNES level has
+    # 104 (the classes 82/9E/9F/C6 draw there). A row no PC chunk carries — the SNES DE's sprites
+    # are the PC's art under the PC's palettes, so the console levels have none; the console
+    # finale's crowd row 192 is its SNES-only sprites' — is left with a note to the step that owns
+    # it (finale_integrate converts the crowd's bank and writes that row as a chunk of the pack's
+    # own); the judge, content_check.py, holds the finished pack's SNES-sourced levels to the rule.
+    for start, (chunk, d, d2, n) in sorted(snes_sprite_palettes(rom, tr).items()):
+        if d > PAL_MATCH_MAX or (d2 is not None and d2 < 2 * d):
+            print(f"  ! sprite palette row {start}: no PC palette chunk carries the SNES colours "
+                  f"(closest {chunk:03X} at {d}, next {d2}), left to the step that owns it")
+            continue
+        new_pal_list.append({"chunk": chunk, "start": start})
 
     # ---- assemble the converted stripe over the donor head ----
     head = bytearray(dhead)
