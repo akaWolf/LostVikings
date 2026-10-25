@@ -157,6 +157,76 @@ def compose_cgram(rom, pal_list):
     return cg
 
 
+def complete_lists(scratch, script_id, script_raw, stripe):
+    """The donor's sprite bank and anim chunk lists of the converted stripe `stripe` (a
+    parse_stripe dict carrying the converted head and spawns) completed with what the level's
+    classes need — tools/assets/content_check.py's derivation: the spawn table, the three
+    vikings, the head's class and the children their code spawns, each class's reach by the
+    disassembler's walk, under the judge's calibration on the PC levels (a lookup the original's
+    own levels leave unresolved is left alone). The donor's lists only ever covered the DONOR's
+    classes: issue #3's audit found TMPL's class 37 (the sand column) without its bank 13D,
+    RVTS's 1A/9B/A7/A9 and PDDY's 9F without theirs, children of SNDS/TMPL/PDDY classes without
+    theirs, SNDS's 67/69 and PDDY's 82 without their anim chunks 0FF/108/105 — objects that
+    never spawn (sub_12f82's miss frees the slot, sub_13809) or wear another chunk's frames
+    (anim command 23's miss takes entry 0). A new entry copies the bytes of a PC level that
+    lists the chunk, one of the same world first: the loaders read the id alone and step over
+    the rest (sub_1167a: mov ax,[di+25F6h] .. add di,6; sub_116ae: mov ax,[di+25F6h] .. add
+    di,5 — the SNES layout words the PC format kept, a tile address and the bank's tile dims,
+    which no PC code reads: the table has no fixed DS address and sub_11080's five stage
+    walkers are the only code that reaches it). A chunk no PC level lists is left alone with a
+    note (a later step's own, such as the finale integration's): the judge of the finished pack
+    reports it if it stays missing. Returns (sprite_banks, anim_chunks); the engine's tables
+    (32 banks, 16 chunks) are asserted, the byte budgets are the judge's warnings after the
+    pack."""
+    import content_check as CC
+    judge = CC.Judge(CC.Pack(scratch))
+    try:
+        judge.calibrate()
+        banks = [dict(b) for b in stripe["sprite_banks"]]
+        achunks = [dict(a) for a in stripe["anim_chunks"]]
+        lv = CC.Level("converted", LR.serialize_stripe(stripe), script_id, script_raw)
+        sprites, anims, norec, classes = judge.needs(lv)
+        child_only = classes - set(lv.classes)
+        entry_b, entry_a = {}, {}     # chunk -> the entry of a PC level, the donor world's levels first
+        for l in sorted(judge.pc_levels(), key=lambda l: (l.script_cid != script_id, l.slot)):
+            for b in l.st["sprite_banks"]:
+                entry_b.setdefault(b["chunk"], dict(b))
+            for a in l.st["anim_chunks"]:
+                entry_a.setdefault(a["chunk"], dict(a))
+        have = {b["chunk"] for b in banks}
+        for spr, clss in sorted(sprites.items()):
+            if spr in have:
+                continue
+            if all(c in child_only and judge.is_dormant(lv, c, spr, judge.dormant_spr) for c in clss):
+                continue
+            if spr not in entry_b:
+                # no PC level lists it: a chunk of a later step's own (the finale integration's
+                # class 4E -> 0F0, added when it rewrites the stripe) — the judge of the finished
+                # pack reports it if it stays missing
+                print(f"  ! sprite bank {spr:03X} for classes {judge.class_list(clss, child_only)}: no PC level lists it, left to the step that owns it")
+                continue
+            banks.append(dict(entry_b[spr]))
+            have.add(spr)
+            print(f"  + sprite bank {spr:03X} for classes {judge.class_list(clss, child_only)}")
+        have = {a["chunk"] for a in achunks}
+        for res, clss in sorted(anims.items()):
+            if res in have:
+                continue
+            if all(judge.is_dormant(lv, c, res, judge.dormant) for c in clss):
+                continue
+            if res not in entry_a:
+                print(f"  ! anim chunk {res:03X} for classes {judge.class_list(clss, child_only)}: no PC level lists it, left to the step that owns it")
+                continue
+            achunks.append(dict(entry_a[res]))
+            have.add(res)
+            print(f"  + anim chunk {res:03X} for classes {judge.class_list(clss, child_only)}")
+        assert len(banks) <= CC.SPRITE_RES_MAX, f"{len(banks)} sprite banks, the table holds {CC.SPRITE_RES_MAX}"
+        assert len(achunks) <= CC.ANIM_CHUNK_MAX, f"{len(achunks)} anim chunks, the table holds {CC.ANIM_CHUNK_MAX}"
+        return banks, achunks
+    finally:
+        judge.close()
+
+
 def convert_level(snes_hdr_id, donor_cid, scratch, pal_chunk=PAL_CHUNK_DEFAULT,
                   new_cids=None, next_level=None, music=None):
     """new_cids: dict(hdr, map, tiles, gtld, pal) of NEW archive ids —
@@ -278,6 +348,12 @@ def convert_level(snes_hdr_id, donor_cid, scratch, pal_chunk=PAL_CHUNK_DEFAULT,
         head[0x05] = music & 0xFF
     for o in range(0x07, 0x12):          # viking start block (sel/X/Y/flags/arg)
         head[o] = tr[o]
+    # +0x12 = the initial switch/trigger bits: the head lands on DS:25B3, this word on
+    # DS:25C5, and the switch classes read it at spawn (a sand column with its bit set starts
+    # solid, a ramp corner switched). The SNES head's own value, not the donor's: TMPL 0002
+    # against the donor 0055's 0000 let the Temple's column crumble as the level began
+    # (issue #3); RVTS 001E against 0003, PDDY 00C0 against 00B1.
+    head[0x12], head[0x13] = tr[0x12], tr[0x13]
     head[0x29:0x2D] = tr[0x29:0x2D]      # dims (+0x2D byte kept from SNES)
     if new_cids:
         # own chunk refs (the donor head carried the donor's)
@@ -303,7 +379,8 @@ def convert_level(snes_hdr_id, donor_cid, scratch, pal_chunk=PAL_CHUNK_DEFAULT,
     out["pal_list"] = new_pal_list
     out["pal_anim_en"] = st["pal_anim_en"]
     out["pal_anims"] = st["pal_anims"]
-    # banks / anim chunks / rest: donor's own (cover all classes)
+    # banks / anim chunks: the donor's own plus what THIS level's classes need (complete_lists)
+    out["sprite_banks"], out["anim_chunks"] = complete_lists(scratch, script_id, script_raw, out)
     new_raw = LR.serialize_stripe(out)
 
     # ---- write into the scratch tree ----
