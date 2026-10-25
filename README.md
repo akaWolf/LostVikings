@@ -236,14 +236,21 @@ its own data — the spawn table, the class records of its script, the
 animation code of those classes and the children they spawn — and fails
 the build when a sprite bank or an animation chunk a level needs is not
 in its lists (an object that never spawns, a wrong sprite), when the
-engine's tables overflow, or when a converted level's head drifted from
-its SNES source; the original's own quirks are calibrated out on the PC
-levels first. `make content-check` repeats the report; `make
-content-smoke` is the dynamic half (`tests/content_smoke.sh`): the game
-binary starts every level of the pack under SDL's dummy drivers, spawns
-every entry of its spawn table once (`V2_SPAWN_SWEEP=1`), and any
-`V2-SPAWN-FAIL` / `V2-ANIM-RES-MISS` the engine prints that the judge did
-not expect fails the slot.
+engine's tables overflow, or when a converted level's head, spawn table,
+palette animation or sprite palette rows drifted from its SNES source
+(the sprite rows are the PC palette chunks whose colours the SNES level
+loads: a donor level's rows colour the donor's enemies, not these); the
+original's own quirks are calibrated out on the PC levels first. `make
+content-check` repeats the report; `make content-smoke` is the dynamic
+half (`tests/content_smoke.sh`): the game binary starts every level of
+the pack under SDL's dummy drivers, spawns every entry of its spawn table
+once (`V2_SPAWN_SWEEP=1`), and any `V2-SPAWN-FAIL` / `V2-ANIM-RES-MISS`
+the engine prints that the judge did not expect fails the slot. `make
+content-regress` (`tests/content_regress.sh`) replays the reported cases
+on the pack — the sand column of TMPL standing while the vikings walk up
+to it — and `make sound-header-check` (`tests/sound_header_check.sh`)
+plays copies of `DATA.DAT` whose SETUP header says "no sound card" or
+another port, which must sound exactly like the file as it is.
 
 The game's frame pacing follows the display: the DOS game renders three
 sub-frames per game frame, one per 60 Hz refresh of Mode X, moving the

@@ -1,0 +1,6 @@
+# tests/content/tmpl_walk.inp — TMPL (the pack's slot 50) from its start: right up the slope to the ladder,
+# then down it (tests/content_regress.sh; frames = game ticks, V2_START_LEVEL puts the level up at frame 2)
+20 KD RIGHT
+260 KU RIGHT
+270 KD DOWN
+520 KU DOWN

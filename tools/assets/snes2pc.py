@@ -157,6 +157,41 @@ def compose_cgram(rom, pal_list):
     return cg
 
 
+# A sprite palette row of a SNES level as the PC palette chunk carrying the same colours: the distance
+# (over 16 colours, |dR|+|dG|+|dB| in VGA6 steps) of a true match is the BGR555 -> VGA6 rounding alone
+# (the five console levels and the twelve balance variants: 14..145), the runner-up 370 or more away.
+PAL_MATCH_MAX = 256
+
+
+def snes_sprite_palettes(rom, snes_raw):
+    """The sprite palette rows (starts >= 128) of a SNES level stripe as PC palette chunks:
+    {start: (chunk, dist, second, n)} — for each entry of the stripe's palette list at 128 or above,
+    its colours out of the composed CGRAM (BGR555 -> VGA6) against every 16-colour palette chunk a PC
+    level loads (level_render.pal_chunk_union): the closest chunk, its distance, the runner-up's
+    distance and the entry's colour count. The SNES DE's sprites are the PC's art under the PC's
+    palettes (every row of every converted level matches one PC chunk within the rounding and no other
+    within twice that), so a level converted on a PC donor must load on each row the chunk the SNES
+    level loads there: the row a sprite draws on is chosen by its spawn record (a pool sprite's anim
+    word — SNDS's guard, class 69 with anim 45, draws on row 224; PC14's with anim 43 on row 208),
+    i.e. by the SNES spawn table the converter keeps, so a donor's rows fit the donor's spawns, not
+    these (issue #6: SNDS's row 224 held JMNN's 102 — black, red and six pinks for JMNN's own enemy —
+    where the SNES level loads 107's blue and gold; PDDY's donor loads nothing on row 192, where the
+    SNES level has 104 for the classes 82/9E/9F/C6). The judge compares the result with a converted
+    stripe's list (content_check.py), the converter takes it for the stripe."""
+    st = LR.parse_stripe(snes_raw)
+    cg = compose_cgram(rom, st["pal_list"])
+    chunks = {cid: p for cid, p in LR.pal_chunk_union().items() if len(p) >= 48}
+    out = {}
+    for e in st["pal_list"]:
+        if e["start"] < 128:
+            continue
+        n = len(rom.chunk(e["chunk"])) // 2
+        want = b"".join(bytes(bgr555_to_vga6(cg[c])) for c in range(e["start"], min(e["start"] + n, 256)))
+        ranked = sorted((sum(abs(a - b) for a, b in zip(want[:48], p[:48])), cid) for cid, p in chunks.items())
+        out[e["start"]] = (ranked[0][1], ranked[0][0], ranked[1][0] if len(ranked) > 1 else None, n)
+    return out
+
+
 def complete_lists(scratch, script_id, script_raw, stripe):
     """The donor's sprite bank and anim chunk lists of the converted stripe `stripe` (a
     parse_stripe dict carrying the converted head and spawns) completed with what the level's

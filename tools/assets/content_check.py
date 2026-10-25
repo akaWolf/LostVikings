@@ -45,7 +45,18 @@ converter's choice of a donor head:
             (+0x16 next slot, +0x2E..+0x33 chunk refs, +0x39..+0x3E parallax
             refs); its spawn table and palette animation equal the source's;
   palettes  the palette rows above 128 that every PC level of the world loads
-            (the viking / HUD rows) are present.
+            (the viking / HUD rows) are present; a level converted from the
+            SNES image loads on every sprite row (128+) the PC palette chunk
+            whose colours the SNES level loads there (snes2pc.py
+            snes_sprite_palettes: the SNES DE's sprites are the PC's art under
+            the PC's palettes, each SNES row matches one PC chunk within the
+            BGR555 -> VGA6 rounding and no other) — the row a sprite draws on
+            is chosen by its spawn record (a pool sprite's anim word), i.e. by
+            the SNES spawn table the converter keeps, so a donor's rows fit the
+            donor's spawns and not these (issue #6: SNDS's guard, class 69 on
+            row 224, under JMNN's 102 instead of 107 — pink and white for blue
+            and gold; PDDY with nothing on row 192, where the SNES loads 104);
+            a row the pack loads and the SNES level does not is a warning.
 
 Self-calibration: the same checks run first over every level of the EXE's
 own tables (the 37 playable levels and the special slots up to 0x2F — the
@@ -502,6 +513,23 @@ class Judge:
                 err.append("spawn table differs from the SNES source")
             if (sst["pal_anim_en"], sst["pal_anims"]) != (lv.st["pal_anim_en"], lv.st["pal_anims"]):
                 err.append("palette animation differs from the SNES source")
+            # the sprite palette rows (128+): the SNES level's own, as the PC chunks carrying their
+            # colours (snes2pc.snes_sprite_palettes) — the row a sprite draws on is the spawn record's
+            # choice, and the spawn table is the SNES one, so the SNES palette list is the one that fits
+            # it; a donor's fits the donor's spawns (issue #6: SNDS's guard on row 224 under JMNN's 102)
+            if self.rom is not None:
+                import snes2pc as S2   # lazily: snes2pc imports this module for complete_lists
+                want_rows = S2.snes_sprite_palettes(self.rom, src)
+                have_rows = {s: c for c, s in pal_entries(lv.st) if s >= 128}
+                for s, (chunk, d, d2, n) in sorted(want_rows.items()):
+                    if d > S2.PAL_MATCH_MAX or (d2 is not None and d2 < 2 * d):
+                        err.append(f"sprite palette row {s}: no PC palette chunk carries the SNES level's colours (closest {chunk:03X} at {d}, next at {d2})")
+                    elif s not in have_rows:
+                        err.append(f"sprite palette row {s} missing — the SNES level loads {chunk:03X}'s colours there; the sprites on that row draw with whatever the DAC holds")
+                    elif have_rows[s] != chunk:
+                        err.append(f"sprite palette row {s}: {have_rows[s]:03X} loaded where the SNES level loads {chunk:03X}'s colours — the sprites on that row wear the wrong palette")
+                for s in sorted(set(have_rows) - set(want_rows)):
+                    warn.append(f"sprite palette row {s}: {have_rows[s]:03X} loaded, the SNES level loads nothing there (a donor's row, unused)")
         # palette rows every PC level of the world loads
         want = self.world_pal_rows.get(lv.script_cid, set())
         have = {s for _, s in pal_entries(lv.st) if s >= 128}

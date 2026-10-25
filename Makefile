@@ -422,7 +422,7 @@ C_OBJS   := $(patsubst %.c,   $(OBJDIR)/%.o, $(C_SRCS))
 ALL_OBJS := $(CXX_OBJS) $(C_OBJS)
 DEPS     := $(ALL_OBJS:.o=.d)
 
-.PHONY: all clean keymap_editor content content-check content-smoke
+.PHONY: all clean keymap_editor content content-check content-smoke content-regress sound-header-check
 
 all: $(EXE_NAME)
 
@@ -442,6 +442,10 @@ content-check:
 	python3 tools/assets/content_check.py --content content
 content-smoke:
 	bash tests/content_smoke.sh
+content-regress:
+	bash tests/content_regress.sh
+sound-header-check:
+	bash tests/sound_header_check.sh
 
 # Standalone keymap editor — links ONLY against SDL2 + v2_keymap.cpp. No m2c,
 # no adlmidi, no game logic. Independent of HEADLESS / TEST toggles.
