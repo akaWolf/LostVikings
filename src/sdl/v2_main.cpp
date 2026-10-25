@@ -25,6 +25,13 @@
 #include "render_v2.h"   // V2_EXE_STATIC_SIZE
 #include <csignal>
 #ifdef _WIN32
+// The console's output code page (main): SetConsoleOutputCP, and GetConsoleMode/GetStdHandle for the test
+// whether the log reaches a console at all. WIN32_LEAN_AND_MEAN leaves out the halves of <windows.h> nothing
+// here uses (winsock.h, ole2.h, shellapi.h, mmsystem.h, ...) and with them a third of the macro record the
+// -ggdb3 build writes into the object (.debug_macro of v2_main.o: 1169 KB against 1557 KB with the full
+// header, 506 KB without it). NOMINMAX is not needed: libstdc++'s os_defines.h for the mingw target defines
+// it already, so <windows.h> never defines min/max in a C++ unit here (a second definition only draws a warning).
+#define WIN32_LEAN_AND_MEAN
 #include <windows.h>  // SetConsoleOutputCP
 #else
 #include <unistd.h>   // _exit (glibc pulls it in through other headers, other libcs do not)
@@ -165,7 +172,22 @@ void v2_only_clean_exit(const char* why) {   // C++ linkage: the callers declare
 
 int main(int argc, char* argv[]) {
 #ifdef _WIN32
-    SetConsoleOutputCP(CP_UTF8); // output code page to UTF-8
+    // The Windows game build is a console program (-mconsole: the Makefile's choice over SDL2main's WinMain),
+    // so the log goes to a console window — the one the game is started from, or its own for a double-clicked
+    // exe. A console decodes what is written to it by its output code page, by default the system's OEM page
+    // (437 on an English Windows, 850, 866), while the engine's string literals are UTF-8: the em dash E2 80 94
+    // showed as `ΓÇö` (437), the arrows and the ± of the log likewise; 65001 makes the console decode UTF-8.
+    // The page is the console's property, not the process's — a console the game was started from keeps it
+    // after the game exits, as after `chcp 65001`; the console of a double-clicked exe closes with the game —
+    // so it is changed only when the log actually reaches a console: GetConsoleMode succeeds on a console
+    // handle alone and fails on a file, a pipe or no handle at all (`vikings.exe > log.txt` with the errors
+    // still on the window sets it as before; both streams redirected leave the window as it was — the bytes
+    // in the file are UTF-8 either way).
+    {
+        DWORD con_mode;
+        if (GetConsoleMode(GetStdHandle(STD_OUTPUT_HANDLE), &con_mode) || GetConsoleMode(GetStdHandle(STD_ERROR_HANDLE), &con_mode))
+            SetConsoleOutputCP(CP_UTF8); // output code page to UTF-8
+    }
 #endif
     // stdout line-buffered in every build: a run log that captures stdout and stderr
     // together otherwise gets a stdout buffer chunk written in the middle of a line
