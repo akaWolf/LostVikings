@@ -25,9 +25,9 @@ LOG=$(mktemp /tmp/native_ail_check.XXXXXX.log)
 TRACE=$(mktemp /tmp/native_ail_check.XXXXXX.opl)
 
 SDL_VIDEODRIVER=dummy SDL_AUDIODRIVER=dummy V2_NATIVE_AIL=1 V2_OPL_TRACE="$TRACE" \
-timeout "$TIMEOUT_S" ./vikings --replay tests/replays/level1.inp \
---max-frames "$MAX_FRAMES" > "$LOG" 2>&1
-RC=$?   # 124 (timeout budget) is fine — the assertions below are the verdict
+timeout "$TIMEOUT_S" ./vikings --replay-input=tests/replays/level1.inp \
+--max-frames="$MAX_FRAMES" > "$LOG" 2>&1
+RC=$?   # the run ends at the frame limit (rc 0); 124 is the timeout guard — the assertions below are the verdict
 
 fail=0
 if ! grep -q 'V2-AIL: boot OK' "$LOG"; then
