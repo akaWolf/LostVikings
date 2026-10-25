@@ -24,7 +24,9 @@
 #include "v2_gamestate.h"   // stage 4 II.c: evac refresh after teleport load
 #include "render_v2.h"   // V2_EXE_STATIC_SIZE
 #include <csignal>
-#ifndef _WIN32
+#ifdef _WIN32
+#include <windows.h>  // SetConsoleOutputCP
+#else
 #include <unistd.h>   // _exit (glibc pulls it in through other headers, other libcs do not)
 #endif
 extern int v2_dbg_pre_vm_iter;   // game-frame counter (v2_vm.cpp), C++ linkage — declared once at file scope (clang rejects block externs inside extern "C" functions)
@@ -162,6 +164,9 @@ void v2_only_clean_exit(const char* why) {   // C++ linkage: the callers declare
 #endif
 
 int main(int argc, char* argv[]) {
+#ifdef _WIN32
+    SetConsoleOutputCP(CP_UTF8); // output code page to UTF-8
+#endif
     // stdout line-buffered in every build: a run log that captures stdout and stderr
     // together otherwise gets a stdout buffer chunk written in the middle of a line
     // ("sub_171dc: si=... dx=d4" + a stderr line + the rest), and a debug line falls
