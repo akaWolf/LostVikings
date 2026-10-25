@@ -230,6 +230,21 @@ F1 menu then switches the features: PARALLAX, SCENES and
 FINALE are on by default, SNES BALANCE is off, LANGUAGE and SOUND (PC /
 SNES / SC55 / MT32) as you like.
 
+The pack is judged as it is built: `build_content.py` ends with
+`tools/assets/content_check.py`, which derives every level's needs from
+its own data — the spawn table, the class records of its script, the
+animation code of those classes and the children they spawn — and fails
+the build when a sprite bank or an animation chunk a level needs is not
+in its lists (an object that never spawns, a wrong sprite), when the
+engine's tables overflow, or when a converted level's head drifted from
+its SNES source; the original's own quirks are calibrated out on the PC
+levels first. `make content-check` repeats the report; `make
+content-smoke` is the dynamic half (`tests/content_smoke.sh`): the game
+binary starts every level of the pack under SDL's dummy drivers, spawns
+every entry of its spawn table once (`V2_SPAWN_SWEEP=1`), and any
+`V2-SPAWN-FAIL` / `V2-ANIM-RES-MISS` the engine prints that the judge did
+not expect fails the slot.
+
 The game's frame pacing follows the display: the DOS game renders three
 sub-frames per game frame, one per 60 Hz refresh of Mode X, moving the
 camera and the sprites on every one, and the port waits for the

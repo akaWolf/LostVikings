@@ -85,6 +85,9 @@ python3 tools/assets/edit_server.py --scratch content
 ```
 
 After "pack" the running copy of the game sees the change at its next start.
+`make content-check` (README, "Console content") then tells whether every
+class of every level still has its sprite bank and its animation chunks —
+an edit of a level's lists or of a script is the usual way to lose one.
 Keep in mind that a mod package exported from such a tree contains every file
 that differs from the plain PC tree — the whole console material, which is
 derived from the ROM images and must not be redistributed. See

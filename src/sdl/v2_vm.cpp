@@ -7482,6 +7482,29 @@ static int32_t v2_spawn_slot_13d52(uint8_t* s) {
     return -1;
 }
 
+// Content diagnostics (the static judge is tools/assets/content_check.py, the dynamic one
+// tests/content_smoke.sh): the two resource lookups a level's own data can leave unresolved
+// — the sprite bank of a class's template record (sub_12f82 under sub_13e52: the object never
+// spawns) and the anim chunk of an anim command [23] (loc_1356e: the object takes entry 0's
+// sprites). Each (kind, level, class, chunk) is reported once per run, on stderr, in every
+// build; the original's own levels raise no V2-SPAWN-FAIL and only the few dormant
+// V2-ANIM-RES-MISS the judge lists, so any other line is a defect of the content.
+static void v2_content_miss_report(const char* kind, uint8_t* s, uint16_t cls, uint16_t chunk, uint16_t spawn_idx) {
+    struct Seen { const char* kind; uint16_t level, cls, chunk; };
+    static Seen seen[256];
+    static int n_seen = 0;
+    uint16_t level = v2gs(s).level();
+    for (int i = 0; i < n_seen; i++)
+        if (strcmp(seen[i].kind, kind) == 0 && seen[i].level == level && seen[i].cls == cls && seen[i].chunk == chunk)
+            return;
+    if (n_seen < 256) seen[n_seen++] = Seen{kind, level, cls, chunk};
+    if (spawn_idx != 0xFFFF)
+        fprintf(stderr, "%s level=%u class=%02X chunk=%03X spawn=%u (f%d)\n", kind, (unsigned)level, cls, chunk,
+                (unsigned)spawn_idx, v2_dbg_pre_vm_iter);
+    else
+        fprintf(stderr, "%s level=%u class=%02X chunk=%03X (f%d)\n", kind, (unsigned)level, cls, chunk, v2_dbg_pre_vm_iter);
+}
+
 // pos_x/pos_y = world position. Returns true if created, false if failed.
 // sub_12f82 (seg000 eips 0x2f82..0x2fb2): sprite resource lookup by chunk id.
 // 0xFFFF -> base 0, CLC. 0xFFFE -> INC ds:374, base 0, CLC. Else scan the
@@ -7520,8 +7543,13 @@ static bool v2_obj_template_init_13e52(uint8_t* s, uint16_t si, uint16_t bx) {
     obj.w16(OBJ_SPAWN_POOL, v2gs(s).spawn_pool_sel());      // 0x3e6b [si+169D] = ds:374
     v2gs(s).spawn_pool_sel(0);                           // 0x3e72 ds:374 = 0
     uint16_t sprite_base = 0;
-    if (v2_sprite_res_lookup_12f82(s, *(uint16_t*)(aes + bx), &sprite_base))
+    if (v2_sprite_res_lookup_12f82(s, *(uint16_t*)(aes + bx), &sprite_base)) {
+        // the level loads no such sprite bank: the object never spawns (sub_13809 frees the slot
+        // on this CF) — reported for the content checks; ds:34/36 still hold the class and the
+        // spawn index sub_13809 staged (v2_content_miss_report above)
+        v2_content_miss_report("V2-SPAWN-FAIL", s, v2gs(s).scratch_34(), *(uint16_t*)(aes + bx), v2gs(s).scratch_36());
         return true;                                                   // 0x3e7e JC -> RETN (CF=1)
+    }
     obj.w16(OBJ_SPRITE_BASE, sprite_base);                             // loc_13e81 [si+1855] = ax
     // 0x3e85: orig reads WORD es:[bx+2]; TEST ax,80h and AND ax,7Fh only see
     // the low byte, so a byte read is bit-identical.
@@ -10000,6 +10028,92 @@ static void v2_run_transition_chain(uint8_t* shadow) {
     v2_current_level = v2gs(shadow).level();
 }
 
+// Content diagnostics, the dynamic half (tests/content_smoke.sh; the static judge is
+// tools/assets/content_check.py): V2_SPAWN_SWEEP=1 spawns every entry of the level's spawn
+// table once, one entry per frame, SWEEP_SETTLE frames after each new world (render_v2.h
+// v2_world_gen). An entry goes through the game's own path — sub_13ae0 under a spawn window
+// ds:34..3A closed on that entry, [42] = FFFF as loc_13a94 holds it — so a sprite bank the
+// level does not load prints V2-SPAWN-FAIL from sub_13e52, and an anim chunk it does not load
+// V2-ANIM-RES-MISS from the object's first anim step, which runs in this frame's VM. An
+// object this sweep created (not one the level had spawned itself) is despawned at the next
+// frame's tick through sub_13c93, as op 0x10 does it, so the 20-slot table stays free for the
+// next entry; the window words, ds:32 and ds:42 are restored around both calls. A full table
+// defers the entry to the next frame (SWEEP_RETRY frames, then it counts as failed), the
+// kill-bit gate (sub_13d30) counts it as denied; nothing moves while ds:32F (the transition)
+// is set. The sweep ends with a V2-SWEEP done line; an entry that spawned nothing gets its
+// own line.
+static void v2_despawn_13c93(V2VM& vm, uint16_t di);
+static void v2_content_sweep_tick(uint8_t* s) {
+    static int sweep = -1;
+    if (sweep < 0) { const char* e = getenv("V2_SPAWN_SWEEP"); sweep = (e && *e) ? atoi(e) : 0; }
+    if (sweep <= 0) return;
+    enum { SWEEP_SETTLE = 60, SWEEP_RETRY = 300 };
+    static uint32_t gen = 0;
+    static int settle = 0, idx = -1, retry = 0, n_spawned = 0, n_denied = 0, n_failed = 0;
+    static int mine_slot = -1, mine_idx = -1;
+    if (gen != v2_world_gen) {
+        gen = v2_world_gen; settle = SWEEP_SETTLE; idx = 0; retry = 0;
+        n_spawned = n_denied = n_failed = 0; mine_slot = mine_idx = -1;
+    }
+    if (settle > 0) { settle--; return; }
+    if (idx < 0 || v2gs(s).transition() != 0) return;
+    // the previous frame's object of this sweep, when its first tick left it alive
+    if (mine_slot >= 0) {
+        if (*(uint16_t*)(s + (uint16_t)mine_slot + OBJ_CODE_SEG) != 0 &&
+            *(uint16_t*)(s + (uint16_t)mine_slot + OBJ_ANIM_SUB) == (uint16_t)mine_idx) {
+            uint16_t save_32 = v2gs(s).mode_word(), save_34 = v2gs(s).scratch_34(), save_36 = v2gs(s).scratch_36(),
+                     save_38 = v2gs(s).scratch_38(), save_3a = v2gs(s).scratch_3a(), save_42 = v2gs(s).cur_obj();
+            V2VM vm{};
+            vm.ds = s; vm.shadow = s; vm.obj = (uint16_t)mine_slot;
+            v2_despawn_13c93(vm, (uint16_t)mine_slot);
+            v2gs(s).cur_obj(save_42); v2gs(s).scratch_3a(save_3a); v2gs(s).scratch_38(save_38);
+            v2gs(s).scratch_36(save_36); v2gs(s).scratch_34(save_34); v2gs(s).mode_word(save_32);
+        }
+        mine_slot = mine_idx = -1;
+    }
+    uint16_t off = (uint16_t)(idx * 0x0E);
+    uint16_t sx = *(uint16_t*)(s + (uint16_t)(DS_SPAWN_TABLE + off));
+    if (sx == 0xFFFF) {
+        fprintf(stderr, "V2-SWEEP: level=%u done entries=%d spawned=%d denied=%d failed=%d (f%d)\n",
+                (unsigned)v2gs(s).level(), idx, n_spawned, n_denied, n_failed, v2_dbg_pre_vm_iter);
+        idx = -1;
+        return;
+    }
+    uint16_t sy = *(uint16_t*)(s + (uint16_t)(DS_SPAWN_TABLE + off + 2));
+    uint16_t hw = *(uint16_t*)(s + (uint16_t)(DS_SPAWN_TABLE + off + 4));
+    uint16_t hh = *(uint16_t*)(s + (uint16_t)(DS_SPAWN_TABLE + off + 6));
+    uint16_t cls = *(uint16_t*)(s + (uint16_t)(DS_SPAWN_TABLE + off + 8));
+    bool pre_live = false;   // the level spawned this entry itself (sub_13ae0's own dedup would refuse it)
+    for (uint16_t si = 0; (int16_t)si < (int16_t)v2gs(s).obj_count(); si += 2)
+        if (*(uint16_t*)(s + si + OBJ_CODE_SEG) != 0 && *(uint16_t*)(s + si + OBJ_ANIM_SUB) == (uint16_t)idx) { pre_live = true; break; }
+    bool denied = !pre_live && v2_spawn_gate_13d30(s, (uint16_t)idx);
+    bool full = !pre_live && !denied && v2_spawn_slot_13d52(s) < 0;
+    if (full && retry < SWEEP_RETRY) { retry++; return; }
+    int slot = -1;
+    if (!pre_live && !denied && !full) {
+        uint16_t save_32 = v2gs(s).mode_word(), save_34 = v2gs(s).scratch_34(), save_36 = v2gs(s).scratch_36(),
+                 save_38 = v2gs(s).scratch_38(), save_3a = v2gs(s).scratch_3a(), save_42 = v2gs(s).cur_obj();
+        v2gs(s).scratch_34((uint16_t)(sx + hw)); v2gs(s).scratch_36((uint16_t)(sx - hw + 1));   // sub_13ae0's four compares pass exactly this box
+        v2gs(s).scratch_38((uint16_t)(sy + hh)); v2gs(s).scratch_3a((uint16_t)(sy - hh + 1));
+        v2gs(s).cur_obj(0xFFFF);
+        v2_spawn_visible_entry_13ae0(s, (uint16_t)idx, off);
+        v2gs(s).cur_obj(save_42); v2gs(s).scratch_3a(save_3a); v2gs(s).scratch_38(save_38);
+        v2gs(s).scratch_36(save_36); v2gs(s).scratch_34(save_34); v2gs(s).mode_word(save_32);
+        for (uint16_t si = 0; (int16_t)si < (int16_t)v2gs(s).obj_count(); si += 2)
+            if (*(uint16_t*)(s + si + OBJ_CODE_SEG) != 0 && *(uint16_t*)(s + si + OBJ_ANIM_SUB) == (uint16_t)idx) { slot = si; break; }
+    }
+    if (pre_live || slot >= 0) n_spawned++;
+    else if (denied) n_denied++;
+    else {
+        n_failed++;
+        fprintf(stderr, "V2-SWEEP: level=%u entry=%d class=%02X at (%d,%d) not spawned (%s) (f%d)\n",
+                (unsigned)v2gs(s).level(), idx, cls, (int16_t)sx, (int16_t)sy,
+                full ? "table full" : "template init failed", v2_dbg_pre_vm_iter);
+    }
+    if (slot >= 0) { mine_slot = slot; mine_idx = idx; }
+    idx++; retry = 0;
+}
+
 static void v2_game_loop_pre_vm(uint8_t* shadow, uint16_t ds_val) {
     v2_ui_service(shadow);                  // UX stage 3: menu pause / options / debug tools
     // sub_12352: input processing. Exact replica.
@@ -10082,6 +10196,7 @@ static void v2_game_loop_pre_vm(uint8_t* shadow, uint16_t ds_val) {
             want = -1;
         }
     }
+    v2_content_sweep_tick(shadow);   // V2_SPAWN_SWEEP=1: the content smoke's spawn sweep (defined above)
     {
         // debug: V2_TEST_GAMEOVER=<frame> raises the all-dead flag ([334] bit 1,
         // sub_12e16's game-over signal) at that pre-VM frame — drives the real
@@ -17965,7 +18080,14 @@ bool v2_vm_exec_anim_cmd(V2VM& vm, uint16_t handler, uint16_t& anim_bx, uint8_t 
             for (; di_r < 0x40; di_r += 2) {
                 if (vm.ds_read(di_r + DS_ANIM_CHUNK_IDS) == res_id) break;
             }
-            if (di_r >= 0x40) di_r = 0; // not found → use entry 0
+            if (di_r >= 0x40) {
+                // the level loads no such anim chunk: the object takes entry 0's sprites —
+                // reported for the content checks (the original has a few such dormant
+                // lookups of its own; content_check.py lists them, v2_content_miss_report)
+                v2_content_miss_report("V2-ANIM-RES-MISS", vm.shadow,
+                                       ObjRef{vm, (uint16_t)vm.global_r(DS_CUR_OBJ)}.u16(OBJ_ANIM_IDX), res_id, 0xFFFF);
+                di_r = 0; // not found → use entry 0
+            }
             // Get resource info
             uint16_t base_off = vm.ds_read(di_r + DS_ANIM_CHUNK_OFF);
             uint16_t base_seg = vm.ds_read(di_r + DS_ANIM_CHUNK_SEG);

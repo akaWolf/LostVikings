@@ -75,6 +75,7 @@ ROM_SIZE_MIN, ROM_SIZE_MAX = 0x80000, 0x800000
 
 
 def fail(msg):
+    sys.stdout.flush()   # the report before the verdict when both go to one file
     sys.stderr.write("build_content: " + msg + "\n")
     sys.exit(1)
 
@@ -215,7 +216,7 @@ def main():
     os.chdir(ROOT)
 
     # 1. the archive -> raw chunks
-    print(f"[1/4] extracting {data} -> {raw}")
+    print(f"[1/5] extracting {data} -> {raw}")
     r = subprocess.run([sys.executable, os.path.join(ROOT, "tools", "data", "extract_datadat.py"), data, raw],
                        cwd=ROOT, capture_output=True, text=True)
     sys.stdout.write("".join("      " + l + "\n" for l in r.stdout.strip().splitlines()[-3:]))
@@ -235,7 +236,7 @@ def main():
         shutil.copy(smap, os.path.join(raw, "sprite_map.json"))
 
     # 2. the open tree, judged byte-exact against the archive; the image's texts
-    print(f"[2/4] converting the {ARCHIVE_CHUNKS} chunks into the open tree {out}")
+    print(f"[2/5] converting the {ARCHIVE_CHUNKS} chunks into the open tree {out}")
     import assetc
     assetc.RAW = raw
     assetc.ASSETS = out
@@ -258,11 +259,11 @@ def main():
     import edit_server as E
     E.SCRATCH = out
     if mod:
-        print(f"[3/4] applying {mod}")
+        print(f"[3/5] applying {mod}")
         n_src = E.mod_import(mod)
         source = f"{n_src} files of {mod}"
     else:
-        print(f"[3/4] converting the console images: {snes}, {genesis}")
+        print(f"[3/5] converting the console images: {snes}, {genesis}")
         os.environ["LV_SNES_ROM"] = snes
         os.environ["LV_GENESIS_ROM"] = genesis
         import integrate_snes as I
@@ -270,7 +271,7 @@ def main():
         source = f"{len(slots)} console level slots from the two images"
 
     # 4. the engine-facing store
-    print("[4/4] packing")
+    print("[4/5] packing")
     n_rec = E.do_pack()
 
     extras = json.load(open(os.path.join(out, "extras.json")))
@@ -285,6 +286,24 @@ def main():
     trailer = re.findall(rb"LVX[0-9A-Z]", img[STATIC_IMAGE:])
     if len(img) <= STATIC_IMAGE or not trailer:
         fail(f"{exe}: no LVX trailer past the static image ({len(img)} B)")
+
+    # 5. the judge (content_check.py): every level the pack defines must have what its
+    # classes need — the sprite banks and anim chunks of the classes it spawns and of
+    # their children, the tables within the engine's limits, a converted head equal to
+    # its SNES source. A FAIL is a level that misbehaves in the game (an object that never
+    # spawns, a wrong sprite); the pack is left in place for inspection.
+    print("[5/5] judging the pack")
+    import content_check as CC
+    rom = None
+    if snes:
+        import snes2pc
+        rom = snes2pc.SnesRom(snes)
+    rc = CC.judge_pack(out, rom, out=lambda line: print("      " + line))
+    if rc == 2:
+        fail("content_check: the judge fails on the original's own levels — fix tools/assets/content_check.py")
+    if rc != 0:
+        fail(f"content_check: the pack at {out} has errors (above) — not a usable pack; "
+             "tools/assets/content_check.py --content <dir> repeats the report")
     print(f"done: {out}")
     print(f"      {n_rec} records in .compiled ({ARCHIVE_CHUNKS} archive ids, {len(extras)} extras, "
           f"{ARCHIVE_CHUNKS + len(extras) - n_rec} of them replacing an archive id); {source}; "

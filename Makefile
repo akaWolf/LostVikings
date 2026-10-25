@@ -422,7 +422,7 @@ C_OBJS   := $(patsubst %.c,   $(OBJDIR)/%.o, $(C_SRCS))
 ALL_OBJS := $(CXX_OBJS) $(C_OBJS)
 DEPS     := $(ALL_OBJS:.o=.d)
 
-.PHONY: all clean keymap_editor content
+.PHONY: all clean keymap_editor content content-check content-smoke
 
 all: $(EXE_NAME)
 
@@ -432,6 +432,16 @@ all: $(EXE_NAME)
 # up by itself (test mode ignores it). tools/assets/build_content.py.
 content:
 	python3 tools/assets/build_content.py
+
+# The checks of the pack: the static judge (tools/assets/content_check.py — every
+# level's sprite banks, anim chunks, tables and head against what its classes need;
+# build_content.py runs it after packing too) and the dynamic smoke
+# (tests/content_smoke.sh: the game binary starts every level of the pack and spawns
+# every entry of its spawn table once, V2_SPAWN_SWEEP=1; needs the game build).
+content-check:
+	python3 tools/assets/content_check.py --content content
+content-smoke:
+	bash tests/content_smoke.sh
 
 # Standalone keymap editor — links ONLY against SDL2 + v2_keymap.cpp. No m2c,
 # no adlmidi, no game logic. Independent of HEADLESS / TEST toggles.
