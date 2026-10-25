@@ -327,7 +327,12 @@ F1 → SOUND < PC | SNES | SC55 | MT32 > (saved as `sound=0..3` in
 
 - **PC** — the original: the game's Sound Blaster Pro / AdLib driver
   running in the interpreter, its OPL3 register stream rendered by the
-  Nuked OPL3 core. Nothing to add.
+  Nuked OPL3 core. Nothing to add. The sound and music cards chosen in
+  the original SETUP (the header record of `DATA.DAT`) are ignored: the
+  port always runs the Sound Blaster Pro FM configuration, the one card
+  it models; a header set up for another card is reported in the log
+  and left as it is. SETUP's "no music" / "no sound effects" switches
+  are honoured as the original honours them.
 - **SNES** — the SNES DE music and effects: the console's SPC driver and
   its banks, converted from the SNES image into the content pack. Needs
   `content/` (the section above); takes effect at the next level.

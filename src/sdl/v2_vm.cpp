@@ -7883,6 +7883,54 @@ static void v2_open_data_dat_12989(uint8_t* s) {
         return;
     }
 
+#ifdef V2_ONLY
+    // The game build runs the Sound Blaster Pro FM configuration whatever the
+    // original SETUP wrote into the header's six card words (issue #3: a header
+    // set to sound 0 / music 0 — the PC-speaker driver 0x1C7 and the music set
+    // 0 — left the port's sound dead: no timbres, the sequence slots never
+    // playing, the smart bomb's effect never finishing for the script).
+    //   +6  [86B6] sound card → the driver chunk 0x1C7+k (v2_alloc_segments_12ab8,
+    //                           seg000:6458)
+    //   +8  [86B8] music set  → the bank 0x20C+k, the SFX set 0x207+k, every
+    //                           track's variant table[track]+k (sub_1775d)
+    //   +A..+10 [86BA..86C0]  → IO/IRQ/DMA/DRQ: pushed to the detect sub_1c615
+    //                           = fn65 alone (sub_17561 eip 0x75B0..0x75C4); the
+    //                           install sub_1c61b = fn66 takes the driver
+    //                           descriptor's own words es:[bx+0C..12] (eip
+    //                           0x75D3..0x75EB; SBPFM.ADV: 220h, FFFF, FFFF, FFFF)
+    // The port models that one card: the SB Pro port block 220h..225h
+    // (v2_native_opl.cpp) with the FM driver SBPFM.ADV 0x1CC on it; the MT-32
+    // and SC-55 worlds load card 8 for themselves (v2_mt32.cpp). Another choice
+    // in the header can only break it: a driver for hardware the port has not
+    // got, or a detect probe at a port the model does not answer (the original
+    // mutes the game on a failed detect, eip 0x7679; the m2c side answers the
+    // detect with 1). So the six words become SETUP's canonical SB Pro record
+    // (sound 5, music 2, 220h, IRQ 7, DMA 1, no DRQ); the header's mute
+    // switches +2/+4 (→ ds:302/304, the "no music" / "no sound effects"
+    // choice) and the rest of the record stay the file's, the file itself is
+    // not touched. The TEST build keeps the file's words: the orig side reads
+    // the same file. Same place for both sources of the record (the archive
+    // and the content pack's 0000.bin, a copy of the pack builder's own header).
+    {
+        static_assert(DS_MUSIC_CARD == DS_SOUND_CARD + 2, "the six card words are contiguous");
+        static const uint16_t sbpro[6] = { 5, 2, 0x220, 7, 1, 0xFFFF };
+        uint16_t have[6];
+        bool differs = false;
+        for (int i = 0; i < 6; i++) {
+            have[i] = *(const uint16_t*)(s + DS_SOUND_CARD + 2 * i);
+            if (have[i] != sbpro[i]) differs = true;
+        }
+        if (differs) {
+            printf("V2-STARTUP: the DATA.DAT header (written by the original SETUP) selects sound card %u, music %u, "
+                   "IO %03Xh IRQ %u DMA %u DRQ %04X; the port runs the Sound Blaster Pro FM configuration "
+                   "(sound 5, music 2, 220h, IRQ 7, DMA 1) - the file is left as it is\n",
+                   have[0], have[1], have[2], have[3], have[4], have[5]);
+            for (int i = 0; i < 6; i++) *(uint16_t*)(s + DS_SOUND_CARD + 2 * i) = sbpro[i];
+            v2_gs_evac_mirror_span(s, DS_SOUND_CARD, 12);
+        }
+    }
+#endif
+
     // BIOS ROM checksum at F000:0000 (0x7FF8 words) → ds:0x86D0
     // Original: gs=F000h, sum loop, XOR with INT 21h/36h (disk space), INT 21h/30h (DOS version)
     // BIOS ROM checksum + DOS disk/version XOR → ds:0x86D0
