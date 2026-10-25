@@ -74,7 +74,7 @@ def listing(seen, base, names=True):
         out.append(f"{pc:05X}: {op:02X} {raw:<24} {mn}{t}")
     return "\n".join(out)
 
-def port_blob(regions, bank, base, edits=None, inserts=None, drops=(), op19_map=None, prolog=True, extra_targets=None):
+def port_blob(regions, bank, base, edits=None, inserts=None, drops=(), op19_map=None, prolog=None, extra_targets=None):
     """Port SMD class code to a PC blob at `base`: the instructions of the
     ROM regions [(start, end)] in address order, verbatim, with
     - jump/call/branch targets relocated (every target op keeps its word as
@@ -89,7 +89,17 @@ def port_blob(regions, bank, base, edits=None, inserts=None, drops=(), op19_map=
     - `extra_targets` {smd_addr: pc_addr} for jump targets OUTSIDE the
       regions (the shared despawn stub 0x225A0 etc. — the caller provides
       the PC-side equivalent),
-    - a `03 base+3` prolog (sub_1424c re-enters records at the raw pointer)."""
+    - `prolog` = the target of a `03 <prolog>` jump emitted first, at `base`
+      = the record's raw code pointer (None: no prolog). Both engines enter a
+      fresh object at code+3 (68k @0x2104 addq #3; the judge's P+3 entry) and
+      re-enter it at the RAW pointer on FLAG_INIT_PC 0x200 and on the level's
+      transition frames: PC sub_1424c loc_14274/loc_1427C (ds:32F), 68k
+      0x39E6/0x39F0 (`and #$200,$1066(a5)` / `tst.w $302(a4)`, then pc :=
+      class table +4 without +3). Every original class's prolog jumps to op
+      10 there (SMD bank 3 -> 0x225A0, bank 4 -> 0x2EE91; PC 1C2: 34 classes
+      of 41): the object despawns. The caller passes its despawn stub — a
+      `03 base+3` would restart the spawn code on every such frame instead,
+      a behaviour of neither platform (the port had that until 2026-10)."""
     edits = edits or {}; inserts = inserts or {}; op19_map = op19_map or {}; extra_targets = extra_targets or {}
     b = BANK[bank]
     seen, notes = walk([r[0] for r in regions], b)
@@ -120,15 +130,15 @@ def port_blob(regions, bank, base, edits=None, inserts=None, drops=(), op19_map=
             raw[x] = y - x; x = y
     items = sorted(list(order) + list(raw))
     # layout pass: new address of every instruction / raw run
-    new = {}; cur = base + (3 if prolog else 0)
+    new = {}; cur = base + (3 if prolog is not None else 0)
     for pc in items:
         if pc in drops:
             continue
         new[pc] = cur
         cur += (raw[pc] if pc in raw else seen[pc][1] + len(inserts.get(pc, b"")))
     out = bytearray()
-    if prolog:
-        out += bytes((0x03,)) + struct.pack("<H", base + 3)
+    if prolog is not None:
+        out += bytes((0x03,)) + struct.pack("<H", prolog)
     for pc in items:
         if pc in drops:
             continue

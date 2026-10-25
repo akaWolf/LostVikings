@@ -728,7 +728,11 @@ def d8_timer_blob(base, ticks):
 # (00 = 8 rows) anims the SMD lets the record imply (the medium one carries
 # its own `15 02`), the three pop sounds (SMD ids 0x28/0x2A/0x29) are
 # dropped (no PC ids known), and the classes' despawn exits (`1C -> 0x225A0`
-# = op 10) go to a one-byte `10` stub in the blob.
+# = op 10) go to a one-byte `10` stub in the blob — and so do the records'
+# prologs (`03 a0a5` -> 0x225A0 of 25/24/23, `03 3cab` -> 0x2EE91 of 4A, op
+# 10 both): the engine re-enters an object at the record's raw pointer on
+# FLAG_INIT_PC and on the transition frames, where both originals despawn
+# it (smd_lvs.port_blob).
 BUB_ANIM = [  # (smd_start, smd_end, size, add_type_prefix)
     (0x25DDB, 0x25DE8, 32, True), (0x25DE8, 0x25E0E, 32, True),
     (0x25E0E, 0x25E1D, 16, False), (0x25E1D, 0x25E43, 16, True),
@@ -796,16 +800,17 @@ def bubble_blobs(base, frames):
     anims, amap = bubble_anims(base, frames)
     parts = [anims]; addr = {}
     def total(): return sum(len(x) for x in parts)
-    # the despawn stub `10` goes last: its address needs the final layout,
-    # so lay the classes out twice (their sizes do not depend on it)
+    # the despawn stub `10` goes last (the exits' and the prologs' target):
+    # its address needs the final layout, so lay the classes out twice
+    # (their sizes do not depend on it)
     def layout(stub):
         parts[:] = [anims]; addr.clear()
         for cls, (r0, r1) in BUB_CLASSES.items():
             a = base + total(); addr[cls] = a
-            blob, _ = SL.port_blob([(r0, r1)], 3, a, op19_map=amap, extra_targets={SMD_DESPAWN: stub})
+            blob, _ = SL.port_blob([(r0, r1)], 3, a, op19_map=amap, extra_targets={SMD_DESPAWN: stub}, prolog=stub)
             parts.append(blob)
         a = base + total(); addr[0x4A] = a
-        blob, _ = SL.port_blob([GEYSER_4A], 4, a, extra_targets={SMD_DESPAWN: stub})
+        blob, _ = SL.port_blob([GEYSER_4A], 4, a, extra_targets={SMD_DESPAWN: stub}, prolog=stub)
         parts.append(blob)
         return base + total()
     stub = layout(0)
@@ -837,7 +842,7 @@ TMPL_BUF = 0xC00 * 16    # the template lives in the animdata segment: 0xC00 par
 # incoming; only its own `X = X+0` aliases), and the D2 record is pointed
 # at the 13DB stub like 1C6 does. The region keeps its exact length (the
 # blob is zero-padded), so nothing else in the template shifts.
-# 2026-09-03: the E1 talk-spot class (187 B) joined the blocks and the Ship
+# 2026-09-03: the E1 talk-spot class (188 B) joined the blocks and the Ship
 # tail (180 B) cannot take it next to the D8 — the adjacent D7 region
 # (S_3694..S_374A, 182 B, also unreached from the Ship levels' spawns and
 # op-14 templates: lvs_full.full_walk) merges into the overlay region;
@@ -1084,12 +1089,16 @@ E1_MASK_PC = 0x25AEA                 # `5F 16` (pool &= 0x0FFF): the delta add g
 
 def e1_talk_blob(base):
     """Class E1 for the scene templates (smd_lvs.port_blob: prolog, code,
-    colour sub, relocated jumps/calls)."""
+    colour sub, relocated jumps/calls) + the prolog's despawn stub `10`."""
     import smd_lvs as SL
     delta = SCENE_TEXT_IDX0 - SMD_SCENE_LINES[0]
     ins = {E1_MASK_PC: bytes((0x51, delta & 0xFF, delta >> 8, 0x59, 0x16))}
-    blob, _ = SL.port_blob([E1_SMD_MAIN, E1_SMD_SUB], 3, base, edits=E1_EDITS, inserts=ins)
-    return blob
+    # the stub closes the blob: its address = the code's size (prolog-independent)
+    sized, _ = SL.port_blob([E1_SMD_MAIN, E1_SMD_SUB], 3, base, edits=E1_EDITS, inserts=ins, prolog=0)
+    stub = base + len(sized)
+    blob, _ = SL.port_blob([E1_SMD_MAIN, E1_SMD_SUB], 3, base, edits=E1_EDITS, inserts=ins, prolog=stub)
+    assert len(blob) == len(sized)
+    return blob + bytes((0x10,))
 
 
 # The banner letters = the SMD class E0 ported as BYTECODE (docs2/GENESIS_ROM
@@ -1123,7 +1132,8 @@ E0_LAND_Y_SITE = 0x2D8E7             # `81 0a00`: the falling letters stop at y 
 
 
 def e0_letters_blob(base, nblk=8, frame0=1, pin_y=0):
-    """(blob) = prolog + the E0 code ported to `base` + the block anims.
+    """(blob) = prolog + the E0 code ported to `base` + the block anims +
+    the prolog's despawn stub `10`.
     `frame0` = the pool frame of block 0 (65 on route B: the banner bank
     rides behind the world's pool bank 0x12F — smd2pc). `pin_y` = the
     scene's camera pin (genesis_scene.layout): the E0 rows and the landing
@@ -1154,11 +1164,13 @@ def e0_letters_blob(base, nblk=8, frame0=1, pin_y=0):
         return bytes(out), addr
     # pass 1: the code length with a dummy anim map
     dummy = {E0_SMD_ANIM_BASE: 0, **{a: 0 for a in E0_SMD_ANIMS}}
-    code, _ = SL.port_blob([E0_SMD_MAIN], 4, base, edits=edits, drops=E0_SFX_DROPS, op19_map=dummy)
+    code, _ = SL.port_blob([E0_SMD_MAIN], 4, base, edits=edits, drops=E0_SFX_DROPS, op19_map=dummy, prolog=0)
     a_bytes, a_addr = anims(base + len(code))
     amap = {E0_SMD_ANIM_BASE: a_addr[0], **{a: a_addr[k] for k, a in enumerate(E0_SMD_ANIMS)}}
-    code, _ = SL.port_blob([E0_SMD_MAIN], 4, base, edits=edits, drops=E0_SFX_DROPS, op19_map=amap)
-    return code + a_bytes
+    stub = base + len(code) + len(a_bytes)           # the prolog's despawn stub closes the blob
+    code2, _ = SL.port_blob([E0_SMD_MAIN], 4, base, edits=edits, drops=E0_SFX_DROPS, op19_map=amap, prolog=stub)
+    assert len(code2) == len(code)
+    return code2 + a_bytes + bytes((0x10,))
 
 def restore_1c6(scratch):
     """The scene script 1C6 goes back to the canonical text (earlier runs
