@@ -183,6 +183,10 @@ int main(int argc, char* argv[]) {
         if (strcmp(argv[i], "--debug") == 0) {
             g_debug_mode = true;
             fprintf(stderr, "[v2_main] --debug enabled: F4/F5/F6 cheats active\n");
+        } else if (strcmp(argv[i], "--save-states") == 0) {
+            // the save slots without the cheats: F2 / F3 and SAVE / LOAD SLOT in the F1 menu (v2_ui.cpp)
+            g_v2_save_states = true;
+            fprintf(stderr, "[v2_main] --save-states: F2 saves, F3 loads (slot in the F1 menu)\n");
         } else if (strncmp(argv[i], "--record-input=", 15) == 0) {
             record_input = argv[i] + 15;
         } else if (strncmp(argv[i], "--replay-input=", 15) == 0) {

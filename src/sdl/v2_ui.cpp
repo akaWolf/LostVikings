@@ -200,7 +200,21 @@ static bool editing_addr = false;           // the JOIN line takes the address f
 static std::string toast_text; static uint32_t toast_until = 0;
 void v2_ui_toast(const char* text) { toast_text = text; toast_until = SDL_GetTicks() + 1500; }
 
-static int n_items() { return g_debug_mode ? IT_COUNT : IT_LEVEL; }
+// --save-states: SAVE / LOAD SLOT and F2 / F3 without --debug — the LEVEL jump, the REWIND
+// and the debug keys stay --debug's
+bool g_v2_save_states = false;
+// the items the menu shows: LEVEL with --debug, SAVE / LOAD with --debug or --save-states
+static bool item_shown(int it) {
+    if (it < 0 || it >= IT_COUNT) return false;
+    if (it == IT_LEVEL) return g_debug_mode;
+    if (it == IT_SAVE || it == IT_LOAD) return g_debug_mode || g_v2_save_states;
+    return true;
+}
+// the cursor's next shown item in direction d (+1 / -1), wrapping
+static int cursor_step(int c, int d) {
+    for (int i = 0; i < IT_COUNT; i++) { c = (c + d + IT_COUNT) % IT_COUNT; if (item_shown(c)) return c; }
+    return 0;
+}
 // UX stage 8 tails: in a network game the options that shape the simulation
 // are the host's for everybody (they came with HELLO); changing one here would
 // split the worlds at the next level
@@ -316,7 +330,7 @@ static bool edit_addr_key(SDL_Keycode k) {
 }
 
 // the F1 / R3 toggle: the menu opens with its cursor on a valid item
-static void menu_toggle() { v2_ui_menu_open = !v2_ui_menu_open.load(); if (cursor >= n_items()) cursor = 0; }
+static void menu_toggle() { v2_ui_menu_open = !v2_ui_menu_open.load(); if (!item_shown(cursor)) cursor = cursor_step(cursor, +1); }
 
 // Game controllers (2026-10-06, a player's request): a controller drives the
 // menu too. R3 (the right stick's click — the game itself has no use for it,
@@ -344,8 +358,8 @@ void ui_trace(const char* what) {
 void nav_fire(int nav) {
     if (editing_addr) { if (nav == NAV_LEFT || nav == NAV_RIGHT) return; }   // the address line takes letters only
     switch (nav) {
-    case NAV_UP:    cursor = (cursor - 1 + n_items()) % n_items(); break;
-    case NAV_DOWN:  cursor = (cursor + 1) % n_items(); break;
+    case NAV_UP:    cursor = cursor_step(cursor, -1); break;
+    case NAV_DOWN:  cursor = cursor_step(cursor, +1); break;
     case NAV_LEFT:  adjust(-1); break;
     case NAV_RIGHT: adjust(+1); break;
     default: break;
@@ -441,6 +455,8 @@ bool v2_ui_handle_event(const SDL_Event* e) {
     }
     if (g_debug_mode) {                          // debug tools outside the menu
         if (k == SDLK_F8) { v2_ui_rewind_hold = down; return true; }
+    }
+    if (g_debug_mode || g_v2_save_states) {      // the save slots (the slot chosen in the menu)
         if (k == SDLK_F2) { if (down && !rep) v2_ui_req_save = sel_slot; return true; }
         if (k == SDLK_F3) { if (down && !rep) v2_ui_req_load = sel_slot; return true; }
     }
@@ -449,8 +465,8 @@ bool v2_ui_handle_event(const SDL_Event* e) {
     if (editing_addr) return edit_addr_key(k);
     switch (k) {
     case SDLK_ESCAPE: v2_ui_menu_open = false; break;
-    case SDLK_UP:     cursor = (cursor - 1 + n_items()) % n_items(); break;
-    case SDLK_DOWN:   cursor = (cursor + 1) % n_items(); break;
+    case SDLK_UP:     cursor = cursor_step(cursor, -1); break;
+    case SDLK_DOWN:   cursor = cursor_step(cursor, +1); break;
     case SDLK_LEFT:   adjust(-1); break;
     case SDLK_RIGHT:  adjust(+1); break;
     case SDLK_RETURN: case SDLK_SPACE: case SDLK_KP_ENTER: activate(); break;
@@ -498,8 +514,8 @@ bool v2_ui_draw(uint32_t* rgba, int w, int h, SDL_PixelFormat* fmt, bool transpa
         drew = true;
     }
     if (v2_ui_menu_open.load()) {
-        // the title, every item of the enum (IT_COUNT in debug mode, IT_LEVEL otherwise), the
-        // REWIND hint of debug mode and the network status — sized from the enum so a new item
+        // the title, every item of the enum (drawn when item_shown), the REWIND hint of debug
+        // mode and the network status — sized from the enum so a new item
         // grows the buffer: a fixed 28 (written for 22 items) overflowed by three rows in debug
         // mode once the items reached 28 (2026-10-07: a SIGSEGV at F1 on an ARM build)
         enum { MENU_LINES = 1 + IT_COUNT + 1 + 1 };
@@ -550,24 +566,28 @@ bool v2_ui_draw(uint32_t* rgba, int w, int h, SDL_PixelFormat* fmt, bool transpa
         snprintf(lines[n++], 40, "HOST GAME < PORT %d >  ENTER", net_port);
         if (editing_addr) snprintf(lines[n++], 40, "JOIN      %s_", v2_ui_net_addr);
         else              snprintf(lines[n++], 40, "JOIN      %s  ENTER", v2_ui_net_addr);
-        if (g_debug_mode) {
-            int nl = v2_ui_nlevels.load();
-            if (nl > 0 && sel_level_idx < nl)
-                snprintf(lines[n++], 40, "LEVEL     < %02d %s >  ENTER=GO", v2_ui_levels[sel_level_idx].slot, v2_ui_levels[sel_level_idx].pw);
-            else snprintf(lines[n++], 40, "LEVEL     (NOT READY)");
-            snprintf(lines[n++], 40, "SAVE SLOT < %d >  ENTER (F2)", sel_slot);
-            snprintf(lines[n++], 40, "LOAD SLOT < %d >  ENTER (F3)", sel_slot);
-            snprintf(lines[n++], 40, "REWIND: HOLD F8");
-        }
-        // the network status under the items (not selectable)
-        snprintf(lines[n++], 40, "%.39s", v2_net_status());
-        int maxlen = 0; for (int i = 0; i < n; i++) maxlen = maxlen > (int)strlen(lines[i]) ? maxlen : (int)strlen(lines[i]);
-        const int x0 = 8, y0 = 8, bw = maxlen * 6 + 14, bh = n * 9 + 8;
+        { int nl = v2_ui_nlevels.load();
+          if (nl > 0 && sel_level_idx < nl)
+              snprintf(lines[n++], 40, "LEVEL     < %02d %s >  ENTER=GO", v2_ui_levels[sel_level_idx].slot, v2_ui_levels[sel_level_idx].pw);
+          else snprintf(lines[n++], 40, "LEVEL     (NOT READY)"); }
+        snprintf(lines[n++], 40, "SAVE SLOT < %d >  ENTER (F2)", sel_slot);
+        snprintf(lines[n++], 40, "LOAD SLOT < %d >  ENTER (F3)", sel_slot);
+        // lines[1 + it] is item it's; under them the lines that are not items
+        if (g_debug_mode) snprintf(lines[n++], 40, "REWIND: HOLD F8");
+        int status_line = -1;
+        if (item_shown(IT_NET_HOST)) { status_line = n; snprintf(lines[n++], 40, "%.39s", v2_net_status()); }   // the network status (not selectable)
+        int rows[MENU_LINES], nr = 0;             // the lines drawn: the title, the shown items, the rest
+        rows[nr++] = 0;
+        for (int it = 0; it < IT_COUNT; it++) if (item_shown(it)) rows[nr++] = 1 + it;
+        for (int i = 1 + IT_COUNT; i < n; i++) rows[nr++] = i;
+        int maxlen = 0; for (int r = 0; r < nr; r++) maxlen = maxlen > (int)strlen(lines[rows[r]]) ? maxlen : (int)strlen(lines[rows[r]]);
+        const int x0 = 8, y0 = 8, bw = maxlen * 6 + 14, bh = nr * 9 + 8;
         darken_box(rgba, w, h, fmt, x0, y0, bw, bh);
-        for (int i = 0; i < n; i++) {
-            bool cur = (i >= 1 && i - 1 == cursor && i - 1 < n_items());
-            if (cur) put_text(rgba, w, h, fmt, x0 + 3, y0 + 4 + i * 9, ">", YELLOW);
-            put_text(rgba, w, h, fmt, x0 + 10, y0 + 4 + i * 9, lines[i], (i == 0 || i == n - 1) ? GREY : (cur ? YELLOW : WHITE));
+        for (int r = 0; r < nr; r++) {
+            const int i = rows[r];
+            bool cur = (i >= 1 && i - 1 == cursor && i - 1 < IT_COUNT);
+            if (cur) put_text(rgba, w, h, fmt, x0 + 3, y0 + 4 + r * 9, ">", YELLOW);
+            put_text(rgba, w, h, fmt, x0 + 10, y0 + 4 + r * 9, lines[i], (r == 0 || i == status_line) ? GREY : (cur ? YELLOW : WHITE));
         }
         drew = true;
     }

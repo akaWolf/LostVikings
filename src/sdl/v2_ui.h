@@ -7,6 +7,8 @@
 #include <atomic>
 #include <SDL2/SDL.h>
 
+extern bool g_v2_save_states;   // v2_ui.cpp: --save-states — the save slots (F2 / F3, the F1 menu) without --debug
+
 struct V2Options {
     std::atomic<bool> parallax{true};   // the SNES parallax layer (mod levels)
     std::atomic<bool> scenes{true};     // play the Genesis interludes (slots 53-57)

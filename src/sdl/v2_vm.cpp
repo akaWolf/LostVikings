@@ -9769,7 +9769,7 @@ static void v2_ui_service(uint8_t* s) {
             v2_ui_toast("SCENE SKIPPED");
         }
     }
-    if (!g_debug_mode) return;
+    if (!g_debug_mode && !g_v2_save_states) return;
     int k;
     if ((k = v2_ui_req_save.exchange(-1)) >= 0) {
         char p[64]; snprintf(p, sizeof p, "v2_save_%d.state", k);
@@ -9787,6 +9787,7 @@ static void v2_ui_service(uint8_t* s) {
         } else if (v2_state_load(p) == 0) { v2_parallax_load(s); v2_ui_toast("STATE LOADED"); }
         else v2_ui_toast("LOAD FAILED");
     }
+    if (!g_debug_mode) return;   // the LEVEL jump, the stands' hooks and the REWIND are --debug's
     if ((k = v2_ui_req_level.exchange(-1)) >= 0) {
         if (net_game) v2_ui_toast("NOT IN A NETWORK GAME");
         else {

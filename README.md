@@ -361,6 +361,7 @@ The three entry points have different surfaces.
 | Flag | Description |
 | --- | --- |
 | `--debug`                | same as test mode |
+| `--save-states`          | the save slots without the cheats: F2 saves, F3 loads, SAVE / LOAD SLOT in the F1 menu (`v2_save_<n>.state`) |
 | `--keymap=<path>`        | same as test mode |
 | `--record-input=<file>`  | record SDL input to a frame-based `.inp` log |
 | `--replay-input=<file>`  | replay an `.inp` log instead of live keyboard |
