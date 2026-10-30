@@ -134,7 +134,7 @@ src/sdl/
 ### Модифицированные файлы
 
 ```
-src/aux/asm.cpp                      # +2 строки (вызов render_init_v2)
+src/runtime/asm.cpp                  # +2 строки (вызов render_init_v2)
 src/sdl/render.cpp                   # +6 строк (отладочный вывод, позиционирование)
 ```
 

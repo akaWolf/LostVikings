@@ -93,7 +93,7 @@ ADL_DEFINES := -DADLMIDI_DISABLE_DOSBOX_EMULATOR \
                -DADLMIDI_DISABLE_OPAL_EMULATOR \
                -DADLMIDI_DISABLE_JAVA_EMULATOR
 
-INCLUDES := -I ./src/aux/ -I ./src/rendering/
+INCLUDES := -I ./src/runtime/ -I ./src/rendering/
 
 V2_DEFINES := -DV2_RENDER_FROM_SHADOW
 # The game — the standalone v2 build (-DV2_ONLY: the orig sub_* functions are
@@ -200,7 +200,7 @@ endif
 # far-ret frame — "Return address wasn't created by native CALL"; inserting
 # opaque no-op probes made it vanish, the classic UB-sensitive-codegen smell).
 # RELEASE=1 therefore pins every m2c translation unit at -O0 and lets the
-# whole v2/sdl/aux layer take -O2. The emulated world was ~6% of CPU in the
+# whole v2/sdl/runtime layer take -O2. The emulated world was ~6% of CPU in the
 # attract profile — the -O0 pin costs little.
 ifeq ($(RELEASE),1)
 $(OBJDIR)/src/vikings.exe.o: CXXFLAGS += -O0
@@ -308,9 +308,9 @@ CXX_SRCS := \
   src/vikings.exe_seg002.cpp \
   src/vikings.exe_seg003.cpp \
   src/_data.cpp \
-  src/aux/asm.cpp \
-  src/aux/memmgr.cpp \
-  src/aux/shadowstack.cpp \
+  src/runtime/asm.cpp \
+  src/runtime/memmgr.cpp \
+  src/runtime/shadowstack.cpp \
   src/sdl/render.cpp \
   src/sdl/render_v2.cpp \
   src/sdl/render_v2_test.cpp \
