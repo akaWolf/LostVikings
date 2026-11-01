@@ -33,7 +33,8 @@ ORIG_FILES = ['src/vikings.exe_seg000.cpp', 'src/vikings.exe_seg003.cpp']
 V2_FILES   = ['src/sdl/v2_vm.cpp', 'src/sdl/v2_render_funcs.cpp']
 
 def load(p):
-    return open(os.path.join(ROOT, p), encoding='latin-1').read().split('\n')
+    with open(os.path.join(ROOT, p), encoding='latin-1') as f:
+        return f.read().split('\n')
 
 # loc_-входы, имеющие v2-зеркала (JMP на них = вызов): Y-муверы и др.
 LOC_MIRRORED = {'loc_174e9': 'sub_174e9', 'loc_174bf': 'sub_174bf',
@@ -93,6 +94,11 @@ def v2_raw_bodies():
     fn_start = re.compile(
         r'^(?:extern "C"\s+)?(?:static\s+)?(?:inline\s+)?'
         r'[a-zA-Z_][\w:<>*&\s]*\b([a-zA-Z_]\w*)\s*\([^;]*$')
+    # Top-level forward declarations between definitions are outside either
+    # body, but the next-definition boundary would otherwise include them.
+    fn_decl = re.compile(
+        r'^(?:extern "C"\s+)?(?:static\s+)?(?:inline\s+)?'
+        r'[a-zA-Z_][\w:<>*&\s]*\b[a-zA-Z_]\w*\s*\([^;{}]*\)\s*;\s*$')
     for path in V2_FILES:
         src = load(path)
         starts = []          # ЛЮБАЯ функция — граница тела (не только *_HEX)
@@ -107,7 +113,7 @@ def v2_raw_bodies():
                 code = ln.split('//')[0]
                 # строки-декларации (static/extern ... ;) — не вызовы
                 cs = code.strip()
-                if (cs.startswith(('static ', 'extern ')) and cs.endswith(';')):
+                if fn_decl.match(code) or (cs.startswith(('static ', 'extern ')) and cs.endswith(';')):
                     continue
                 if re.search(r'fx::(play_sfx|play_xmidi)', code):
                     calls.append(('sfx', 'sub_177bb'))
@@ -175,15 +181,35 @@ def load_whitelist():
     wl = {}
     p = os.path.join(ROOT, 'tests/call_order_whitelist.txt')
     if not os.path.exists(p): return wl
-    for ln in open(p, encoding='utf-8'):
+    with open(p, encoding='utf-8') as f:
+        lines = f.readlines()
+    for ln in lines:
         ln = ln.strip()
         if not ln or ln.startswith('#'): continue
         parts = ln.split(None, 3)
         if len(parts) >= 3:
-            wl[(parts[0], parts[1])] = (parts[2], parts[3] if len(parts) > 3 else '')
+            detail = parts[3] if len(parts) > 3 else ''
+            sections = detail.split(' | ')
+            snapshot = None
+            if len(sections) == 3 and sections[1].startswith('orig=') and sections[2].startswith('v2='):
+                snapshot = (sections[1][5:].split(','), sections[2][3:].split(','))
+                if any(not re.fullmatch(r'sub_[0-9a-f]+', s) for seq in snapshot for s in seq):
+                    raise ValueError(f'Invalid whitelist snapshot: {ln}')
+            elif len(sections) != 1:
+                raise ValueError(f'Invalid whitelist snapshot: {ln}')
+            wl[(parts[0], parts[1])] = (parts[2], sections[0], snapshot)
     return wl
 
+def whitelist_matches(entry, orig_seq, v2_seq):
+    # Legacy entries cover an entire pair; entries with a snapshot cover only
+    # the two explicitly reviewed sequences.
+    return entry is not None and (entry[2] is None or entry[2] == (orig_seq, v2_seq))
+
 def main():
+    # Windows consoles may use a legacy code page that cannot encode report
+    # symbols or whitelist text. Preserve the audit instead of crashing.
+    if hasattr(sys.stdout, 'reconfigure'):
+        sys.stdout.reconfigure(errors='backslashreplace')
     only = sys.argv[1] if len(sys.argv) > 1 else None
     orig = parse_orig()
     v2   = v2_bodies()
@@ -197,10 +223,11 @@ def main():
         for (v2name, vseq) in v2[p]:
             d = diff_pair(oseq, vseq)
             if not d: continue
-            if (p, v2name) in wl:
+            entry = wl.get((p, v2name))
+            if whitelist_matches(entry, oseq, vseq):
                 n_wl += 1
                 if only:
-                    cls, why = wl[(p, v2name)]
+                    cls, why, _ = entry
                     print(f"=== {p} ↔ {v2name}  [WL:{cls}] {why}")
                 continue
             n_diff += 1

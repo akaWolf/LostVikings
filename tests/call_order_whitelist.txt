@@ -6,8 +6,9 @@
 #   OWN-TAIL    — собственный loc_-хвост orig, экстрагированный в v2-функцию
 #   RESTRUCTURED— v2-архитектурная перестройка с компенсирующим verify-каналом
 #   BP-PARAM    — 1cd7b/1cd7d-класс: вход-стаб заменён параметром
-# Каждая строка обязана иметь причину; NEW-диффы этих пар всё равно печатаются
-# (whitelist прячет только точное текущее расхождение — заморозка снимка).
+# Legacy entries suppress the entire pair. New entries should append an exact
+# snapshot: | orig=sub_...,sub_... | v2=sub_...,sub_...
+# A snapshot suppresses only those full sequences; changed sequences are reported.
 sub_108c8 v2_audio_tick_108c8 PORT AIL-стабы 1c79f/1c769/176bd — до #61
 sub_17512 v2_snd_xmi_setup_17512 PORT AIL tail 10dba — до #61
 sub_17561 v2_ail_init_17561 PORT AIL-цепь целиком — до #61 (см. задачу)
