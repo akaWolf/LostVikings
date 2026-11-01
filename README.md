@@ -527,6 +527,9 @@ bash tests/locale_box.sh                      # the language banks reach the lev
                                               # UPDATE=1 retakes the goldens, LANGS="..." picks languages)
 bash tests/mt32_dump.sh                       # the MT-32 world: its MIDI stream against the level's MT-32 track
 bash tests/wide_canon.sh                      # the wide view: the canon replays at 320 px, byte for byte
+bash tests/quit_chain_check.sh                # the quit to DOS (make quit-chain-check): the title's F10 and the
+                                              # prompt's "End game" leave by the original's loc_10e35 chain — the
+                                              # archive closed, [92FF] = 0 in the state image saved at the exit
 ```
 
 The canon runs without a language bank and without the audio thread or

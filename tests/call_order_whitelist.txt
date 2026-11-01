@@ -61,3 +61,4 @@ sub_158d7 v2_vm_probe_down_158d7 PARSER-FIXED group-dispatch kloc_15a70 тепе
 sub_12ab8 v2_alloc_segments_12ab8 LOOP-ROLLED палитро-чанки 4..0xE→2E7D..(шаг 0x300) таблицей+циклом против orig-развёртки 13 сайтов; 10e85=PORT-64K
 sub_11c52 v2_selector_blink_11c52 COND-MERGE+ORDER mode0: две 1183d/120d1-ветки → ax-условный сайт; mode1: порядок веток текстово обратен; сверено построчно 2026-08-04
 sub_14199 v2_tile_type_at_14199 WRAPPER orig = 14199→141a7→141ba трёхслойная обёртка; v2 плоская (OOB 0x400/0 + row-LUT + (tv&0xFC00)>>10 сверены построчно)
+sub_10dba v2_fatal_10dba PORT the fatal exit: 16546 (the INT 9 vector back — the port hooks no INT 9) and 1754c (the AIL exit — the port pauses the SDL device) have no mirror call; the archive close, 1686f and 1292f are mirrored | orig=sub_16546,sub_1754c,sub_1686f,sub_1292f | v2=sub_1686f,sub_1292f

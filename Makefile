@@ -422,7 +422,7 @@ C_OBJS   := $(patsubst %.c,   $(OBJDIR)/%.o, $(C_SRCS))
 ALL_OBJS := $(CXX_OBJS) $(C_OBJS)
 DEPS     := $(ALL_OBJS:.o=.d)
 
-.PHONY: all clean keymap_editor content content-check content-smoke content-regress sound-header-check
+.PHONY: all clean keymap_editor content content-check content-smoke content-regress sound-header-check quit-chain-check
 
 all: $(EXE_NAME)
 
@@ -446,6 +446,8 @@ content-regress:
 	bash tests/content_regress.sh
 sound-header-check:
 	bash tests/sound_header_check.sh
+quit-chain-check:
+	bash tests/quit_chain_check.sh
 
 # Standalone keymap editor — links ONLY against SDL2 + v2_keymap.cpp. No m2c,
 # no adlmidi, no game logic. Independent of HEADLESS / TEST toggles.

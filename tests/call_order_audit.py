@@ -39,7 +39,14 @@ def load(p):
 # loc_-входы, имеющие v2-зеркала (JMP на них = вызов): Y-муверы и др.
 LOC_MIRRORED = {'loc_174e9': 'sub_174e9', 'loc_174bf': 'sub_174bf',
                 'loc_17496': 'sub_17496', 'loc_1746c': 'sub_1746c',
-                'loc_13a74': 'sub_13a74', 'loc_13a54': 'sub_13a54'}
+                'loc_13a74': 'sub_13a74', 'loc_13a54': 'sub_13a54',
+                'loc_10e35': 'sub_10e35'}
+
+# loc_-входы без собственного sub_: тело orig начинается с самой метки и
+# спаривается с v2-зеркалом по тому же hex (loc_10e35 — выход в DOS: 16546,
+# 1754c, шесть INT 21h/49, INT 21h/3E, 1686f, 1292f, INT 21h/4C; в него
+# прыгают sub_10350 (F10/Alt-X), sub_103ca («End game»), sub_1434c (Quit меню)).
+LOC_BODIES = {'loc_10e35': 'sub_10e35'}
 
 # v2-зеркала БЕЗ hex-суффикса (исторические имена) → их orig sub_.
 # Дополняет docs2/ref/V2_FUNCTION_NAMES.md; без этого их вызовы невидимы
@@ -64,6 +71,9 @@ def parse_orig():
                 cur = m.group(1); bodies.setdefault(cur, []); continue
             if re.match(r'^(seg00\d_[0-9a-f]+_proc|loc_[0-9a-f]+_far):', ln):
                 cur = None; continue           # far-проки — отдельные зоны
+            lb = re.match(r'^(loc_[0-9a-f]+):', ln)
+            if lb and lb.group(1) in LOC_BODIES:
+                cur = LOC_BODIES[lb.group(1)]; bodies.setdefault(cur, []); continue
             if cur is None: continue
             # PORT-замены: закомментированный J(...) под SDL-вставкой — это
             # ЖИВОЕ orig-поведение (перенесено в замену), считаем вызовом.

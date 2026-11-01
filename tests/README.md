@@ -87,6 +87,7 @@ diff text, context.txt → exit code 1.
 | `scenarios.sh` | Iterate all `replays/*.inp`, pass/fail each | ~10 sec × N replays | Every PR |
 | `fuzz_harness.sh [N=100]` | N random-seed sessions | ~30 sec × N | Nightly |
 | `fuzz_coverage.py [iter=10000]` | Coverage-guided mutation, B5-driven | Hours | Weekly |
+| `quit_chain_check.sh` | The game build's quit to DOS runs the original's loc_10e35 chain: two canon replays (the title's F10, the prompt's "End game"), the state image's [92FF]/[9300] at the exit | ~20 sec | After changes to the exit paths |
 
 ---
 
