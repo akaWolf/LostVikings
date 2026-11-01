@@ -77,7 +77,7 @@ KB на кейс из-за разреженности DS): состояние #1
   `bool sub_12352(m2c::_offsets, m2c::_STATE*){return _group1(m2c::ksub_12352,_state);}`
   — тонкие wrapper'ы на групповые диспетчеры (`_group1..3`, goto-метки,
   `case m2c::ksub_XXXX: goto sub_XXXX` — seg000:18466).
-- Регистры — поля `m2c::_STATE` (src/aux/asm.h:148-181: eax..eip, cs/ds/es/fs/gs/ss,
+- Регистры — поля `m2c::_STATE` (src/runtime/asm.h:148-181: eax..eip, cs/ds/es/fs/gs/ss,
   флаги CF..TF), память — глобальная `m2c::m`, `raddr(s,o)` (asm.h:705).
   Снять regs_in/regs_out = memcpy одного структа.
 - Прецедент вызова orig-кода из внешнего C++: `redraw_tilemap(m2c::_STATE*)`

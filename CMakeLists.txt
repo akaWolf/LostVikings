@@ -22,8 +22,8 @@ file(GLOB
 	VIKINGS_FILES
 	${PROJECT_SOURCE_DIR}/src/*.cpp
 	${PROJECT_SOURCE_DIR}/src/sdl/*.cpp
-	${PROJECT_SOURCE_DIR}/src/aux/*.cpp)
-include_directories(${PROJECT_SOURCE_DIR}/src/aux)
+	${PROJECT_SOURCE_DIR}/src/runtime/*.cpp)
+include_directories(${PROJECT_SOURCE_DIR}/src/runtime)
 
 find_package(SDL2 REQUIRED)
 include_directories(${SDL2_INCLUDE_DIRS})

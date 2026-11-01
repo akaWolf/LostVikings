@@ -81,7 +81,7 @@ void render_callback_v2(void* state)
 
 ### 4. Обновлен asm.cpp
 
-**Файл**: `src/aux/asm.cpp`
+**Файл**: `src/runtime/asm.cpp`
 
 **Изменения**:
 - ✅ Добавлено объявление: `extern void render_init_v2(void *);`
@@ -241,7 +241,7 @@ void render_callback_v2(void* state)
 Если нужна реализация seg003:
 ```makefile
 all:
-	g++ src/*.cpp src/sdl/*.cpp src/aux/*.cpp src/rendering/*.c $(ADL) $(SDL) $(DBG) -I ./src/aux/ -I ./src/rendering/ -o vikings
+	g++ src/*.cpp src/sdl/*.cpp src/runtime/*.cpp src/rendering/*.c $(ADL) $(SDL) $(DBG) -I ./src/runtime/ -I ./src/rendering/ -o vikings
 ```
 
 ---
@@ -262,7 +262,7 @@ src/sdl/
 ### Модифицированные файлы
 
 ```
-src/aux/asm.cpp                  # +2 строки (extern, вызов)
+src/runtime/asm.cpp              # +2 строки (extern, вызов)
 ```
 
 ### Всего
@@ -422,7 +422,7 @@ src/
 │   ├── seg003_implementation.c       # Реализация seg003
 │   └── ...
 │
-└── aux/
+└── runtime/
     └── asm.cpp                        # ✅ ИЗМЕНЕНО (+2 строки)
 ```
 

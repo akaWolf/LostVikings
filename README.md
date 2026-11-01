@@ -585,7 +585,7 @@ is masked in logs by GitHub Actions automatically.
 
 ```
 src/
-  aux/asm.cpp             entry point for test mode
+  runtime/asm.cpp         entry point for test mode
   vikings.exe*.cpp        m2c-decompiled DOS executable (do not hand-edit)
   _data.cpp               m2c-decompiled DS image
   sdl/v2_main.cpp         entry point of the game (the default build)
@@ -616,7 +616,7 @@ m2c-decompile audit; safe to ignore for everyday work.
 
 ## License
 
-The port code in `src/sdl/`, `src/aux/`, `src/rendering/` and the build
+The port code in `src/sdl/`, `src/runtime/`, `src/rendering/` and the build
 infrastructure is the work of this project. The m2c output under
 `src/vikings.exe*.cpp` and `src/_data.cpp` is mechanically derived from
 the original 1992 Lost Vikings executable, which remains the property of
