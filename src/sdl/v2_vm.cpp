@@ -3430,8 +3430,8 @@ static void v2_audio_tick_108c8(uint8_t* s) {
 }
 
 // sub_1686f (seg000): VGA mode restore on exit. Verified with seg000 lines 15588-15597.
-// The original calls it at the fatal exit (sub_10dba 0DCF) and at the quit to DOS (loc_10e35 0E7A);
-// the port's quit paths (v2_run_animation_vm, v2_phase_post_flip3) exit without it. DS write: [92FF]=0 if [9300]!=FF.
+// The original calls it at the fatal exit (sub_10dba 0DCF) and at the quit to DOS (loc_10e35 0E7A); the port's
+// quit sites reach it through v2_quit_to_dos_10e35. DS write: [92FF]=0 if [9300]!=FF.
 static void v2_vga_mode_restore_1686f(uint8_t* s) {
     uint8_t al = v2gs(s).vga_mode_byte_b();                                             // MOV al, ds:9300h
     if (al == 0xFF) return;                                              // CMP al, FFh; JZ ret
@@ -7798,6 +7798,42 @@ void v2_fatal_box_at_exit(void) {                          // v2_main.cpp, after
     v2_midi_shutdown();
     _exit(0);                                              // INT 21h/4C00
 }
+// loc_10e35 (seg000 0E35–0E83): the quit to DOS — the way out of the F10 / Alt-X / Alt-Q quit (sub_10350:
+// 037C with the game mode 8000h, 0386 with the level flag 8), of the quit prompt's "End game" (sub_103ca
+// 0418: word_28814 & 2), of the menu's Quit (sub_1434c loc_143eb) and of a failed DOS free (loc_10db7 —
+// unreachable in the port, which has no DOS memory). The chain of the fatal exit less the messages:
+//   0E35 sub_16546 — the keyboard interrupt vector back to the one sub_16528 saved (the port hooks no INT 9)
+//   0E38 sub_1754c — the AIL exit ([A39A] != 0: far 1C22E(0, 0) into the driver); in the port the sound stops
+//        with need_quit — the audio pump's choke sees it (v2_native_opl.cpp) — and v2_midi_shutdown closes the
+//        MIDI dump
+//   0E3B..0E6F INT 21h/49 ×6 — es = [2E5F] [2E5D] [2E61] [2E63] [2E67] [2E77]: the DOS memory blocks (none here)
+//   0E71 INT 21h/3E bx=[2BB2] — closes the archive (v2_data_handle)
+//   0E7A sub_1686f — the VGA mode restore: [92FF] = 0 unless [9300] == FF (v2_vga_mode_restore_1686f)
+//   0E7D sub_1292f — the INT 24h vector back (v2_dos_int24_restore_1292f: nothing saved in the port)
+//   0E80 INT 21h/4C al=0 — back to DOS
+// The port's own, in this order: the golden end-state dump (direction V) after the chain's DS write — the
+// state the original leaves at INT 21h/4C — and before need_quit, because the audio pump exits the process
+// on need_quit (v2_only_clean_exit) and the dump must be on disk first; then the flushes, need_quit with
+// 50 ms for the render threads to leave their Mesa call (static destructors would run mid-call otherwise),
+// _exit. The V2-QUIT line names the frame and the two bytes for the stands (tests/quit_chain_check.sh).
+// Never returns (the menu site keeps the fn-test isolator's guard before the call).
+static void v2_quit_to_dos_10e35(uint8_t* s) {
+    // 0E35 sub_16546: no INT 9 hook in the port — nothing to restore
+    // 0E38 sub_1754c: the sound stop — need_quit below
+    // 0E3B..0E6F INT 21h/49 ×6: no DOS memory in the port
+    const uint8_t page_flag_before = v2gs(s).vga_page_flag_b();
+    if (v2_data_handle) { fclose(v2_data_handle); v2_data_handle = nullptr; }   // 0E71 INT 21h/3E [2BB2]
+    v2_vga_mode_restore_1686f(s);                                              // 0E7A sub_1686f
+    v2_dos_int24_restore_1292f(s);                                             // 0E7D sub_1292f
+    fprintf(stderr, "V2-QUIT: loc_10e35 at frame %d — the archive closed, [92FF] %02X -> %02X ([9300] %02X)\n",
+            v2_dbg_pre_vm_iter, page_flag_before, v2gs(s).vga_page_flag_b(), v2gs(s).vga_mode_byte_b());
+    headless_golden_dump();                                                    // direction V: a quit is a clean exit (all builds)
+    fflush(stdout); fflush(stderr);
+    extern bool need_quit; need_quit = true; SDL_Delay(50);                    // 0E38's effect in the port: the sound stops, the threads finish
+    v2_midi_shutdown();                                                        // UX stage 11: V2_MIDI_DUMP (_exit skips atexit)
+    _exit(0);                                                                  // 0E80 INT 21h/4C00
+}
+
 static void v2_fatal_10dba(uint8_t* s, uint16_t msg_off, uint16_t code) {
     if (v2_fntest_vm_soft) { v2_fntest_vm_soft = 3; return; }
 #if defined(V2_ONLY) && !defined(HEADLESS)
@@ -16642,17 +16678,15 @@ void v2_vm_op_13(V2VM& vm) {
             v2_vga_fill_span(0x86BC, 0x7000, 0);
         }
     } else if (al == 0x01) {
-        // Orig sub_1434c loc_143eb → JMP loc_10E35: GAME EXIT.
-        // loc_10E35 (eip 0x0E35) frees all DOS memory blocks (5× INT 21h 0x4900),
-        // closes data file, calls sub_1686F + sub_1292F, then INT 21h 0x4C00 (DOS exit).
-        // Used when user selects "Quit" from menu.
+        // Orig sub_1434c loc_143eb → JMP loc_10E35: GAME EXIT — the quit to DOS (sub_16546, sub_1754c,
+        // six INT 21h/49 for the DOS memory blocks, INT 21h/3E for the archive, sub_1686F, sub_1292F,
+        // INT 21h/4C; the chain is listed at v2_quit_to_dos_10e35). Used when the user selects "Quit"
+        // from the menu.
         // fn-test: the oracle's INT 21h/4C escapes the isolator (UB-skip), so
-        // a unit case never reaches the comparison — guard instead of _exit.
+        // a unit case never reaches the comparison — guard instead of the exit.
         extern int v2_fntest_vm_soft;
         if (v2_fntest_vm_soft) { v2_fntest_vm_soft = 3; return; }
-        // V2: trigger graceful exit similar to orig behavior.
-        headless_golden_dump();   // direction V: menu-quit is a clean exit (all builds)
-        extern bool need_quit; need_quit = true; SDL_Delay(50); v2_midi_shutdown(); _exit(0);
+        v2_quit_to_dos_10e35(vm.shadow);
     }
 
     // All paths: ADD bx, 3
@@ -21544,18 +21578,9 @@ void v2_run_animation_vm(uint16_t ds_val) {
             }
             if (trigger) {
                 if (v2gs(s).game_mode_ac() == 0x8000 || (v2gs(s).level_flags_b() & 8)) {
-                    // loc_10e35: orig path = QUIT to DOS, NOT level reload — sub_16546 (the keyboard
-                    // INT 9 vector back to the one sub_16528 saved, cs:16436|16438; no DS writes),
-                    // sub_1754c (AIL exit), INT 21h/49 ×6 (the DOS memory blocks [2E5F] [2E5D] [2E61]
-                    // [2E63] [2E67] [2E77]), INT 21h/3E (close the archive), sub_1686f (VGA mode restore),
-                    // sub_1292f (the INT 24h vector back, ds:86AC|86AE), INT 21h/4C (terminate program).
-                    // For v2: stop sound + _exit(0) to bypass static destructors
-                    // (render thread mid-Mesa would SEGV otherwise).
-                    headless_golden_dump();   // direction V: DOS-quit is a clean exit (all builds)
-                    fflush(stdout); fflush(stderr);
-                    extern bool need_quit; need_quit = true; SDL_Delay(50);
-                    v2_midi_shutdown();   // UX stage 11: V2_MIDI_DUMP (_exit skips atexit)
-                    _exit(0);
+                    // 037C / 0386 JMP loc_10e35: the quit to DOS, NOT a level reload — the chain (the
+                    // archive close, sub_1686f, sub_1292f, the exit) is listed at v2_quit_to_dos_10e35.
+                    v2_quit_to_dos_10e35(s);
                 } else {
                     // Normal quit prompt (orig loc_10389 tail, seg000 3411-3438):
                     // DAC color 3 = black, [303EB]/[303ED] = 0, then the shade
@@ -21594,13 +21619,7 @@ void v2_run_animation_vm(uint16_t ds_val) {
                     // orig sub_103ca quit-path epilogue: TEST word_28814, 2 →
                     // JMP loc_10e35 (DOS quit) when the prompt ended with "End
                     // game" (or no input → the [334]|=2 default).
-                    if (v2gs(s).frame_flags() & 2) {
-                        headless_golden_dump();   // direction V: prompt-quit is a clean exit (all builds)
-                        fflush(stdout); fflush(stderr);
-                        extern bool need_quit; need_quit = true; SDL_Delay(50);
-                        v2_midi_shutdown();   // UX stage 11: V2_MIDI_DUMP (_exit skips atexit)
-                        _exit(0);
-                    }
+                    if (v2gs(s).frame_flags() & 2) v2_quit_to_dos_10e35(s);   // 0418 JMP loc_10e35: the quit to DOS
                 }
             }
         }
@@ -22806,15 +22825,10 @@ void v2_phase_post_flip3(uint16_t ds_val) {
         }
         if (trigger) {
             if (v2gs(s).game_mode_ac() == 0x8000 || (v2gs(s).level_flags_b() & 8)) {
-                // loc_10E35: direct QUIT to DOS (orig: sub_16546 — the keyboard INT 9 vector back, no DS
-                // writes — sub_1754c AIL exit, the six DOS frees, the archive close, sub_1686f, sub_1292f,
-                // INT 21h/4C; the chain is listed at the F10 quit in v2_run_animation_vm). v2: stop sound + _exit(0).
-                headless_golden_dump();   // direction V: the attract/title F10 quit is a clean exit too (all builds) —
-                                          // 2026-09-06: synth_title_f10 ends here; the wide canon had no golden for it
-                fflush(stdout); fflush(stderr);
-                extern bool need_quit; need_quit = true; SDL_Delay(50);
-                v2_midi_shutdown();   // UX stage 11: V2_MIDI_DUMP (_exit skips atexit)
-                _exit(0);
+                // 037C / 0386 JMP loc_10E35: the direct quit to DOS — the attract/title F10 (synth_title_f10
+                // ends here; 2026-09-06: the wide canon had no golden for it). The chain is listed at
+                // v2_quit_to_dos_10e35.
+                v2_quit_to_dos_10e35(s);
             } else {
                 // loc_10389 path: password screen via canonical helpers.
                 // v2_pw_pre_loop detects F10 path internally via shadow
@@ -22845,16 +22859,10 @@ void v2_phase_post_flip3(uint16_t ds_val) {
                 }
                 // Post-loop: check word_28814 & 2 → loc_10E35 (Y in quit prompt
                 // sets this bit → "Quit to DOS").
-                if (v2gs(s).frame_flags() & 2) {
-                    headless_golden_dump();   // direction V: this F10-prompt quit is a clean exit too (all builds) —
-                                              // 2026-09-06: the only quit site without it; the HEADLESS+V2_ONLY wide
-                                              // canon lost the goldens of level5/level6/synth_title_f10 (replays that
-                                              // end here), the dual-run judge reaches its dump through the orig side
-                    fflush(stdout); fflush(stderr);
-                    need_quit = true; SDL_Delay(50);
-                    v2_midi_shutdown();   // UX stage 11: V2_MIDI_DUMP (_exit skips atexit)
-                    _exit(0);
-                }
+                // The chain is listed at v2_quit_to_dos_10e35 (level5/level6 end here; 2026-09-06: the only
+                // quit site that had no golden dump — the HEADLESS+V2_ONLY wide canon lost the goldens of
+                // level5/level6/synth_title_f10, the dual-run judge reaches its dump through the orig side).
+                if (v2gs(s).frame_flags() & 2) v2_quit_to_dos_10e35(s);   // 0418 JMP loc_10E35: the quit to DOS
                 // else: continue gameplay (user pressed N — return to game).
             }
         }

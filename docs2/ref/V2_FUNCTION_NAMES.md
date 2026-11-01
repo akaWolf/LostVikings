@@ -26,6 +26,7 @@ Generated from source on 2026-07-22 (waves 1, 2, 2b, fx, 2c).
 | sub_108c8 | `v2_audio_tick_108c8` |
 | sub_10cd8 | `v2_load_chunk_10cd8` |
 | sub_10d9f | `v2_alloc_recorded_10d9f` |
+| loc_10e35 | `v2_quit_to_dos_10e35` |
 | sub_10e99 | `v2_pal_correct_10e99` |
 | sub_10e99 | `v2_vm_pal_correct_10e99` |
 | sub_10f03 | `v2_pal_shade_10f03` |
