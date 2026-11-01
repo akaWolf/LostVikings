@@ -74,7 +74,7 @@ Generated from source on 2026-07-22 (waves 1, 2, 2b, fx, 2c).
 | sub_125a3 | `v2_vm_ch_escape_125a3` |
 | sub_12816 | `v2_glyph_list_clear_12816` |
 | sub_128a9 | `v2_dos_file_close_128a9` |
-| sub_1292f | `v2_snd_state_check_1292f` |
+| sub_1292f | `v2_dos_int24_restore_1292f` |
 | sub_12948 | `v2_dos_init_12948` |
 | sub_12989 | `v2_open_data_dat_12989` |
 | sub_12ab8 | `v2_alloc_segments_12ab8` |

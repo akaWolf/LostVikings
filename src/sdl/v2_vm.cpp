@@ -3430,7 +3430,8 @@ static void v2_audio_tick_108c8(uint8_t* s) {
 }
 
 // sub_1686f (seg000): VGA mode restore on exit. Verified with seg000 lines 15588-15597.
-// Called from exit cleanup only (sub_10dba). DS write: [92FF]=0 if [9300]!=FF.
+// The original calls it at the fatal exit (sub_10dba 0DCF) and at the quit to DOS (loc_10e35 0E7A);
+// the port's quit paths (v2_run_animation_vm, v2_phase_post_flip3) exit without it. DS write: [92FF]=0 if [9300]!=FF.
 static void v2_vga_mode_restore_1686f(uint8_t* s) {
     uint8_t al = v2gs(s).vga_mode_byte_b();                                             // MOV al, ds:9300h
     if (al == 0xFF) return;                                              // CMP al, FFh; JZ ret
@@ -4294,10 +4295,12 @@ static void v2_dos_file_close_128a9(uint8_t* /*s*/) {
     // INT(21h, AH=4Ch) — terminate program — commented
 }
 
-// sub_1292f: restore the saved DOS INT 24h critical-error vector if present.
-// No game DS writes; the SDL port does not install this DOS interrupt handler.
-static void v2_snd_state_check_1292f(uint8_t* /*s*/) {
-    // No DOS interrupt vector to restore.
+// sub_1292f (seg000 292F): the INT 24h critical-error vector goes back — `mov ax,[86AC]; or ax,[86AE]; jz`
+// (nothing saved: return), else ds:dx = the saved vector and `mov ax,2524h; int 21h`. No DS write. The port
+// installs no critical-error handler and v2_dos_init_12948 writes 0 to both words, so the jz path is the only one.
+// The original calls it at the fatal exit (sub_10dba 0DD2) and at the quit to DOS (loc_10e35 0E7D).
+static void v2_dos_int24_restore_1292f(uint8_t* /*s*/) {
+    // ds:86AC|86AE == 0 in the port: the jz path, no INT 21h/25
 }
 
 // sub_17512 (seg000): Sound driver XMI buffer setup. No DS writes to game state.
@@ -7733,11 +7736,13 @@ static void v2_dos_init_12948(uint8_t* s) {
 // and of the chunk loader (loc_1098e) end here, and it never returns.
 //   0DBA push seg004 / 0DBD pop ds — DS = the game's data segment, where the texts live
 //   0DBE push bx (the DOS error code)   0DBF push ax (the message's offset)
-//   0DC0 sub_16546 — restore the DOS keyboard interrupt vector (not used by SDL)
+//   0DC0 sub_16546 — the keyboard interrupt vector back to the one sub_16528 saved (cs:16436|16438, INT 21h/25 al=9;
+//        the port hooks no INT 9 — nothing to do)
 //   0DC3 sub_1754c — the AIL exit (the driver's own memory)
 //   0DC6 INT 21h/3E bx=[2BB2] — closes the archive
 //   0DCF sub_1686f — the VGA mode restore ([92FF] = 0 unless [9300] == FF; v2_vga_mode_restore_1686f)
-//   0DD2 sub_1292f — restore the DOS critical-error vector (not used by SDL)
+//   0DD2 sub_1292f — the critical-error vector back (ds:86AC|86AE, INT 21h/25 al=24h; v2_dos_int24_restore_1292f —
+//        the port saved none)
 //   0DD5 INT 21h/09 dx=2BBE — "*** An Error has occured while running PC Vikings ***"
 //   0DDD pop dx; 0DDE INT 21h/09 — the message
 //   0DE3 pop ax; 0DE4 or ax,ax; 0DE6 jz 0E30 — a zero code prints no code line
@@ -7805,7 +7810,7 @@ static void v2_fatal_10dba(uint8_t* s, uint16_t msg_off, uint16_t code) {
     // process termination releases the remaining backend resources.
     if (v2_data_handle) { fclose(v2_data_handle); v2_data_handle = nullptr; }   // 0DC6 INT 21h/3E [2BB2]
     v2_vga_mode_restore_1686f(s);                                              // 0DCF sub_1686f
-    v2_snd_state_check_1292f(s);                                               // 0DD2 sub_1292f
+    v2_dos_int24_restore_1292f(s);                                             // 0DD2 sub_1292f
     std::string text = v2_dos_string(s, 0x2BBE) + v2_dos_string(s, msg_off);  // 0DD5, 0DDE
     if (code) {                                                                // 0DE4 or ax,ax
         const uint8_t al = (uint8_t)code, ah = (uint8_t)(code >> 8);
@@ -21539,9 +21544,11 @@ void v2_run_animation_vm(uint16_t ds_val) {
             }
             if (trigger) {
                 if (v2gs(s).game_mode_ac() == 0x8000 || (v2gs(s).level_flags_b() & 8)) {
-                    // loc_10e35: orig path = QUIT to DOS, NOT level reload.
-                    // sub_16546 (VGA cleanup, no DS writes), sub_1754c (AIL exit),
-                    // INT 21h/49 (free DOS memory), INT 21h/4C (terminate program).
+                    // loc_10e35: orig path = QUIT to DOS, NOT level reload — sub_16546 (the keyboard
+                    // INT 9 vector back to the one sub_16528 saved, cs:16436|16438; no DS writes),
+                    // sub_1754c (AIL exit), INT 21h/49 ×6 (the DOS memory blocks [2E5F] [2E5D] [2E61]
+                    // [2E63] [2E67] [2E77]), INT 21h/3E (close the archive), sub_1686f (VGA mode restore),
+                    // sub_1292f (the INT 24h vector back, ds:86AC|86AE), INT 21h/4C (terminate program).
                     // For v2: stop sound + _exit(0) to bypass static destructors
                     // (render thread mid-Mesa would SEGV otherwise).
                     headless_golden_dump();   // direction V: DOS-quit is a clean exit (all builds)
@@ -22799,8 +22806,9 @@ void v2_phase_post_flip3(uint16_t ds_val) {
         }
         if (trigger) {
             if (v2gs(s).game_mode_ac() == 0x8000 || (v2gs(s).level_flags_b() & 8)) {
-                // loc_10E35: direct QUIT to DOS (orig: sub_16546 VGA cleanup +
-                // sub_1754c AIL exit + INT 21h/4C). v2: stop sound + _exit(0).
+                // loc_10E35: direct QUIT to DOS (orig: sub_16546 — the keyboard INT 9 vector back, no DS
+                // writes — sub_1754c AIL exit, the six DOS frees, the archive close, sub_1686f, sub_1292f,
+                // INT 21h/4C; the chain is listed at the F10 quit in v2_run_animation_vm). v2: stop sound + _exit(0).
                 headless_golden_dump();   // direction V: the attract/title F10 quit is a clean exit too (all builds) —
                                           // 2026-09-06: synth_title_f10 ends here; the wide canon had no golden for it
                 fflush(stdout); fflush(stderr);
