@@ -2272,6 +2272,9 @@ static void v2_chunk_trace_note(char kind, uint16_t chunk_id,
 
 static uint32_t v2_read_chunk_archive(uint16_t chunk_id, uint8_t* dest, uint32_t max_size,
                                       uint8_t* ds_ctx = nullptr);
+static void v2_fatal_10dba(uint8_t* s, uint16_t msg_off, uint16_t code);
+static uint16_t v2_dos_err_read(int e);
+static uint16_t v2_dos_err_seek(int e);
 static uint32_t v2_read_chunk(uint16_t chunk_id, uint8_t* dest, uint32_t max_size,
                               uint8_t* ds_ctx = nullptr) {
     uint8_t* dctx = ds_ctx ? ds_ctx : v2_vm_shadow_ds;
@@ -2623,12 +2626,19 @@ static uint32_t v2_read_chunk_archive(uint16_t chunk_id, uint8_t* dest, uint32_t
 
     // Read chunk table entry: seek to chunk_id * 4
     uint32_t table_offset = (uint32_t)chunk_id * 4;
-    if (fseek(v2_data_handle, table_offset, SEEK_SET)) return 0;
+    if (fseek(v2_data_handle, table_offset, SEEK_SET)) {
+        v2_fatal_10dba(dctx, 0x2CE7, v2_dos_err_seek(errno));
+        return 0;
+    }
 
     // Read 8 bytes: offset (4) + next_offset (4)
     // Original sub_10982: fread(raddr(ds,0x2BB4), 8, 1, data_handle)
     uint8_t header[8];
-    if (fread(header, 8, 1, v2_data_handle) != 1) return 0;
+    if (fread(header, 8, 1, v2_data_handle) != 1) {
+        int err = errno;
+        if (ferror(v2_data_handle)) v2_fatal_10dba(dctx, 0x2CE7, v2_dos_err_read(err));
+        return 0;
+    }
     uint32_t chunk_offset = *(uint32_t*)(header);
     uint32_t next_offset = *(uint32_t*)(header + 4);
     uint32_t compressed_size = next_offset - chunk_offset;
@@ -2637,12 +2647,19 @@ static uint32_t v2_read_chunk_archive(uint16_t chunk_id, uint8_t* dest, uint32_t
     v2_gs_evac_mirror_span(dctx, DS_CHUNK_HDR, 8);  // stage-4 bridge: bulk header write
 
     // Seek to chunk data
-    if (fseek(v2_data_handle, chunk_offset, SEEK_SET)) return 0;
+    if (fseek(v2_data_handle, chunk_offset, SEEK_SET)) {
+        v2_fatal_10dba(dctx, 0x2CE7, v2_dos_err_seek(errno));
+        return 0;
+    }
 
     // Read decompressed size (first 2 bytes)
     // Original: fread(raddr(ds,0x2BBC), 2, 1, data_handle)
     uint16_t decompressed_size;
-    if (fread(&decompressed_size, 2, 1, v2_data_handle) != 1) return 0;
+    if (fread(&decompressed_size, 2, 1, v2_data_handle) != 1) {
+        int err = errno;
+        if (ferror(v2_data_handle)) v2_fatal_10dba(dctx, 0x2CE7, v2_dos_err_read(err));
+        return 0;
+    }
     v2gs(dctx).decomp_size(decompressed_size);
 
     // Original sub_10982: ecx = compressed_size (including 2-byte header already read).
@@ -2653,17 +2670,21 @@ static uint32_t v2_read_chunk_archive(uint16_t chunk_id, uint8_t* dest, uint32_t
     static uint8_t comp_buf[0x10000];
     uint32_t eax_check = compressed_size >> 4;    // orig: SHR eax,4 (32-bit)
     if (eax_check >= 0x0B08) {
-        // Orig loc_1098e: sub_10dba twice = the FATAL "chunk too big" handler
-        // (close file, print error via INT21, exit). No alternate load path
-        // exists — the previous v2 "Non-FS temp" branch was invented. Real
-        // DATA.DAT chunks never reach this (~45KB compressed limit).
+        // Orig loc_1098e: sub_10dba with message 2D05 and error code zero.
+        // It does not return in production; the fn-test isolator soft-exits.
         fprintf(stderr, "V2-CHUNK-FATAL: id=0x%X compressed=%u >= 0xB080 — orig would "
                 "abort via sub_10dba (chunk too big)\n", chunk_id, compressed_size);
+        v2_fatal_10dba(dctx, 0x2D05, 0);
         return 0;
     }
     // Original: fread(fs:0x1000, cx, 1, data_handle), cx = low 16 bits of ecx.
     uint32_t fs_read_size = (uint16_t)compressed_size;
     size_t read = fread(v2_vm_shadow_fs + 0x1000, 1, fs_read_size, v2_data_handle);
+    int read_err = errno;
+    if (read < fs_read_size && ferror(v2_data_handle)) {
+        v2_fatal_10dba(dctx, 0x2CE7, v2_dos_err_read(read_err));
+        return 0;
+    }
     // Zero shadow_fs[0..0xFFF] — original: memset(ds:0, 0, 0x800 words)
     memset(v2_vm_shadow_fs, 0, 0x1000);
     // Copy to comp_buf for LZSS decompression
@@ -4273,10 +4294,10 @@ static void v2_dos_file_close_128a9(uint8_t* /*s*/) {
     // INT(21h, AH=4Ch) — terminate program — commented
 }
 
-// sub_1292f (seg000): Sound state check. No DS writes (read-only).
-// Verified with seg000 lines 6201+. Tests ds:86AC|86AE, calls AIL if nonzero.
+// sub_1292f: restore the saved DOS INT 24h critical-error vector if present.
+// No game DS writes; the SDL port does not install this DOS interrupt handler.
 static void v2_snd_state_check_1292f(uint8_t* /*s*/) {
-    // Sound driver shutdown — AIL calls only, no DS writes
+    // No DOS interrupt vector to restore.
 }
 
 // sub_17512 (seg000): Sound driver XMI buffer setup. No DS writes to game state.
@@ -7712,11 +7733,11 @@ static void v2_dos_init_12948(uint8_t* s) {
 // and of the chunk loader (loc_1098e) end here, and it never returns.
 //   0DBA push seg004 / 0DBD pop ds — DS = the game's data segment, where the texts live
 //   0DBE push bx (the DOS error code)   0DBF push ax (the message's offset)
-//   0DC0 sub_16546 — the VGA cleanup (no DS effect in the model, as at the quit paths)
+//   0DC0 sub_16546 — restore the DOS keyboard interrupt vector (not used by SDL)
 //   0DC3 sub_1754c — the AIL exit (the driver's own memory)
 //   0DC6 INT 21h/3E bx=[2BB2] — closes the archive
 //   0DCF sub_1686f — the VGA mode restore ([92FF] = 0 unless [9300] == FF; v2_vga_mode_restore_1686f)
-//   0DD2 sub_1292f — the sound state check (read-only; v2_snd_state_check_1292f)
+//   0DD2 sub_1292f — restore the DOS critical-error vector (not used by SDL)
 //   0DD5 INT 21h/09 dx=2BBE — "*** An Error has occured while running PC Vikings ***"
 //   0DDD pop dx; 0DDE INT 21h/09 — the message
 //   0DE3 pop ax; 0DE4 or ax,ax; 0DE6 jz 0E30 — a zero code prints no code line
@@ -7774,7 +7795,14 @@ void v2_fatal_box_at_exit(void) {                          // v2_main.cpp, after
 }
 static void v2_fatal_10dba(uint8_t* s, uint16_t msg_off, uint16_t code) {
     if (v2_fntest_vm_soft) { v2_fntest_vm_soft = 3; return; }
-    // 0DC0 sub_16546, 0DC3 sub_1754c: no DS effect in the model (the quit paths)
+#if defined(V2_ONLY) && !defined(HEADLESS)
+    // Stop the device before the fatal dialog can wait for user input. This
+    // also waits for an in-flight callback; fatal callers are not audio callbacks.
+    SDL_PauseAudio(1);
+#endif
+    // 0DC0 restores the DOS keyboard vector; SDL does not install one.
+    // 0DC3 shuts down AIL if initialized. The native device is paused above;
+    // process termination releases the remaining backend resources.
     if (v2_data_handle) { fclose(v2_data_handle); v2_data_handle = nullptr; }   // 0DC6 INT 21h/3E [2BB2]
     v2_vga_mode_restore_1686f(s);                                              // 0DCF sub_1686f
     v2_snd_state_check_1292f(s);                                               // 0DD2 sub_1292f
