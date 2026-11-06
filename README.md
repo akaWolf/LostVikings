@@ -84,6 +84,22 @@ archive: the Blizzard Arcade Collection repack, a truncated copy). The archive
 this port is built against is 1 570 444 bytes, md5
 `d0f8a04202070a54d1909758ecd962b5`.
 
+The original SETUP program changes audio settings inside the archive, so a
+different MD5 alone does not mean the file is corrupt. The extractor
+(`python3 tools/data/extract_datadat.py DATA.DAT`) logs the hashes and those
+settings. It also compares against the reference with the documented SETUP
+audio fields masked: a match means all other bytes agree. Unknown variants
+are reported as such, not automatically rejected. The same details are saved
+under `archive_info` in the extraction manifest.
+
+For the recognized reference archive, the extractor also reports bounded LZSS
+probes using the stored size plus one. It excludes the SETUP header, six raw
+screens and the unclassified final record from that count. Some probed
+records are unreferenced and their type remains uncertain, so a complete probe
+is not an integrity guarantee. For compatibility, `chunks/dec/` and the
+manifest's existing size fields retain their legacy behavior; per-record
+`diagnostic` fields describe the new checks.
+
 The bundled `ds_static.bin` / `exe_static.bin` snapshots are not a
 DATA.DAT substitute — they hold the static EXE image (initial DS, the
 seg001 text/menu data, lookup tables). Test mode reconstructs this
