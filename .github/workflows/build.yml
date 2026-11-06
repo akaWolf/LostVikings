@@ -40,6 +40,11 @@ jobs:
 
       - name: Generated-executor declarations are current (tools/data/gen_vm_decls.py --check)
         run: python3 tools/data/gen_vm_decls.py --check
+      - name: DATA.DAT diagnostics and scenario runner tests
+        run: |
+          python3 tests/test_extract_datadat.py
+          python3 tests/test_reference_dat.py
+          python3 tests/test_scenarios_runner.py
       - name: Build the HEADLESS test-mode binary (the canon judge)
         # clang: v2_vm.cpp (with the transpiled executors since stage 3A) needs
         # > 8 GB under gcc and dies on the 16 GB runner; clang peaks at ~1.2 GB.
