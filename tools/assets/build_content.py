@@ -219,7 +219,7 @@ def main():
     print(f"[1/5] extracting {data} -> {raw}")
     r = subprocess.run([sys.executable, os.path.join(ROOT, "tools", "data", "extract_datadat.py"), data, raw],
                        cwd=ROOT, capture_output=True, text=True)
-    sys.stdout.write("".join("      " + l + "\n" for l in r.stdout.strip().splitlines()[-3:]))
+    sys.stdout.write("".join("      " + l + "\n" for l in r.stdout.strip().splitlines()))
     if r.returncode != 0:
         sys.stderr.write(r.stderr)
         fail("extract_datadat.py failed")
