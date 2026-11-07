@@ -37,6 +37,16 @@ TEST=1 make -j$(nproc)
 GOLDEN=update ./tests/scenarios.sh   # (re)take the catalog from a green run
 ./tests/scenarios.sh                 # normal runs now also check golden
 
+# If DATA.DAT differs from the reference only in SETUP audio settings, each
+# scenario first verifies the supplied archive in lockstep. A separate replay
+# uses a temporary, checksum-verified reference-settings copy for the existing
+# golden comparison. The supplied file is never modified. GOLDEN=update
+# requires the exact reference archive; other variants are not normalized.
+# The reference replay runs in a temporary working directory, with the keymap,
+# options and static images linked from the project root. Other relative files
+# are not mirrored; custom configurations relying on them require separate
+# validation. The variant's final state is not compared with a variant golden.
+
 # 4c. Teleport save/load (direction V step 2, phase-D tooling)
 # Any headless run can snapshot the FULL v2 world at its clean exit:
 V2_SAVE_STATE=/tmp/state.bin ./vikings_headless --replay-input=... --max-frames=...

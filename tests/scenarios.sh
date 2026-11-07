@@ -16,6 +16,34 @@ JOBS=${JOBS:-$(nproc)}
 # historical 4ms (validated: unit set 501 fail=0, canon x2 52/52, golden
 # end-states byte-identical). Override with V2_FAST_VSYNC=0 to fall back.
 export V2_FAST_VSYNC=${V2_FAST_VSYNC:-1}
+ROOT=$(pwd)
+GOLDEN_WORK=""
+if [ -f DATA.DAT ]; then
+    GOLDEN_WORK=$(mktemp -d "${TMPDIR:-/tmp}/vikings-golden-XXXXXXXX") || exit 2
+    trap 'rm -rf "$GOLDEN_WORK"' EXIT
+    archive_status=$(python3 tests/reference_dat.py DATA.DAT "$GOLDEN_WORK/DATA.DAT") || exit 2
+    case "$archive_status" in
+        exact) rm -rf "$GOLDEN_WORK"; GOLDEN_WORK="" ;;
+        normalized)
+            if [ "$GOLDEN" = update ]; then
+                echo "FAIL: GOLDEN=update requires the unmodified reference DATA.DAT"
+                exit 2
+            fi
+            for file in ds_static.bin exe_static.bin vikings_keymap.cfg v2_options.cfg; do
+                [ ! -f "$file" ] || ln -s "$ROOT/$file" "$GOLDEN_WORK/$file"
+            done
+            echo "SETUP audio differs: testing the supplied archive and checking goldens in a separate reference-settings run."
+            ;;
+        unknown)
+            if [ "$GOLDEN" = update ]; then
+                echo "FAIL: GOLDEN=update requires the unmodified reference DATA.DAT"
+                exit 2
+            fi
+            echo "WARNING: unknown DATA.DAT; comparing goldens without normalization."
+            rm -rf "$GOLDEN_WORK"; GOLDEN_WORK="" ;;
+        *) echo "FAIL: unexpected archive status: $archive_status"; exit 2 ;;
+    esac
+fi
 RESULTS_DIR="/tmp/headless_scenario_results_$$"
 rm -rf "$RESULTS_DIR"
 mkdir -p "$RESULTS_DIR"
@@ -41,15 +69,34 @@ run_one() {
     if V2_GOLDEN_DUMP="$DUMP_DIR/golden.txt" ./vikings_headless \
         --replay-input="$inp" \
         --max-frames="$FRAMES" \
-        --dump-dir="$DUMP_DIR" \
-        > "$LOG" 2>&1; then
-        if [ "$GOLDEN" = "update" ] && [ -s "$DUMP_DIR/golden.txt" ]; then
-            cp "$DUMP_DIR/golden.txt" "$GOLDEN_REF"
+         --dump-dir="$DUMP_DIR" \
+         > "$LOG" 2>&1; then
+        if [ -f "$GOLDEN_REF" ] && [ ! -s "$DUMP_DIR/golden.txt" ]; then
+            echo "FAIL: $name (supplied-archive replay did not produce a golden dump)"
+            echo "  dump dir: $DUMP_DIR/"
+            echo "FAIL missing-dump" > "$RESULTS_DIR/$name.status"
+            return
         fi
-        if [ -f "$GOLDEN_REF" ] && [ -s "$DUMP_DIR/golden.txt" ] \
-           && ! cmp -s "$DUMP_DIR/golden.txt" "$GOLDEN_REF"; then
+        if [ -n "$GOLDEN_WORK" ] && [ -f "$GOLDEN_REF" ]; then
+            mkdir -p "$DUMP_DIR/reference"
+            if ! (cd "$GOLDEN_WORK" && V2_GOLDEN_DUMP="$DUMP_DIR/reference/golden.txt" "$ROOT/vikings_headless" \
+                --replay-input="$ROOT/$inp" --max-frames="$FRAMES" \
+                --dump-dir="$DUMP_DIR/reference" > "$DUMP_DIR/reference/run.log" 2>&1); then
+                echo "FAIL: $name (reference-settings replay failed)"
+                echo "  dump dir: $DUMP_DIR/"
+                echo "FAIL reference" > "$RESULTS_DIR/$name.status"
+                return
+            fi
+            GOLDEN_DUMP="$DUMP_DIR/reference/golden.txt"
+        else
+            GOLDEN_DUMP="$DUMP_DIR/golden.txt"
+        fi
+        if [ "$GOLDEN" = "update" ] && [ -s "$GOLDEN_DUMP" ]; then
+            cp "$GOLDEN_DUMP" "$GOLDEN_REF"
+        fi
+        if [ -f "$GOLDEN_REF" ] && { [ ! -s "$GOLDEN_DUMP" ] || ! cmp -s "$GOLDEN_DUMP" "$GOLDEN_REF"; }; then
             echo "FAIL: $name (golden end-state mismatch)"
-            diff "$GOLDEN_REF" "$DUMP_DIR/golden.txt" | head -12 | sed 's/^/    /'
+            diff "$GOLDEN_REF" "$GOLDEN_DUMP" | head -12 | sed 's/^/    /'
             echo "  dump dir: $DUMP_DIR/"
             echo "FAIL golden" > "$RESULTS_DIR/$name.status"
             return
@@ -70,6 +117,7 @@ run_one() {
 export -f run_one
 export RESULTS_DIR
 export GOLDEN
+export ROOT GOLDEN_WORK
 
 shopt -s nullglob
 replays=(tests/replays/*.inp)
