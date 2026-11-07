@@ -3,6 +3,23 @@
 #
 # Runs scenarios in parallel across all cores (each headless run is
 # single-threaded, so N replays = N cores busy). Override with JOBS=k.
+#
+# The archive: with DATA.DAT in the root, tests/reference_dat.py classifies it
+# first (python3):
+#   exact       the reference archive — every replay runs once and its dump is
+#               compared with its golden;
+#   normalized  the reference but for the SETUP audio words of record 0 (another
+#               music set, another card, the mutes): every replay runs on the
+#               archive as supplied — the lockstep verification of that archive —
+#               and then again from a temporary directory with a copy carrying
+#               the reference's words, a copy proven by the reference MD5; the
+#               golden is compared with the dump of that second run (the goldens
+#               are the reference's end states: the music set alone moves the
+#               whole timeline);
+#   unknown     any other file — a warning, the comparison as for the reference.
+# GOLDEN=update is refused unless the archive is the exact reference; the
+# supplied file is never written. A replay that leaves no dump where a golden
+# exists fails.
 
 cd "$(dirname "$0")/.."
 
@@ -69,8 +86,8 @@ run_one() {
     if V2_GOLDEN_DUMP="$DUMP_DIR/golden.txt" ./vikings_headless \
         --replay-input="$inp" \
         --max-frames="$FRAMES" \
-         --dump-dir="$DUMP_DIR" \
-         > "$LOG" 2>&1; then
+        --dump-dir="$DUMP_DIR" \
+        > "$LOG" 2>&1; then
         if [ -f "$GOLDEN_REF" ] && [ ! -s "$DUMP_DIR/golden.txt" ]; then
             echo "FAIL: $name (supplied-archive replay did not produce a golden dump)"
             echo "  dump dir: $DUMP_DIR/"

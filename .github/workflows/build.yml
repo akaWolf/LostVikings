@@ -40,8 +40,9 @@ jobs:
 
       - name: Generated-executor declarations are current (tools/data/gen_vm_decls.py --check)
         run: python3 tools/data/gen_vm_decls.py --check
-      - name: DATA.DAT diagnostics and scenario runner tests
+      - name: Unit tests that need no game data (the call-order audit, the DATA.DAT diagnostics, the scenario runner)
         run: |
+          python3 tests/test_call_order_audit.py
           python3 tests/test_extract_datadat.py
           python3 tests/test_reference_dat.py
           python3 tests/test_scenarios_runner.py
