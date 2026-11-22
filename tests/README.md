@@ -98,6 +98,8 @@ diff text, context.txt → exit code 1.
 | `fuzz_harness.sh [N=100]` | N random-seed sessions | ~30 sec × N | Nightly |
 | `fuzz_coverage.py [iter=10000]` | Coverage-guided mutation, B5-driven | Hours | Weekly |
 | `quit_chain_check.sh` | The game build's quit to DOS runs the original's loc_10e35 chain: two canon replays (the title's F10, the prompt's "End game"), the state image's [92FF]/[9300] at the exit | ~20 sec | After changes to the exit paths |
+| `content_tools_check.sh` | The console content pack does not depend on where it is built: `build_content.py` in this tree, in its tracked files alone (a fresh checkout) and in `content-tools/` as the release bundles carry it — the same `.compiled/` and `exe_static.bin` from all three, then the bundle's judge on its pack. Needs `DATA.DAT` and the console images (`make content-tools-check`) | ~30 sec | After changes to `tools/assets`, `tools/data` or `content_tools_bundle.sh` |
+| `test_content_tools_bundle.py` | `content-tools/` as shipped is enough for the builder, on a synthetic archive and without game data: its modules load, the pack's judge starts, the judge reads the archive of the pack it judges, the sprite palette rows are matched against the archive's own palette chunks | ~1 sec | Every commit (CI) |
 
 ---
 

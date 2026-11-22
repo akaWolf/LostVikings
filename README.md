@@ -266,7 +266,13 @@ content-regress` (`tests/content_regress.sh`) replays the reported cases
 on the pack — the sand column of TMPL standing while the vikings walk up
 to it — and `make sound-header-check` (`tests/sound_header_check.sh`)
 plays copies of `DATA.DAT` whose SETUP header says "no sound card" or
-another port, which must sound exactly like the file as it is.
+another port, which must sound exactly like the file as it is. `make
+content-tools-check` (`tests/content_tools_check.sh`) builds the pack
+three times — in the tree as it stands, from its tracked files alone (a
+fresh checkout) and from `content-tools/` as the release bundles carry
+it — and requires the same `.compiled/` and `exe_static.bin` from all
+three: the build must not lean on what a development tree keeps beside
+the tools (the editor's `assets/` and `assets_raw/chunks/`).
 
 The game's frame pacing follows the display: the DOS game renders three
 sub-frames per game frame, one per 60 Hz refresh of Mode X, moving the

@@ -422,7 +422,7 @@ C_OBJS   := $(patsubst %.c,   $(OBJDIR)/%.o, $(C_SRCS))
 ALL_OBJS := $(CXX_OBJS) $(C_OBJS)
 DEPS     := $(ALL_OBJS:.o=.d)
 
-.PHONY: all clean keymap_editor content content-check content-smoke content-regress sound-header-check quit-chain-check
+.PHONY: all clean keymap_editor content content-check content-smoke content-regress content-tools-check sound-header-check quit-chain-check
 
 all: $(EXE_NAME)
 
@@ -444,6 +444,11 @@ content-smoke:
 	bash tests/content_smoke.sh
 content-regress:
 	bash tests/content_regress.sh
+# The pack does not depend on where it is built: this tree, its tracked files alone (a fresh
+# checkout) and content-tools/ as the release bundles carry it give the same store (needs
+# DATA.DAT and the console images, as `make content` does).
+content-tools-check:
+	bash tests/content_tools_check.sh
 sound-header-check:
 	bash tests/sound_header_check.sh
 quit-chain-check:
