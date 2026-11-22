@@ -167,11 +167,13 @@ def compose_cgram(rom, pal_list):
 PAL_MATCH_MAX = 256
 
 
-def snes_sprite_palettes(rom, snes_raw):
+def snes_sprite_palettes(rom, snes_raw, raw=None):
     """The sprite palette rows (starts >= 128) of a SNES level stripe as PC palette chunks:
     {start: (chunk, dist, second, n)} — for each entry of the stripe's palette list at 128 or above,
     its colours out of the composed CGRAM (BGR555 -> VGA6) against every 16-colour palette chunk a PC
-    level loads (level_render.pal_chunk_union): the closest chunk, its distance, the runner-up's
+    level loads (level_render.archive_pal_chunks: the lists of the archive's own level headers, read
+    from the raw extraction `raw` — default the one the tools work on, assetc.RAW; the judge passes
+    the extraction of the pack it judges): the closest chunk, its distance, the runner-up's
     distance and the entry's colour count. The SNES DE's sprites are the PC's art under the PC's
     palettes (every row of every converted level matches one PC chunk within the rounding and no other
     within twice that), so a level converted on a PC donor must load on each row the chunk the SNES
@@ -184,7 +186,7 @@ def snes_sprite_palettes(rom, snes_raw):
     stripe's list (content_check.py), the converter takes it for the stripe."""
     st = LR.parse_stripe(snes_raw)
     cg = compose_cgram(rom, st["pal_list"])
-    chunks = {cid: p for cid, p in LR.pal_chunk_union().items() if len(p) >= 48}
+    chunks = {cid: p for cid, p in LR.archive_pal_chunks(raw).items() if len(p) >= 48}
     out = {}
     for e in st["pal_list"]:
         if e["start"] < 128:

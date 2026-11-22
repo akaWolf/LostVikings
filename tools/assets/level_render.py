@@ -232,6 +232,52 @@ def pal_chunk_union():
     return _PAL_UNION
 
 
+_ARCHIVE_PALS = {}
+
+
+def archive_pal_chunks(raw=None):
+    """{chunk_id: payload} for every palette chunk a level header of the ARCHIVE
+    lists — the PC's palettes, for the converter and the pack's judge
+    (snes2pc.snes_sprite_palettes). The headers are the chunk map's
+    level_header_stripe records of the raw extraction `raw` (default: assetc.RAW,
+    the extraction the tools work on — build_content.py points it at
+    <pack>/raw), read as the decompressor left them. pal_chunk_union above takes
+    the same lists from the open tree assets/ of the tools' root, which only the
+    editor's setup makes: a build that read it stopped in a fresh checkout and
+    in a release bundle (tests/content_tools_check.sh). The two agree on an
+    untouched open tree — its header files hold these very bytes. Cached per
+    extraction."""
+    import assetc as AC
+    raw = os.path.abspath(raw if raw is not None else AC.RAW)
+    if raw in _ARCHIVE_PALS:
+        return _ARCHIVE_PALS[raw]
+
+    def dec(cid):
+        with open(os.path.join(raw, "chunks", "dec", f"{cid:04d}.bin"), "rb") as f:
+            return f.read()
+    with open(os.path.join(raw, "chunk_map.json")) as f:
+        cmap = json.load(f)
+    ids = set()
+    for key, info in sorted(cmap.items()):
+        if (info.get("roles") or [None])[0] != "level_header_stripe":
+            continue
+        try:
+            st = parse_stripe(dec(int(key, 16)))
+        except Exception:
+            continue
+        for e in st["pal_list"]:
+            if e["chunk"] != 0xFFFF:
+                ids.add(e["chunk"])
+    out = {}
+    for cid in sorted(ids):
+        try:
+            out[cid] = dec(cid)
+        except Exception:
+            pass
+    _ARCHIVE_PALS[raw] = out
+    return out
+
+
 def level_passwords():
     """37 4-letter passwords @ds:0x85A5 (bit7 stripped); password slot i =
     level table index i (op_D3 verified). Levels 37+ are scene stubs."""

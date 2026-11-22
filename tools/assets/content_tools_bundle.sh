@@ -4,14 +4,18 @@
 # needs, in the repo's own layout so its path logic (ROOT = two levels above the
 # script) holds — the asset tools and converters, the lvsc chain of tools/data,
 # the two repo inputs of the archive conversion (the chunk role map, the DSL
-# text of the six world scripts) and the static images the tools read from the
-# repo root. No game data and no console data: the user runs it against their
-# own DATA.DAT and their own SNES DE / Genesis images (README, "Console content").
+# text of the six world scripts), the static images the tools read from the
+# repo root and the LZSS decoder of the pack's judge. No game data and no console
+# data: the user runs it against their own DATA.DAT and their own SNES DE /
+# Genesis images (README, "Console content"). The build may read nothing of
+# the repository but what is copied here: tests/content_tools_check.sh builds
+# the pack from this directory alone, tests/test_content_tools_bundle.py holds
+# it to a synthetic archive in the CI.
 set -eu
 [ $# -eq 1 ] || { echo "usage: $0 DEST" >&2; exit 2; }
 DEST=$1
 ROOT=$(cd "$(dirname "$0")/../.." && pwd)
-mkdir -p "$DEST/tools/assets" "$DEST/tools/data" "$DEST/assets_raw/lvs" "$DEST/src/sdl"
+mkdir -p "$DEST/tools/assets" "$DEST/tools/data" "$DEST/assets_raw/lvs" "$DEST/src/sdl" "$DEST/python"
 cp "$ROOT"/tools/assets/*.py "$DEST/tools/assets/"
 cp "$ROOT/src/sdl/v2_ds_layout.h" "$DEST/src/sdl/"       # the field names of the .lvd logic language (tools/data/disasm.py reads it from ROOT)
 cp "$ROOT"/tools/assets/*.json "$DEST/tools/assets/"   # the converters' tables: the BAC translations cache, the glyph tables, the effect map, the SMD map
@@ -20,6 +24,7 @@ cp "$ROOT"/tools/data/*.json "$DEST/tools/data/"     # the op tables of the scri
 cp "$ROOT/assets_raw/chunk_map.json" "$DEST/assets_raw/"
 cp "$ROOT"/assets_raw/lvs/*.lvsf "$DEST/assets_raw/lvs/"
 cp "$ROOT/exe_static.bin" "$ROOT/ds_static.bin" "$DEST/"   # level_render / texts_exe read them from ROOT
+cp "$ROOT/python/lv_lzss.py" "$DEST/python/"               # the judge's decoder of the compiled records (content_check.py Pack)
 cp "$ROOT/EDITOR.md" "$DEST/"                              # the level / logic editor and mods guide (the same tools)
 cat > "$DEST/README.txt" <<'EOF'
 Console content builder (SNES / Genesis material for the game).

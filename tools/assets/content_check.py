@@ -60,7 +60,8 @@ converter's choice of a donor head:
 
 Self-calibration: the same checks run first over every level of the EXE's
 own tables (the 37 playable levels and the special slots up to 0x2F — the
-ending, the title screens; heads from the open tree or the archive). Whatever
+ending, the title screens; heads and scripts from the archive the pack was
+built from: Pack.raw). Whatever
 the original itself "fails" is a property of the original, not a defect:
 those (script, class, anim chunk) pairs are dormant lookups and are only
 reported as information for the pack (toggle_switch -> chunk 0x167 in every
@@ -84,9 +85,15 @@ are compared with --dormant.
 
 Reachability: the disassembler reads a script from assets_raw/chunks/dec under
 the working directory (with its tables under tools/data), so the judge walks
-in a temporary root that links the repo's files and holds the pack's own
-scripts; a walk of one class takes well under a millisecond, the whole judge
-about a second.
+in a temporary root that links the tools' files and the archive's chunks and
+holds the pack's own scripts; a walk of one class takes well under a
+millisecond, the whole judge about a second.
+
+The archive: the extraction the pack was built from, <content>/raw — what
+build_content.py leaves there — or, for a tree without one (the editor's
+scratch), the extraction the tools work on (assets_raw/ of the editor's
+setup). The judge needs nothing else beside the tools: it runs in a fresh
+checkout and from the content-tools/ of a release bundle.
 
 Usage: content_check.py [--content DIR] [--snes-rom PATH] [--strict] [-v]
        content_check.py --list | --list-all | --dormant   (for tests/content_smoke.sh:
@@ -108,6 +115,7 @@ import tempfile
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(os.path.dirname(HERE))
 sys.path.insert(0, HERE)
+import assetc as AC  # noqa: E402
 import level_render as LR  # noqa: E402
 
 # ---- the engine's model (verified facts, v2_vm.cpp / v2_ds_layout.h) --------
@@ -138,10 +146,20 @@ def _load_module(name, path):
 class Pack:
     """A content directory: headers from the open tree, chunks from the archive
     or the compiled records (content/.compiled/NNNN.bin = 8-byte table header
-    + [u16 size][LZSS], decimal file names)."""
+    + [u16 size][LZSS], decimal file names).
+
+    The archive is the extraction the pack was built from: build_content.py
+    leaves it in <content>/raw (chunks/dec/NNNN.bin, the decompressor's output),
+    and a tree without one — the editor's scratch, a copy of the open tree — is
+    judged against the extraction the tools work on (assetc.RAW: assets_raw/ of
+    the editor's setup). Never the tools' root as such: assets_raw/chunks/ is no
+    part of a checkout or of a release bundle, and a judge that asked it found
+    no archive there (tests/content_tools_check.sh)."""
 
     def __init__(self, content):
         self.dir = content
+        own = os.path.join(content, "raw")
+        self.raw = os.path.abspath(own if os.path.isdir(os.path.join(own, "chunks", "dec")) else AC.RAW)
         self._lzss = _load_module("lv_lzss", os.path.join(ROOT, "python", "lv_lzss.py"))
         self._chunks = {}
 
@@ -150,15 +168,23 @@ class Pack:
         with open(p) as f:
             return bytes.fromhex(json.load(f)["raw"])
 
+    def dec_path(self, cid):
+        return os.path.join(self.raw, "chunks", "dec", f"{cid:04d}.bin")
+
     def is_archive(self, cid):
-        return os.path.exists(os.path.join(ROOT, "assets_raw", "chunks", "dec", f"{cid:04d}.bin"))
+        return os.path.exists(self.dec_path(cid))
+
+    def archive(self, cid):
+        """An archive chunk as the engine sees it (an LZSS record: the decompressor's output)."""
+        with open(self.dec_path(cid), "rb") as f:
+            return f.read()
 
     def chunk(self, cid):
         if cid in self._chunks:
             return self._chunks[cid]
         data = None
         if self.is_archive(cid):
-            data = LR.open_payload(cid, "lzss")
+            data = self.archive(cid)
         else:
             p = os.path.join(self.dir, ".compiled", f"{cid:04d}.bin")
             if os.path.exists(p):
@@ -199,9 +225,10 @@ class Walker:
     and the (address, length) of every instruction it reaches — the identity of the
     class's behaviour, for the test of a copied class. The disassembler reads a script
     from assets_raw/chunks/dec under the working directory, so a temporary root links the
-    repo's tables and chunks and takes the pack's own scripts."""
+    tools' tables and the archive's chunks — the extraction `raw` of the pack under
+    judgement (Pack.raw) — and takes the pack's own scripts."""
 
-    def __init__(self):
+    def __init__(self, raw):
         self.root = tempfile.mkdtemp(prefix="lv_content_check_")
         for name in ("tools", "assets_raw", "assets_raw/chunks"):
             os.makedirs(os.path.join(self.root, name), exist_ok=True)
@@ -211,7 +238,7 @@ class Walker:
             os.symlink(os.path.join(ROOT, f), os.path.join(self.root, f))
         dec = os.path.join(self.root, "assets_raw", "chunks", "dec")
         os.makedirs(dec)
-        for p in glob.glob(os.path.join(ROOT, "assets_raw", "chunks", "dec", "*.bin")):
+        for p in glob.glob(os.path.join(os.path.abspath(raw), "chunks", "dec", "*.bin")):
             os.symlink(p, os.path.join(dec, os.path.basename(p)))
         # the modules bind their tables relative to the working directory, anim_static to the
         # root above its own file — so they are loaded through the temp root's own tools/data
@@ -328,7 +355,7 @@ class Judge:
         self.pack = pack
         self.strict = strict
         self.verbose = verbose
-        self.walker = Walker()
+        self.walker = Walker(pack.raw)
         self.rom = snes_rom
         self.de_table = None
         if snes_rom is not None:
@@ -403,12 +430,10 @@ class Judge:
             scr = exe[o] | (exe[o + 1] << 8)
             if scr == 0xFFFF or not self.pack.is_archive(scr):
                 continue
-            p = os.path.join(ROOT, "assets", "level_headers", f"{hid:04X}.json")
-            if os.path.exists(p):
-                with open(p) as f:
-                    raw = bytes.fromhex(json.load(f)["raw"])
-            else:
-                raw = LR.open_payload(hid, "lzss")
+            # the original's head, from the archive itself: the open tree's level_headers/<hid>.json
+            # holds the same bytes when it is untouched, and it is not there at all outside the
+            # editor's setup
+            raw = self.pack.archive(hid)
             lv = Level(f"PC slot {slot:02X} hdr {hid:04X} script {scr:04X}", raw, scr, self.pack.chunk(scr))
             lv.slot, lv.short, lv.alt = slot, f"PC{slot:02d}", False
             out.append(lv)
@@ -519,7 +544,7 @@ class Judge:
             # it; a donor's fits the donor's spawns (issue #6: SNDS's guard on row 224 under JMNN's 102)
             if self.rom is not None:
                 import snes2pc as S2   # lazily: snes2pc imports this module for complete_lists
-                want_rows = S2.snes_sprite_palettes(self.rom, src)
+                want_rows = S2.snes_sprite_palettes(self.rom, src, self.pack.raw)
                 have_rows = {s: c for c, s in pal_entries(lv.st) if s >= 128}
                 for s, (chunk, d, d2, n) in sorted(want_rows.items()):
                     if d > S2.PAL_MATCH_MAX or (d2 is not None and d2 < 2 * d):
